@@ -1,0 +1,7 @@
+name = "retruco-webapp"
+pages_build_output_dir = ".svelte-kit/cloudflare"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Set BACKEND_ORIGIN and API_PROXY_SECRET as runtime secrets in Pages.
+# Do not commit their values here.

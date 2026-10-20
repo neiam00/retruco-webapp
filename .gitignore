@@ -6,6 +6,8 @@ test-results/
 playwright-report/
 .env
 .env.*
+.dev.vars
+.dev.vars.*
 !.env.example
 .DS_Store
 output/
