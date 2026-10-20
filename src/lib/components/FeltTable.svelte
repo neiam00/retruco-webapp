@@ -50,7 +50,11 @@
   }
 </script>
 
-<section class="felt-table" aria-label="Mesa de truco">
+<section
+  class="felt-table"
+  class:four-player={snapshot.config.players === 4}
+  aria-label="Mesa de truco"
+>
   {#if latestEvent?.automatic && latestEvent.type === 'respond'}
     <div class="team-response" role="status">
       Equipo {(latestEvent.seat % 2) + 1}: {eventLabel(latestEvent)}
@@ -125,7 +129,15 @@
     </div>
   {/if}
 
-  <div class={['table-status', { expanded: !game || game.phase !== 'playing' }]}>
+  <div
+    class={[
+      'table-status',
+      {
+        expanded: !game || game.phase !== 'playing',
+        results: game?.phase === 'hand_over' || game?.phase === 'match_over',
+      },
+    ]}
+  >
     {#if game && (game.phase === 'cutting' || game.phase === 'hand_over')}
       <span class="phase-countdown" aria-label={seconds + ' segundos restantes'}>{seconds}s</span>
     {/if}
@@ -200,8 +212,12 @@
 
 <style>
   .felt-table {
-    position: absolute;
-    inset: 0;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    /* Keep the seat, turn message, and played cards in separate vertical bands. */
+    grid-template-rows: 140px auto minmax(280px, 1fr);
+    padding-bottom: 20px;
     color: #f1f0e6;
     overflow: hidden;
   }
@@ -262,17 +278,17 @@
     z-index: 3;
   }
   .seat-top {
-    top: 7%;
+    top: 50px;
     left: 50%;
     transform: translateX(-50%);
   }
   .seat-left {
-    top: 38%;
+    top: 230px;
     left: 5%;
     transform: rotate(-3deg);
   }
   .seat-right {
-    top: 38%;
+    top: 230px;
     right: 5%;
     transform: rotate(3deg);
   }
@@ -281,12 +297,12 @@
     left: 28px;
   }
   .play-zone {
-    position: absolute;
-    top: 42%;
-    left: 50%;
-    width: 340px;
-    height: 310px;
-    transform: translate(-50%, -50%);
+    position: relative;
+    grid-column: 1;
+    grid-row: 3;
+    place-self: center;
+    width: min(460px, calc(100% - 24px));
+    height: 280px;
   }
   .direction-ring {
     position: absolute;
@@ -323,12 +339,12 @@
     transform: translateX(-50%);
   }
   .played-left {
-    left: -20px;
+    left: 0;
     top: 50%;
     transform: translateY(-50%) rotate(-8deg);
   }
   .played-right {
-    right: -20px;
+    right: 0;
     top: 50%;
     transform: translateY(-50%) rotate(8deg);
   }
@@ -358,23 +374,23 @@
     z-index: 1;
   }
   .deck-top {
-    top: 18%;
-    left: 30%;
+    top: 110px;
+    left: 28px;
     transform: rotate(-10deg);
   }
   .deck-right {
-    top: 55%;
-    right: 24%;
+    top: 110px;
+    right: 28px;
     transform: rotate(10deg);
   }
   .deck-bottom {
-    bottom: 28%;
-    left: 27%;
+    bottom: 120px;
+    left: 28px;
     transform: rotate(-10deg);
   }
   .deck-left {
-    top: 25%;
-    left: 23%;
+    top: 110px;
+    left: 28px;
     transform: rotate(10deg);
   }
   .deck-back {
@@ -393,10 +409,11 @@
     color: #b4c7ae;
   }
   .table-status {
-    position: absolute;
-    top: 19%;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
+    grid-column: 1;
+    grid-row: 2;
+    place-self: center;
+    margin-bottom: 16px;
     z-index: 4;
     text-align: center;
   }
@@ -440,7 +457,11 @@
     margin-top: 9px;
   }
   .expanded {
+    position: absolute;
+    grid-row: auto;
     top: 36%;
+    left: 50%;
+    transform: translateX(-50%);
     width: min(440px, 88%);
     padding: 24px;
     background: #142e26f2;
@@ -483,24 +504,32 @@
     font-size: 11px;
     color: #e1dec0;
   }
-  @media (max-height: 760px) and (min-width: 651px) {
+  @media (max-height: 800px) and (min-width: 651px) {
+    .felt-table {
+      grid-template-rows: 115px auto minmax(240px, 1fr);
+      padding-bottom: 16px;
+    }
+    .seat-top {
+      top: 36px;
+    }
     .play-zone {
-      width: 290px;
       height: 240px;
-      top: 43%;
     }
     .played-card :global(img) {
       width: 56px;
       height: auto;
-    }
-    .table-status {
-      top: 20%;
     }
     .expanded {
       top: 32%;
     }
   }
   @media (max-width: 650px) {
+    .felt-table {
+      grid-template-rows: 140px auto minmax(220px, 1fr);
+    }
+    .felt-table.four-player {
+      grid-template-rows: 220px auto minmax(220px, 1fr);
+    }
     .scoreboard {
       top: 8px;
       left: 12px;
@@ -520,23 +549,22 @@
       padding-inline: 8px;
     }
     .seat-top {
-      top: 11%;
+      top: 80px;
     }
     .seat-left {
-      top: 29%;
+      top: 150px;
       left: 10px;
     }
     .seat-right {
-      top: 29%;
+      top: 150px;
       right: 10px;
     }
     .seat-bottom {
       display: none;
     }
     .play-zone {
-      width: 230px;
-      height: 245px;
-      top: 44%;
+      width: min(330px, calc(100% - 24px));
+      height: 220px;
     }
     .played-card :global(img) {
       width: 51px;
@@ -545,34 +573,26 @@
     .played-card + .played-card {
       margin-left: -30px;
     }
-    .played-left {
-      left: 0;
-    }
-    .played-right {
-      right: 0;
-    }
     .deck :global(img) {
       width: 34px;
       height: auto;
     }
     .deck-top {
-      top: 20%;
-      left: 7%;
+      top: 60px;
+      left: 12px;
     }
     .deck-right {
-      top: 52%;
-      right: 7%;
+      top: 60px;
+      right: 12px;
     }
     .deck-bottom {
-      bottom: 39%;
-      left: 7%;
+      top: 60px;
+      bottom: auto;
+      left: 12px;
     }
     .deck-left {
-      top: 20%;
-      left: 7%;
-    }
-    .table-status {
-      top: 22%;
+      top: 60px;
+      left: 12px;
     }
     .turn-message {
       padding: 9px 11px;
@@ -592,5 +612,15 @@
     .expanded h2 {
       font-size: 25px;
     }
+  }
+
+  /* Results can grow with scores and payouts without covering the hand below. */
+  .table-status.results {
+    position: relative;
+    grid-row: 2 / 4;
+    top: auto;
+    left: auto;
+    transform: none;
+    margin: 16px 0;
   }
 </style>

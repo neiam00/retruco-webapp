@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { expectClearResults, expectClearTableCards } from './table-layout.js';
 
 test('four players surround the central cards and can choose a declaration', async ({
   browser,
@@ -64,6 +65,9 @@ test('four players surround the central cards and can choose a declaration', asy
           break;
         }
       }
+    }
+    for (const playerPage of pages) {
+      await expectClearTableCards(playerPage);
     }
     const page = pages[0];
     for (const position of ['top', 'left', 'right']) {
@@ -139,7 +143,7 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     const caller = (await first.getByRole('button', leyCall).isVisible()) ? first : second;
     const responder = caller === first ? second : first;
     await caller.getByRole('button', leyCall).click();
-    await responder.getByRole('button', { name: 'Quiero sin ley', exact: true }).click();
+    await responder.getByRole('button', { name: 'Sin ley, quiero', exact: true }).click();
     await expect(first.getByLabel('Valores de envido')).not.toBeVisible();
     await caller.getByRole('button', { name: 'Truco', exact: true }).click();
     await expect(responder.locator('.canto-actions button')).toHaveText([
@@ -201,6 +205,9 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       } else {
         if (move === 0) {
           await active.getByRole('button', { name: 'Decir…', exact: true }).click();
+          await expect(
+            active.getByRole('dialog').getByRole('button', { name: 'A ley', exact: true }),
+          ).toBeEnabled();
           await active
             .getByRole('dialog')
             .getByRole('button', { name: 'Flor', exact: true })
@@ -215,10 +222,33 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       await expect
         .poll(() => active.locator('.hand-card.used').count())
         .toBeGreaterThan(usedBefore);
+      await expectClearTableCards(first);
+      await expectClearTableCards(second);
+      if (move === 2) {
+        await first.getByRole('button', { name: 'Decir…', exact: true }).click();
+        await expect(
+          first.getByRole('dialog').getByRole('button', { name: 'A ley', exact: true }),
+        ).toBeDisabled();
+        await first.keyboard.press('Escape');
+        await first.screenshot({
+          path: `output/playwright/played-cards-${testInfo.project.name}.png`,
+          fullPage: true,
+        });
+        if (testInfo.project.name === 'mobile') {
+          await first.setViewportSize({ width: 320, height: 568 });
+          await expectClearTableCards(first);
+          await first.screenshot({
+            path: 'output/playwright/played-cards-small-mobile.png',
+            fullPage: true,
+          });
+          await first.setViewportSize(testInfo.project.use.viewport!);
+        }
+      }
     }
     await expect(first.getByRole('heading', { name: 'La próxima ya viene.' })).toBeVisible();
     await expect(first.getByLabel('Valores de envido')).toContainText('Prueba Ana');
     await expect(first.getByLabel('Valores de envido')).toContainText('Prueba Beto');
+    await expectClearResults(first);
 
     await first.getByRole('button', { name: 'Abrir chat', exact: true }).click();
     await second.getByRole('button', { name: 'Abrir chat', exact: true }).click();
@@ -237,6 +267,12 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       .getByRole('button', { name: 'Salir de la mesa', exact: true })
       .click();
     await expect(second.getByRole('heading', { name: '¡Ganó el equipo 2!' })).toBeVisible();
+    await second.getByRole('button', { name: 'Cerrar chat', exact: true }).click();
+    await expectClearResults(second);
+    await second.screenshot({
+      path: `output/playwright/match-over-${testInfo.project.name}.png`,
+      fullPage: true,
+    });
   } finally {
     await firstContext.close();
     await secondContext.close();

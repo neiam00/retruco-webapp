@@ -12,10 +12,23 @@ describe('manual canto declarations', () => {
 
   it('distinguishes the chosen ley comparison and whole-team flor refusal', () => {
     expect(commandLabel({ type: 'respond', kind: 'accept', mode: 'sin_ley' }, 'ley_envido')).toBe(
-      'Quiero sin ley',
+      'Sin ley, quiero',
     );
     expect(commandLabel({ type: 'respond', kind: 'decline' }, 'flor')).toBe(
       'Con mi flor me achico',
+    );
+  });
+
+  it.each([
+    ['con_ley', 'Con ley, quiero'],
+    ['sin_ley', 'Sin ley, quiero'],
+  ])('puts %s before acceptance and counter-raises', (mode, acceptance) => {
+    expect(commandLabel({ type: 'respond', kind: 'accept', mode }, 'ley_envido')).toBe(acceptance);
+    expect(commandLabel({ type: 'respond', kind: 'raise', amount: 2, mode }, 'ley_envido')).toBe(
+      `${acceptance} y envido`,
+    );
+    expect(commandLabel({ type: 'respond', kind: 'falta', mode }, 'ley_envido')).toBe(
+      `${acceptance} y envido la falta`,
     );
   });
 });

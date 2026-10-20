@@ -119,6 +119,9 @@
             stackMode = false;
           }
           snapshot = incoming;
+          if (declaration === 'a_ley' && incoming.state?.round !== 0) {
+            declaration = '';
+          }
           const receivedAt = Date.now();
           now = receivedAt;
           offset = Date.parse(incoming.serverTime) - receivedAt;
@@ -361,23 +364,25 @@
           </div>
         {/if}
 
-        <FeltTable {snapshot} {seconds} {myTurn} oninvite={copy} />
-        {#if game?.phase === 'cutting' && game.turn === snapshot.seat}
-          <div class="cut-controls">
-            <Label for="cut-point">Punto de corte (1–39)</Label><Input
-              id="cut-point"
-              type="number"
-              min={1}
-              max={39}
-              bind:value={cutPoint}
-            /><Button
-              disabled={!connected || busy || cutPoint < 1 || cutPoint > 39}
-              onclick={() => send({ type: 'cut', cut: cutPoint })}
-            >
-              Partir el mazo
-            </Button>
-          </div>
-        {/if}
+        <div class="table-area" class:four-player={snapshot.config.players === 4}>
+          <FeltTable {snapshot} {seconds} {myTurn} oninvite={copy} />
+          {#if game?.phase === 'cutting' && game.turn === snapshot.seat}
+            <div class="cut-controls">
+              <Label for="cut-point">Punto de corte (1–39)</Label><Input
+                id="cut-point"
+                type="number"
+                min={1}
+                max={39}
+                bind:value={cutPoint}
+              /><Button
+                disabled={!connected || busy || cutPoint < 1 || cutPoint > 39}
+                onclick={() => send({ type: 'cut', cut: cutPoint })}
+              >
+                Partir el mazo
+              </Button>
+            </div>
+          {/if}
+        </div>
 
         {#if game && game.phase !== 'cutting'}
           <section class="hand-area" aria-label="Tu mano">
@@ -443,6 +448,7 @@
                         <Button
                           variant={declaration === option.value ? 'secondary' : 'ghost'}
                           aria-pressed={declaration === option.value}
+                          disabled={option.value === 'a_ley' && game.round !== 0}
                           onclick={() => {
                             declaration = option.value;
                             declarationOpen = false;
@@ -673,8 +679,16 @@
   }
   .game-surface {
     position: relative;
-    height: calc(100dvh - 64px);
-    min-height: 620px;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - 64px);
+    padding-bottom: 22px;
+  }
+  .table-area {
+    position: relative;
+    display: grid;
+    flex: 1;
+    min-height: 520px;
   }
   .table-meta {
     position: absolute;
@@ -691,10 +705,9 @@
     gap: 5px;
   }
   .hand-area {
-    position: absolute;
-    bottom: 22px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
+    flex-shrink: 0;
+    margin: 0 auto;
     z-index: 6;
     width: min(740px, 65%);
     text-align: center;
@@ -952,6 +965,9 @@
     color: #213b2b;
   }
   @media (max-height: 800px) and (min-width: 651px) {
+    .table-area {
+      min-height: 450px;
+    }
     .hand-cards :global(img) {
       width: 100px;
       height: auto;
@@ -994,8 +1010,14 @@
       min-height: 44px;
     }
     .game-surface {
-      height: calc(100dvh - 54px);
-      min-height: 690px;
+      min-height: calc(100dvh - 54px);
+      padding-bottom: 74px;
+    }
+    .table-area {
+      min-height: 460px;
+    }
+    .table-area.four-player {
+      min-height: 540px;
     }
     .table-meta {
       top: 12px;
@@ -1006,7 +1028,6 @@
       display: none;
     }
     .hand-area {
-      bottom: 63px;
       width: calc(100% - 24px);
     }
     .hand-label {

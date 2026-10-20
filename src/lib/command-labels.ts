@@ -48,13 +48,17 @@ function actionLabel(command: Command, pendingKind?: string) {
   if (command.kind === 'flowers_no') return 'A las flores no';
   if (command.kind === 'decline')
     return pendingKind === 'flor' ? 'Con mi flor me achico' : 'No quiero';
-  const mode =
-    command.mode === 'con_ley' ? ' con ley' : command.mode === 'sin_ley' ? ' sin ley' : '';
-  if (command.kind === 'accept') return `Quiero${mode}`;
-  if (command.kind === 'falta') return `Quiero${mode} y envido la falta`;
+  const acceptance =
+    command.mode === 'con_ley'
+      ? 'Con ley, quiero'
+      : command.mode === 'sin_ley'
+        ? 'Sin ley, quiero'
+        : 'Quiero';
+  if (command.kind === 'accept') return acceptance;
+  if (command.kind === 'falta') return `${acceptance} y envido la falta`;
   if (command.kind === 'raise' && pendingKind === 'truco')
     return `Quiero y ${({ 6: 'retruco', 9: 'vale 9', 100: 'vale partida' } as Record<number, string>)[command.amount ?? 0]}`;
   if (command.kind === 'raise')
-    return `Quiero${mode} y ${command.amount === 2 ? 'envido' : `${command.amount} piedras más`}`;
+    return `${acceptance} y ${command.amount === 2 ? 'envido' : `${command.amount} piedras más`}`;
   return command.type;
 }
