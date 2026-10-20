@@ -74,6 +74,20 @@ export interface Snapshot {
   sequence: number;
   chat: { id: number; name: string; text: string; spectator: boolean }[];
   signals: { id: number; seat: number; kind: string }[];
+  events?: {
+    id: number;
+    hand: number;
+    event: {
+      type: string;
+      seat: number;
+      text?: string;
+      kind?: string;
+      canto?: string;
+      amount?: number;
+      mode?: string;
+      automatic?: boolean;
+    };
+  }[];
 }
 export interface Listing {
   code: string;

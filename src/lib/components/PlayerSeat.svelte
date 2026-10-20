@@ -10,6 +10,7 @@
     answering = false,
     self = false,
     mano = false,
+    announcement = '',
   }: {
     name: string;
     team: number;
@@ -18,6 +19,7 @@
     answering?: boolean;
     self?: boolean;
     mano?: boolean;
+    announcement?: string;
   } = $props();
 </script>
 
@@ -33,6 +35,9 @@
   </div>
   {#if active || answering || mano}
     <span class="seat-tag">{answering ? 'RESPONDE' : active ? 'TURNO' : 'MANO'}</span>
+  {/if}
+  {#if announcement}
+    <span class="speech-bubble" aria-live="polite">{announcement}</span>
   {/if}
 </div>
 
@@ -94,6 +99,20 @@
     font-weight: 800;
     letter-spacing: 0.08em;
     transform: rotate(6deg);
+  }
+  .speech-bubble {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    max-width: 190px;
+    padding: 7px 10px;
+    border-radius: 10px 10px 10px 2px;
+    color: #20372b;
+    background: #e9e2bd;
+    box-shadow: 0 4px 12px #061b1533;
+    font-size: 10px;
+    line-height: 1.3;
+    font-weight: 600;
   }
   @media (max-width: 650px) {
     .player-seat {

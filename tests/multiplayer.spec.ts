@@ -187,7 +187,14 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
         await playBoth.click();
       } else {
         if (move === 0) {
+          await active.getByRole('button', { name: 'Decir…', exact: true }).click();
+          await active
+            .getByRole('dialog')
+            .getByRole('button', { name: 'Flor', exact: true })
+            .click();
           await available.first().press('Enter');
+          const other = active === first ? second : first;
+          await expect(other.locator('.speech-bubble').filter({ hasText: /^Flor$/ })).toBeVisible();
         } else {
           await available.first().click();
         }

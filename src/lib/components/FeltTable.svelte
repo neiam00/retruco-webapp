@@ -6,6 +6,7 @@
   import Card from '#lib/components/Card.svelte';
   import PlayerSeat from '#lib/components/PlayerSeat.svelte';
   import { cantoName } from '#lib/command-labels.js';
+  import { eventLabel } from '#lib/game-events.js';
   import type { Snapshot } from '#lib/protocol.js';
 
   let {
@@ -23,9 +24,23 @@
   let game = $derived(snapshot.state);
   let perspective = $derived(snapshot.seat < 0 ? snapshot.perspective : snapshot.seat);
   let respondingTeam = $derived(game?.pending ? 1 - game.pending.caller : undefined);
+  let latestEvent = $derived(snapshot.events?.at(-1)?.event);
 
   function seatName(seat: number) {
     return snapshot.seats[seat]?.name ?? 'Puesto libre';
+  }
+
+  function announcement(seat: number) {
+    const events = snapshot.events ?? [];
+    for (let index = events.length - 1; index >= 0; index--) {
+      const item = events[index];
+      if (item.event.automatic && item.event.type === 'respond') continue;
+      if (item.event.seat === seat && item.hand === game?.handNumber) {
+        const label = eventLabel(item.event);
+        if (label) return label;
+      }
+    }
+    return '';
   }
 
   function position(seat: number) {
@@ -36,6 +51,11 @@
 </script>
 
 <section class="felt-table" aria-label="Mesa de truco">
+  {#if latestEvent?.automatic && latestEvent.type === 'respond'}
+    <div class="team-response" role="status">
+      Equipo {(latestEvent.seat % 2) + 1}: {eventLabel(latestEvent)}
+    </div>
+  {/if}
   <div class="table-outline" aria-hidden="true"></div>
   <div class="scoreboard" aria-label="Marcador">
     <div>
@@ -57,6 +77,7 @@
         remaining={game?.seats[seat].remaining ?? 3}
         self={seat === snapshot.seat}
         mano={seat === game?.mano}
+        announcement={announcement(seat)}
         active={game?.turn === seat && !game.pending && game.phase === 'playing'}
         answering={respondingTeam === seat % 2}
       />
@@ -180,6 +201,18 @@
     inset: 0;
     color: #f1f0e6;
     overflow: hidden;
+  }
+  .team-response {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 12px;
+    background: #e9e2bd;
+    color: #20372b;
+    border-radius: 8px;
+    font-size: 10px;
+    z-index: 8;
   }
   .table-outline {
     position: absolute;
