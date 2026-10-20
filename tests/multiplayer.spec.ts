@@ -141,6 +141,19 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await caller.getByRole('button', leyCall).click();
     await responder.getByRole('button', { name: 'Quiero sin ley', exact: true }).click();
     await expect(first.getByLabel('Valores de envido')).not.toBeVisible();
+    await caller.getByRole('button', { name: 'Truco', exact: true }).click();
+    await expect(responder.locator('.canto-actions button')).toHaveText([
+      'Quiero',
+      'No quiero',
+      'Quiero y retruco',
+      'Quiero y vale 9',
+      'Quiero y vale partida',
+    ]);
+    await responder.screenshot({
+      path: `output/playwright/truco-replies-${testInfo.project.name}.png`,
+      fullPage: true,
+    });
+    await responder.getByRole('button', { name: 'Quiero', exact: true }).click();
     expect(await first.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
