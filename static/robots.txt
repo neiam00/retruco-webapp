@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /mesa/
+Sitemap: https://retru.co.ve/sitemap.xml

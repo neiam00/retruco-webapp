@@ -1,0 +1,10 @@
+node_modules
+.svelte-kit
+.wrangler
+pnpm-lock.yaml
+static/cards
+playwright-report
+test-results
+.agent
+.agents
+AGENTS.md

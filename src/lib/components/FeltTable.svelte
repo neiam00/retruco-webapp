@@ -1,0 +1,529 @@
+<script lang="ts">
+  import { Share2 } from '@lucide/svelte';
+  import { resolve } from '$app/paths';
+  import { Button } from '#lib/components/ui/button/index.js';
+  import Card from '#lib/components/Card.svelte';
+  import PlayerSeat from '#lib/components/PlayerSeat.svelte';
+  import { cantoName } from '#lib/command-labels.js';
+  import type { Snapshot } from '#lib/protocol.js';
+
+  let {
+    snapshot,
+    seconds,
+    myTurn,
+    oninvite,
+  }: {
+    snapshot: Snapshot;
+    seconds: number;
+    myTurn: boolean;
+    oninvite: () => void;
+  } = $props();
+
+  let game = $derived(snapshot.state);
+  let perspective = $derived(snapshot.seat < 0 ? snapshot.perspective : snapshot.seat);
+  let respondingTeam = $derived(game?.pending ? 1 - game.pending.caller : undefined);
+
+  function seatName(seat: number) {
+    return snapshot.seats[seat]?.name ?? 'Puesto libre';
+  }
+
+  function position(seat: number) {
+    const relative = (seat - perspective + snapshot.config.players) % snapshot.config.players;
+    if (snapshot.config.players === 2) return relative === 0 ? 'bottom' : 'top';
+    return ['bottom', 'right', 'top', 'left'][relative];
+  }
+</script>
+
+<section class="felt-table" aria-label="Mesa de truco">
+  <div class="table-outline" aria-hidden="true"></div>
+  <div class="scoreboard" aria-label="Marcador">
+    <div>
+      <span>Equipo 1</span>
+      <strong>{game?.scores[0] ?? 0}</strong>
+    </div>
+    <span class="score-target">A {snapshot.config.target}</span>
+    <div>
+      <span>Equipo 2</span>
+      <strong>{game?.scores[1] ?? 0}</strong>
+    </div>
+  </div>
+
+  {#each Array.from({ length: snapshot.config.players }, (_, seat) => seat) as seat (seat)}
+    <div class={['seat', 'seat-' + position(seat)]}>
+      <PlayerSeat
+        name={seatName(seat)}
+        team={(seat % 2) + 1}
+        remaining={game?.seats[seat].remaining ?? 3}
+        self={seat === snapshot.seat}
+        mano={seat === game?.mano}
+        active={game?.turn === seat && !game.pending && game.phase === 'playing'}
+        answering={respondingTeam === seat % 2}
+      />
+    </div>
+  {/each}
+
+  <div class="play-zone">
+    <svg class="direction-ring" viewBox="0 0 360 360" fill="none" aria-hidden="true">
+      <circle cx="180" cy="180" r="174" stroke-dasharray="3 13" />
+      <circle cx="180" cy="180" r="156" />
+      <path d="M 306 92 A 154 154 0 0 0 64 82 M 64 82 l 2 -25 M 64 82 l 26 -1" />
+      <path d="M 54 268 A 154 154 0 0 0 296 278 M 296 278 l -2 25 M 296 278 l -26 1" />
+    </svg>
+    <div class="table-watermark" aria-hidden="true">r.</div>
+    {#if game}
+      {#each game.seats as seat, index (index)}
+        <div
+          class={['played-group', 'played-' + position(index)]}
+          aria-label={'Cartas de ' + seatName(index)}
+        >
+          {#each seat.plays as play, round (round)}
+            {#if play.present}
+              <div
+                class={['played-card', { burned: play.burned }]}
+                style:--tilt={round * 7 - 7 + 'deg'}
+              >
+                <Card card={play.card} hidden={!play.card} width={70} />
+                <span>{play.burned ? 'Quemada' : round + 1 + '.ª'}</span>
+              </div>
+            {/if}
+          {/each}
+        </div>
+      {/each}
+    {/if}
+  </div>
+
+  {#if game?.vira}
+    <div class={['deck', 'deck-' + position((game.dealer + 1) % snapshot.config.players)]}>
+      <div class="deck-back"><Card hidden width={54} /></div>
+      <div class="vira">
+        <Card card={game.vira} width={54} />
+        <span>LA VIRA</span>
+      </div>
+    </div>
+  {/if}
+
+  <div class={['table-status', { expanded: !game || game.phase !== 'playing' }]}>
+    {#if !game}
+      <span class="status-eyebrow">La mesa está puesta</span>
+      <h1>Faltan {snapshot.config.players - snapshot.seats.length} para repartir.</h1>
+      <p>Invita a tus panas. Aquí los esperamos.</p>
+      <Button onclick={oninvite}><Share2 size={16} />Invitar a mis amigos</Button>
+    {:else if game.phase === 'match_over'}
+      <span class="status-eyebrow">La partida tiene ganador</span>
+      <h1>¡Ganó el equipo {game.winner + 1}!</h1>
+      <p>{game.scores[0]} — {game.scores[1]}</p>
+      <Button href={resolve('/')}>Volver a las mesas</Button>
+    {:else if game.phase === 'hand_over'}
+      <span class="status-eyebrow">Se cierra la mano</span>
+      <h2>La próxima ya viene.</h2>
+      {#each game.payouts as payout, i (i)}
+        <p>Equipo {payout.team + 1}: +{payout.points} de {payout.kind}</p>
+      {/each}
+    {:else if game.phase === 'cutting'}
+      <span class="status-eyebrow">Antes de repartir</span>
+      <h2>
+        {game.turn === snapshot.seat ? 'Te toca partir.' : seatName(game.turn) + ' parte el mazo.'}
+      </h2>
+      <p>Elige dónde cortar las 40 cartas.</p>
+    {:else}
+      <div class="turn-message">
+        <span class="turn-dot"></span>
+        {#if game.pending}
+          <strong>{cantoName(game.pending.kind)}</strong>
+          <span class="wager-value">
+            {game.pending.value === 100 ? 'Vale partida' : game.pending.value + ' piedras'}
+          </span>
+        {:else}
+          <strong>{myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}</strong>
+        {/if}
+        <span
+          class={['timer', { urgent: seconds <= 10 }]}
+          aria-label={seconds + ' segundos restantes'}
+        >
+          {seconds}s
+        </span>
+      </div>
+      {#if game.pending}
+        <p>
+          Responde el equipo {2 - game.pending.caller}{game.suspended ? ' · Truco en espera' : ''}
+        </p>
+      {:else}
+        <p>
+          {game.round + 1}.ª vuelta{game.mandatoryStack
+            ? ' · Todos juegan pegado'
+            : ' · Antihorario'}
+        </p>
+      {/if}
+    {/if}
+  </div>
+</section>
+
+<style>
+  .felt-table {
+    position: absolute;
+    inset: 0;
+    color: #f1f0e6;
+    overflow: hidden;
+  }
+  .table-outline {
+    position: absolute;
+    inset: 10% 4% 12%;
+    border: 1px solid #9bbfab0d;
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 35px #90b9a103,
+      0 0 0 80px #90b9a102;
+  }
+  .scoreboard {
+    position: absolute;
+    top: 22px;
+    left: 28px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 20px;
+    border: 1px solid #b9c6b91c;
+    border-radius: 14px;
+    background: #10251c80;
+  }
+  .scoreboard > div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .scoreboard span {
+    font-size: 9px;
+    color: #9eb6a6;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .scoreboard strong {
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .score-target {
+    border-inline: 1px solid #92ac9826;
+    padding-inline: 14px;
+  }
+  .seat {
+    position: absolute;
+    z-index: 3;
+  }
+  .seat-top {
+    top: 7%;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .seat-left {
+    top: 38%;
+    left: 5%;
+    transform: rotate(-3deg);
+  }
+  .seat-right {
+    top: 38%;
+    right: 5%;
+    transform: rotate(3deg);
+  }
+  .seat-bottom {
+    bottom: 32px;
+    left: 28px;
+  }
+  .play-zone {
+    position: absolute;
+    top: 42%;
+    left: 50%;
+    width: 340px;
+    height: 310px;
+    transform: translate(-50%, -50%);
+  }
+  .direction-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    stroke: #a1c6ae;
+    stroke-width: 1;
+    opacity: 0.14;
+  }
+  .table-watermark {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font:
+      italic 70px Georgia,
+      serif;
+    opacity: 0.06;
+  }
+  .played-group {
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    min-width: 70px;
+  }
+  .played-top {
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .played-bottom {
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .played-left {
+    left: -20px;
+    top: 50%;
+    transform: translateY(-50%) rotate(-8deg);
+  }
+  .played-right {
+    right: -20px;
+    top: 50%;
+    transform: translateY(-50%) rotate(8deg);
+  }
+  .played-card {
+    position: relative;
+    transform: rotate(var(--tilt));
+    filter: drop-shadow(0 7px 7px #041a1640);
+  }
+  .played-card + .played-card {
+    margin-left: -35px;
+  }
+  .played-card span {
+    display: block;
+    text-align: center;
+    font-size: 8px;
+    color: #b8c9b8;
+    margin-top: 5px;
+  }
+  .burned {
+    opacity: 0.4;
+  }
+  .deck {
+    position: absolute;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    z-index: 1;
+  }
+  .deck-top {
+    top: 18%;
+    left: 30%;
+    transform: rotate(-10deg);
+  }
+  .deck-right {
+    top: 55%;
+    right: 24%;
+    transform: rotate(10deg);
+  }
+  .deck-bottom {
+    bottom: 28%;
+    left: 27%;
+    transform: rotate(-10deg);
+  }
+  .deck-left {
+    top: 25%;
+    left: 23%;
+    transform: rotate(10deg);
+  }
+  .deck-back {
+    border-radius: 5px;
+    box-shadow:
+      -2px 2px #d6d5bd,
+      -4px 4px #263a2c,
+      -6px 6px #b0b4a0;
+  }
+  .vira span {
+    display: block;
+    text-align: center;
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    margin-top: 7px;
+    color: #b4c7ae;
+  }
+  .table-status {
+    position: absolute;
+    top: 19%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 4;
+    text-align: center;
+  }
+  .turn-message {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    border: 1px solid #a5b5a62b;
+    border-radius: 11px;
+    background: #122a24e8;
+    white-space: nowrap;
+    box-shadow: 0 8px 20px #081b1726;
+  }
+  .turn-message strong {
+    font-size: 12px;
+  }
+  .turn-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #d9cd94;
+    box-shadow: 0 0 12px #d9cd9440;
+  }
+  .wager-value {
+    font-size: 10px;
+    color: #c5cfb3;
+  }
+  .timer {
+    font-size: 10px;
+    color: #9db8a4;
+    border-left: 1px solid #b1c6ac26;
+    padding-left: 12px;
+  }
+  .timer.urgent {
+    color: #ffc297;
+  }
+  .table-status p {
+    color: #a7bfaa;
+    font-size: 10px;
+    margin-top: 9px;
+  }
+  .expanded {
+    top: 36%;
+    width: min(440px, 88%);
+    padding: 24px;
+    background: #142e26f2;
+    border: 1px solid #a5b5a62b;
+    border-radius: 20px;
+    box-shadow: 0 15px 70px #071a1640;
+  }
+  .expanded h1,
+  .expanded h2 {
+    font-size: 28px;
+    margin-top: 12px;
+    line-height: 1.2;
+  }
+  .expanded p {
+    font-size: 12px;
+    margin: 12px 0;
+  }
+  .expanded :global(button),
+  .expanded :global(a) {
+    margin-top: 12px;
+  }
+  .status-eyebrow {
+    font-size: 9px;
+    letter-spacing: 0.13em;
+    color: #c5ccac;
+    text-transform: uppercase;
+  }
+  @media (max-height: 760px) and (min-width: 651px) {
+    .play-zone {
+      width: 290px;
+      height: 240px;
+      top: 43%;
+    }
+    .played-card :global(img) {
+      width: 56px;
+      height: auto;
+    }
+    .table-status {
+      top: 20%;
+    }
+    .expanded {
+      top: 32%;
+    }
+  }
+  @media (max-width: 650px) {
+    .scoreboard {
+      top: 8px;
+      left: 12px;
+      padding: 8px 10px;
+      gap: 10px;
+    }
+    .scoreboard > div {
+      gap: 6px;
+    }
+    .scoreboard span {
+      font-size: 7px;
+    }
+    .scoreboard strong {
+      font-size: 17px;
+    }
+    .score-target {
+      padding-inline: 8px;
+    }
+    .seat-top {
+      top: 11%;
+    }
+    .seat-left {
+      top: 29%;
+      left: 10px;
+    }
+    .seat-right {
+      top: 29%;
+      right: 10px;
+    }
+    .seat-bottom {
+      display: none;
+    }
+    .play-zone {
+      width: 230px;
+      height: 245px;
+      top: 44%;
+    }
+    .played-card :global(img) {
+      width: 51px;
+      height: auto;
+    }
+    .played-card + .played-card {
+      margin-left: -30px;
+    }
+    .played-left {
+      left: 0;
+    }
+    .played-right {
+      right: 0;
+    }
+    .deck :global(img) {
+      width: 34px;
+      height: auto;
+    }
+    .deck-top {
+      top: 20%;
+      left: 7%;
+    }
+    .deck-right {
+      top: 52%;
+      right: 7%;
+    }
+    .deck-bottom {
+      bottom: 39%;
+      left: 7%;
+    }
+    .deck-left {
+      top: 20%;
+      left: 7%;
+    }
+    .table-status {
+      top: 22%;
+    }
+    .turn-message {
+      padding: 9px 11px;
+      gap: 8px;
+    }
+    .turn-message strong {
+      font-size: 10px;
+    }
+    .table-status p {
+      font-size: 9px;
+    }
+    .expanded {
+      top: 35%;
+      padding: 20px;
+    }
+    .expanded h1,
+    .expanded h2 {
+      font-size: 25px;
+    }
+  }
+</style>
