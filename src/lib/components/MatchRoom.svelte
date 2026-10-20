@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { CardMotion } from '#lib/card-motion.js';
+  import { CardSounds } from '#lib/card-sounds.js';
+  import {
+    CARD_SOUND_STORAGE_KEY,
+    loadCardSoundsMuted,
+    saveCardSoundsMuted,
+  } from '#lib/sound-settings.js';
   import VoiceControls from '#lib/components/VoiceControls.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -15,6 +21,8 @@
     Smile,
     Speech,
     X,
+    Volume2,
+    VolumeX,
   } from '@lucide/svelte';
   import { Button } from '#lib/components/ui/button/index.js';
   import { Input } from '#lib/components/ui/input/index.js';
@@ -62,6 +70,21 @@
   let disposed = false;
   let gameSurface = $state<HTMLElement>();
   const cardMotion = new CardMotion();
+  const cardSounds = new CardSounds();
+  let cardsMuted = $state(false);
+
+  function toggleCardSounds() {
+    cardsMuted = !cardsMuted;
+    cardSounds.setMuted(cardsMuted);
+    saveCardSoundsMuted(cardsMuted);
+    if (!cardsMuted) cardSounds.unlock();
+  }
+
+  function syncCardSounds(event: StorageEvent) {
+    if (event.key !== CARD_SOUND_STORAGE_KEY && event.key !== null) return;
+    cardsMuted = loadCardSoundsMuted();
+    cardSounds.setMuted(cardsMuted);
+  }
   const cpu = new CPUController(
     (seat, revision, command) => {
       if (!disposed && socket?.readyState === WebSocket.OPEN) {
@@ -144,6 +167,7 @@
           const animateCards = gameSurface
             ? cardMotion.prepare(gameSurface, connected ? snapshot : null, incoming)
             : undefined;
+          cardSounds.update(connected ? snapshot : null, incoming);
           snapshot = incoming;
           void tick().then(() => {
             if (!disposed && snapshot === incoming) animateCards?.();
@@ -170,6 +194,7 @@
     };
     socket.onclose = () => {
       cardMotion.cancel();
+      cardSounds.stop();
       cpu.stop();
       connected = false;
       busy = false;
@@ -180,6 +205,8 @@
     };
   }
   onMount(() => {
+    cardsMuted = loadCardSoundsMuted();
+    cardSounds.setMuted(cardsMuted);
     const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
     const stopMotion = () => cardMotion.cancel();
     motionPreference.addEventListener('change', stopMotion);
@@ -197,6 +224,7 @@
     return () => {
       disposed = true;
       cardMotion.cancel();
+      cardSounds.close();
       motionPreference.removeEventListener('change', stopMotion);
       cpu.stop();
       clearInterval(timer);
@@ -286,8 +314,19 @@
   }
 </script>
 
-<svelte:window onresize={() => cardMotion.cancel()} onscroll={() => cardMotion.cancel()} />
-<svelte:document onvisibilitychange={() => cardMotion.cancel()} />
+<svelte:window
+  onresize={() => cardMotion.cancel()}
+  onscroll={() => cardMotion.cancel()}
+  onpointerup={() => cardSounds.unlock()}
+  onkeydown={() => cardSounds.unlock()}
+  onstorage={syncCardSounds}
+/>
+<svelte:document
+  onvisibilitychange={() => {
+    cardMotion.cancel();
+    if (document.hidden) cardSounds.stop();
+  }}
+/>
 
 <svelte:head>
   <title>Mesa {code} — Retruco</title>
@@ -544,6 +583,16 @@
           </section>
         {/if}
         <div class="social-controls">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={cardsMuted ? 'Activar sonidos de cartas' : 'Silenciar cartas'}
+            title={cardsMuted ? 'Activar sonidos de cartas' : 'Silenciar cartas'}
+            aria-pressed={cardsMuted}
+            onclick={toggleCardSounds}
+          >
+            {#if cardsMuted}<VolumeX size={18} />{:else}<Volume2 size={18} />{/if}
+          </Button>
           {#if game?.phase === 'playing' && !spectator}
             <Button
               variant="outline"

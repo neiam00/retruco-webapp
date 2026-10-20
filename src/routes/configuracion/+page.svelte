@@ -1,13 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { resolve } from '$app/paths';
-  import { ArrowLeft, Headphones, Mic, Hand } from '@lucide/svelte';
+  import { ArrowLeft, Headphones, Mic, Hand, Volume2 } from '@lucide/svelte';
   import { Button } from '#lib/components/ui/button/index.js';
   import { loadVoiceMode, saveVoiceMode, type VoiceMode } from '#lib/voice-settings.js';
+  import {
+    CARD_SOUND_STORAGE_KEY,
+    loadCardSoundsMuted,
+    saveCardSoundsMuted,
+  } from '#lib/sound-settings.js';
 
   let mode = $state<VoiceMode>('listen');
   let notice = $state('');
   let ready = $state(false);
+  let cardsMuted = $state(false);
   const choices = [
     {
       value: 'listen',
@@ -31,6 +37,7 @@
 
   onMount(() => {
     mode = loadVoiceMode();
+    cardsMuted = loadCardSoundsMuted();
     ready = true;
   });
 
@@ -40,16 +47,43 @@
       ? 'Preferencia guardada en este dispositivo.'
       : 'El navegador no permite guardar la preferencia. Puedes elegirla en la mesa.';
   }
+
+  function toggleCardSounds() {
+    cardsMuted = !cardsMuted;
+    notice = saveCardSoundsMuted(cardsMuted)
+      ? 'Preferencia guardada en este dispositivo.'
+      : 'El navegador no permite guardar la preferencia. Puedes elegirla en la mesa.';
+  }
 </script>
 
+<svelte:window
+  onstorage={(event) => {
+    if (event.key === CARD_SOUND_STORAGE_KEY || event.key === null)
+      cardsMuted = loadCardSoundsMuted();
+  }}
+/>
+
 <svelte:head>
-  <title>Configuración de voz — Retruco</title>
+  <title>Configuración de audio — Retruco</title>
 </svelte:head>
 
 <main class="settings-page">
   <Button href={resolve('/')} variant="ghost"><ArrowLeft />Volver a las mesas</Button>
   <span class="eyebrow">A tu manera</span>
-  <h1>La voz de la mesa.</h1>
+  <h1>El sonido de la mesa.</h1>
+  <fieldset>
+    <legend>Sonidos de cartas</legend>
+    <label class={['choice', { selected: !cardsMuted }]}>
+      <input type="checkbox" disabled={!ready} checked={!cardsMuted} onchange={toggleCardSounds} />
+      <Volume2 size={24} />
+      <span>
+        <strong>Sonidos al repartir y jugar</strong>
+        <span class="muted">
+          Activa los sonidos de las cartas. La voz de los jugadores se controla por separado.
+        </span>
+      </span>
+    </label>
+  </fieldset>
   <p class="muted">
     Elige cómo quieres conversar. En cada mesa decides cuándo entrar al audio y activar el
     micrófono.

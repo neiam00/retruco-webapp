@@ -1,4 +1,5 @@
 import { cardURL } from './cards.js';
+import { DEAL_DURATION_MS, DEAL_INTERVAL_MS, PLAY_DURATION_MS } from './card-timing.js';
 import type { Snapshot } from './protocol.js';
 
 interface CardPosition {
@@ -86,7 +87,7 @@ export class CardMotion {
             seat === perspective
               ? `[data-hand-card="${index}"] img`
               : `[data-seat="${seat}"] [data-card-back="${index}"] img`,
-          delay: flights.length * 75,
+          delay: flights.length * DEAL_INTERVAL_MS,
           dealing: true,
         });
       };
@@ -103,7 +104,7 @@ export class CardMotion {
       ) {
         if (counts[seat] < 3) deal(seat);
       }
-      this.dealEnds = performance.now() + flights.at(-1)!.delay + 360;
+      this.dealEnds = performance.now() + flights.at(-1)!.delay + DEAL_DURATION_MS;
     } else {
       for (const [seatIndex, seat] of after.seats.entries()) {
         const newlyUsed = after.hand.filter(
@@ -195,7 +196,7 @@ export class CardMotion {
         { transform: `rotate(${to.angle}deg)`, opacity: 1, offset: 1 },
       ],
       {
-        duration: flight.dealing ? 360 : 420,
+        duration: flight.dealing ? DEAL_DURATION_MS : PLAY_DURATION_MS,
         delay: flight.delay,
         easing: 'cubic-bezier(0.22, 0.65, 0.3, 1)',
         fill: 'both',
