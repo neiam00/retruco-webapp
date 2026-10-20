@@ -36,7 +36,7 @@ pnpm lint
 pnpm check
 pnpm test
 pnpm build
-pnpm exec playwright install chromium
+pnpm exec playwright install chromium webkit
 pnpm test:e2e
 ```
 
@@ -47,6 +47,9 @@ two-player hand, chat, reconnect, forfeit, account dialogs and rulebook layout.
 It also verifies public-table joining, private-code joining, spectator perspective
 switching, and account history after login in a fresh browser context.
 Screenshots and traces are written to ignored output directories.
+The WebKit project checks card animation frame pacing, concealed cards, and sound
+controls. See [Safari rendering measurements](docs/safari-card-performance.md)
+for the SVG regression and the WebP comparison.
 
 For the built edge proxy check, build first and run `pnpm exec wrangler pages dev
 .svelte-kit/cloudflare --ip 127.0.0.1 --port 8788`. Supply `BACKEND_ORIGIN` and
@@ -105,9 +108,15 @@ Chat is retained in backend match snapshots by the user's explicit decision.
 
 The Spanish SVG deck comes from
 [gjenkins20/spanish-playing-cards-svg](https://github.com/gjenkins20/spanish-playing-cards-svg).
-See `static/cards/ATTRIBUTION.md` and `/creditos` for attribution. Card faces have
-an opaque ivory CSS backing because the source artwork contains transparent
-regions. DiceBear avatars are generated locally and Lucide supplies UI icons.
+See `static/cards/ATTRIBUTION.md` and `/creditos` for attribution. Edit card designs
+in `artwork/cards/*.svg`, then run `pnpm cards:build` and commit the generated
+`static/cards/*.webp` files and `src/lib/card-assets.json`. Production builds also
+run this conversion. Gameplay loads only the lossless, 576px-wide WebP copies:
+the intricate SVG paths otherwise cause long rendering stalls in Safari.
+Content hashes in filenames prevent stale images after design changes. If using
+`CARD_ASSET_ORIGIN`, upload the generated WebP deck before deploying the client.
+Card faces retain an opaque ivory CSS backing because the artwork contains
+transparent regions. DiceBear avatars are generated locally and Lucide supplies UI icons.
 
 Online matches use the server-authoritative rules engine. P1 voice uses Opus
 over WebRTC, with room-scoped signaling and optional coturn relay credentials

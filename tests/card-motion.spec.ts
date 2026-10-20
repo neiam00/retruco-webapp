@@ -4,6 +4,7 @@ import { expectClearTableCards } from './table-layout.js';
 declare global {
   interface Window {
     cardFlights: { kind: string; source: string }[];
+    cardFrameGaps: number[];
   }
 }
 
@@ -25,6 +26,14 @@ for (const players of [2, 4]) {
       for (const context of contexts) {
         await context.addInitScript(() => {
           window.cardFlights = [];
+          window.cardFrameGaps = [];
+          let previousFrame = performance.now();
+          const frame = (now: number) => {
+            window.cardFrameGaps.push(now - previousFrame);
+            previousFrame = now;
+            requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
           new MutationObserver((records) => {
             for (const record of records) {
               for (const node of record.addedNodes) {
@@ -81,6 +90,10 @@ for (const players of [2, 4]) {
           ),
         )
       ).findIndex(Boolean);
+      for (const page of pages)
+        await page.evaluate(() => {
+          window.cardFrameGaps = [];
+        });
       await pages[cutter].getByRole('button', { name: 'Partir el mazo', exact: true }).click();
       for (const page of pages) {
         await expect
@@ -92,12 +105,25 @@ for (const players of [2, 4]) {
           .toBe(players * 3);
         expect(
           await page.evaluate(() =>
-            window.cardFlights.every((flight) => flight.source.endsWith('/card_back.svg')),
+            window.cardFlights.every((flight) =>
+              /\/card_back-[a-f0-9]+\.webp$/.test(flight.source),
+            ),
           ),
         ).toBe(true);
         await expect(page.locator('[data-card-flight]')).toHaveCount(0);
         await expect(page.locator('.hand-card img:visible')).toHaveCount(3);
       }
+
+      // Complex live SVG paths previously stalled WebKit for up to a second
+      // per frame during the deal. Include real rendering, not just Worker time.
+      const gaps = await pages[0].evaluate(() => window.cardFrameGaps.toSorted((a, b) => a - b));
+      expect(gaps.length).toBeGreaterThan(0);
+      const p95FrameMs = gaps[Math.floor(gaps.length * 0.95)];
+      await testInfo.attach('deal-frame-pacing', {
+        body: JSON.stringify({ samples: gaps.length, p95FrameMs, maxFrameMs: gaps.at(-1) }),
+        contentType: 'application/json',
+      });
+      expect(p95FrameMs).toBeLessThan(100);
 
       const player = (
         await Promise.all(pages.map((page) => page.locator('.hand-card:not(:disabled)').count()))
@@ -170,7 +196,7 @@ for (const players of [2, 4]) {
         const lastFlights = await stackPage.evaluate(() => window.cardFlights.slice(-2));
         expect(lastFlights).toHaveLength(2);
         expect(
-          lastFlights.filter((flight) => flight.source.endsWith('/card_back.svg')),
+          lastFlights.filter((flight) => /\/card_back-[a-f0-9]+\.webp$/.test(flight.source)),
         ).toHaveLength(1);
         await expect(stackPage.locator('[data-card-flight]')).toHaveCount(0);
         await expect(stackPage.locator('.played-card img:visible')).toHaveCount(4);

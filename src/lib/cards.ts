@@ -1,5 +1,8 @@
 import type { Card } from './protocol.js';
 import { CARD_ASSET_ORIGIN } from '$app/env/public';
+import assets from './card-assets.json';
+
+const cardAssets: Record<string, string> = assets;
 
 const suitNames = { coins: 'oros', cups: 'copas', spades: 'espadas', clubs: 'bastos' };
 export function cardName(card: Card) {
@@ -7,9 +10,9 @@ export function cardName(card: Card) {
 }
 export function cardURL(card?: Card) {
   const origin = CARD_ASSET_ORIGIN.replace(/\/$/, '');
-  if (!card) return `${origin}/cards/card_back.svg`;
+  if (!card) return `${origin}/cards/${cardAssets.card_back}`;
   const suit = card.suit === 'spades' ? 'swords' : card.suit;
-  return `${origin}/cards/card_${suit}_${String(card.number).padStart(2, '0')}.svg`;
+  return `${origin}/cards/${cardAssets[`card_${suit}_${String(card.number).padStart(2, '0')}`]}`;
 }
 export const hierarchy = [
   'Perico',
