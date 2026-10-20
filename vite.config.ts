@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), '');
   const apiOrigin = environment.API_ORIGIN;
   const assetOrigin = environment.CARD_ASSET_ORIGIN;
-  const connections: CspSource[] = ['self', 'https://*.google-analytics.com'];
+  const connections: CspSource[] = ['self', 'wss://retru.co.ve', 'https://*.google-analytics.com'];
 
   if (apiOrigin) {
     const origin = configuredOrigin(apiOrigin);

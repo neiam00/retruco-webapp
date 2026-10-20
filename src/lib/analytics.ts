@@ -2,15 +2,18 @@ import { GOOGLE_ANALYTICS_ID } from '$app/env/public';
 
 declare global {
   interface Window {
-    dataLayer?: unknown[][];
+    dataLayer?: unknown[];
   }
 }
 
 let initialized = false;
 
 function tag(...parameters: unknown[]) {
+  if (parameters.length === 0) return;
   window.dataLayer ??= [];
-  window.dataLayer.push(parameters);
+  // Google tag commands use an arguments object, as in the official bootstrap.
+  // eslint-disable-next-line prefer-rest-params -- Preserve gtag.js's documented command format.
+  window.dataLayer.push(arguments);
 }
 
 export function trackPage(pathname: string) {

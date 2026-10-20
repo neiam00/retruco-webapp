@@ -126,6 +126,9 @@
   {/if}
 
   <div class={['table-status', { expanded: !game || game.phase !== 'playing' }]}>
+    {#if game && (game.phase === 'cutting' || game.phase === 'hand_over')}
+      <span class="phase-countdown" aria-label={seconds + ' segundos restantes'}>{seconds}s</span>
+    {/if}
     {#if !game}
       <span class="status-eyebrow">La mesa está puesta</span>
       <h1>Faltan {snapshot.config.players - snapshot.seats.length} para repartir.</h1>
@@ -464,6 +467,13 @@
     letter-spacing: 0.13em;
     color: #c5ccac;
     text-transform: uppercase;
+  }
+  .phase-countdown {
+    display: block;
+    margin-bottom: 12px;
+    color: #d8cb93;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
   .envido-results {
     display: grid;

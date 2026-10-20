@@ -32,6 +32,8 @@ Browser tests require the API/database and Vite already running. Use a disposabl
 database: they create users and matches, play cards, send chat, and forfeit games.
 The desktop/mobile suite covers four-player seating and declarations, a full
 two-player hand, chat, reconnect, forfeit, account dialogs and rulebook layout.
+It also verifies public-table joining, private-code joining, spectator perspective
+switching, and account history after login in a fresh browser context.
 Screenshots and traces are written to ignored output directories.
 
 For the built edge proxy check, build first and run `pnpm exec wrangler pages dev

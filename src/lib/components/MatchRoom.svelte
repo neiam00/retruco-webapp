@@ -119,7 +119,9 @@
             stackMode = false;
           }
           snapshot = incoming;
-          offset = Date.parse(incoming.serverTime) - Date.now();
+          const receivedAt = Date.now();
+          now = receivedAt;
+          offset = Date.parse(incoming.serverTime) - receivedAt;
           connected = true;
           busy = false;
           if (leaving && (incoming.seat < 0 || incoming.state?.phase === 'match_over')) {
