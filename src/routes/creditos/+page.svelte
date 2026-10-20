@@ -23,14 +23,6 @@
     </a>
     .
   </p>
-  <p>
-    La baraja conserva su formato SVG. Retruco usa las 40 cartas del juego venezolano, sin ochos ni
-    nueves.
-  </p>
-  <p>
-    Los controles utilizan shadcn-svelte, los iconos Lucide y los avatares DiceBear Bottts. Los
-    avatares se generan en tu dispositivo a partir del nombre mostrado.
-  </p>
   <Button href="/" variant="outline">Volver a las mesas</Button>
 </main>
 
