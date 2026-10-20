@@ -23,12 +23,15 @@
   } = $props();
 
   let game = $derived(snapshot.state);
+  let missingPlayers = $derived(
+    snapshot.config.players - snapshot.seats.filter((seat) => seat.id).length,
+  );
   let perspective = $derived(snapshot.seat < 0 ? snapshot.perspective : snapshot.seat);
   let respondingTeam = $derived(game?.pending ? 1 - game.pending.caller : undefined);
   let latestEvent = $derived(snapshot.events?.at(-1)?.event);
 
   function seatName(seat: number) {
-    return snapshot.seats[seat]?.name ?? 'Puesto libre';
+    return snapshot.seats[seat]?.name || 'Puesto libre';
   }
 
   function announcement(seat: number) {
@@ -144,9 +147,16 @@
     {/if}
     {#if !game}
       <span class="status-eyebrow">La mesa está puesta</span>
-      <h1>Faltan {snapshot.config.players - snapshot.seats.length} para repartir.</h1>
+      <h1>
+        {missingPlayers === 1 ? 'Falta' : 'Faltan'}
+        {missingPlayers} para repartir.
+      </h1>
       <p>Invita a tus panas. Aquí los esperamos.</p>
       <Button onclick={oninvite}><Share2 size={16} />Invitar a mis amigos</Button>
+    {:else if snapshot.cpuPaused}
+      <span class="status-eyebrow">Partida en pausa</span>
+      <h1>Esperando a los jugadores.</h1>
+      <p>La CPU continúa cuando vuelva un jugador a la mesa.</p>
     {:else if game.phase === 'match_over'}
       <span class="status-eyebrow">La partida tiene ganador</span>
       <h1>{victoryLabel(game.winner, snapshot.seat)}</h1>

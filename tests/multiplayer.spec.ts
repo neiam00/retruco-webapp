@@ -120,7 +120,7 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await first.getByRole('button', { name: 'Cambiar', exact: true }).click();
     await first.getByRole('button', { name: 'Crear una mesa', exact: true }).click();
     await expect(first).toHaveURL(/\/mesa\/[A-Z]{4}-[0-9]{4}$/);
-    await expect(first.getByText('Faltan 1 para repartir.')).toBeVisible();
+    await expect(first.getByText('Falta 1 para repartir.')).toBeVisible();
 
     const tableURL = first.url();
     await second.goto(tableURL);

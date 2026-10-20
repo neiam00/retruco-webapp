@@ -31,6 +31,8 @@
   let florRequired = $state(true);
   let privateMatch = $state(false);
   let spectatorsCanSpeak = $state(false);
+  let cpuSeats = $state<number[]>([]);
+  let openHumanSeats = $derived(players - cpuSeats.length - 1);
   let tables = $state.raw<Listing[]>([]);
   let loading = $state(true);
   let busy = $state(false);
@@ -81,7 +83,7 @@
       const match = await api<{ code: string }>('/matches', {
         private: privateMatch,
         config: { players, target, florRequired },
-        options: { spectatorsCanSpeak },
+        options: { spectatorsCanSpeak, cpuSeats: cpuSeats.length ? cpuSeats : undefined },
       });
       await goto(resolve('/mesa/[code]', { code: match.code }));
     });
@@ -214,7 +216,10 @@
               <Button
                 variant={players === count ? 'secondary' : 'ghost'}
                 aria-pressed={players === count}
-                onclick={() => (players = count)}
+                onclick={() => {
+                  players = count;
+                  cpuSeats = [];
+                }}
               >
                 {count === 2 ? '1 vs 1' : '2 vs 2'}
               </Button>
@@ -236,6 +241,40 @@
           </div>
         </div>
       </div>
+      <fieldset class="cpu-picker">
+        <legend>{players === 2 ? 'Tu rival' : 'Quién se sienta a jugar'}</legend>
+        <p class="muted text-sm">
+          {players === 2
+            ? 'Activa la CPU para jugar sin esperar a otra persona.'
+            : 'Elige los puestos CPU. Los demás quedan libres para tus amigos.'}
+        </p>
+        {#each Array.from({ length: players - 1 }, (_, index) => index + 1) as seat (seat)}
+          <label class="cpu-choice">
+            <span>
+              {players === 2
+                ? 'Jugar contra la CPU'
+                : seat === 2
+                  ? 'Tu compañero: CPU'
+                  : `Oponente ${seat === 1 ? 1 : 2}: CPU`}
+            </span>
+            <input
+              type="checkbox"
+              checked={cpuSeats.includes(seat)}
+              onchange={(event) => {
+                cpuSeats = event.currentTarget.checked
+                  ? [...cpuSeats, seat].sort()
+                  : cpuSeats.filter((selected) => selected !== seat);
+              }}
+            />
+          </label>
+        {/each}
+        {#if cpuSeats.length}
+          <p class="muted text-sm">
+            {cpuSeats.length} CPU · {openHumanSeats}
+            {openHumanSeats === 1 ? 'puesto libre' : 'puestos libres'}
+          </p>
+        {/if}
+      </fieldset>
       <div class="row spread option-row">
         <span>Flor por derecho</span>
         <Button
@@ -347,6 +386,12 @@
                       ? 'Flor por derecho'
                       : 'Flor libre'}
                   </p>
+                  {#if table.cpuPlayers}
+                    <span class="pill">
+                      {table.cpuPlayers}
+                      {table.cpuPlayers === 1 ? 'jugador CPU' : 'jugadores CPU'}
+                    </span>
+                  {/if}
                 </div>
               </div>
               <div class="row">
@@ -476,6 +521,35 @@
 </Dialog.Root>
 
 <style>
+  .cpu-picker {
+    border: 0;
+    padding: 0;
+    margin: 20px 0;
+    display: grid;
+    gap: 10px;
+  }
+  .cpu-picker legend {
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .cpu-picker p {
+    margin: 0;
+  }
+  .cpu-choice {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid #e8e4ce24;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .cpu-choice input {
+    width: 20px;
+    height: 20px;
+    accent-color: #d8cca0;
+  }
   .brand-dot {
     font-size: 1rem;
     color: #ad5533;

@@ -1,7 +1,7 @@
 {
   "extends": "$app/tsconfig",
   "include": ["src", "tests", "*"],
-  "exclude": ["src/service-worker"],
+  "exclude": ["src/service-worker", "src/lib/cpu/vendor"],
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,

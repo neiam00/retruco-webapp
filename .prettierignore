@@ -3,6 +3,7 @@ node_modules
 .wrangler
 pnpm-lock.yaml
 static/cards
+src/lib/cpu/vendor
 playwright-report
 test-results
 .agent

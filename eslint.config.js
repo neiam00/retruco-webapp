@@ -11,6 +11,7 @@ export default [
       '.svelte-kit/**',
       '.wrangler/**',
       'static/**',
+      'src/lib/cpu/vendor/**',
       '.agent/**',
       '.agents/**',
       'playwright-report/**',

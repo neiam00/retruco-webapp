@@ -28,7 +28,8 @@
   import { api, ApiError, socketURL } from '#lib/api.js';
   import { cardName } from '#lib/cards.js';
   import { declarations, commandLabel } from '#lib/command-labels.js';
-  import type { User, Snapshot, Command } from '#lib/protocol.js';
+  import { CPUController, type CPUStatus } from '#lib/cpu/controller.js';
+  import type { User, Snapshot, Command, CPUWork } from '#lib/protocol.js';
 
   let { code }: { code: string } = $props();
   let snapshot = $state.raw<Snapshot | null>(null);
@@ -36,6 +37,8 @@
   let name = $state('');
   let connected = $state(false);
   let error = $state('');
+  let cpuStatus = $state<CPUStatus>('idle');
+  let cpuError = $state('');
   let busy = $state(false);
   let ready = $state(false);
   let copied = $state(false);
@@ -56,6 +59,21 @@
   let socket: WebSocket | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
+  const cpu = new CPUController(
+    (seat, revision, command) => {
+      if (!disposed && socket?.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            input: { id: crypto.randomUUID(), cpuSeat: seat, revision, command },
+          }),
+        );
+      }
+    },
+    (status, message) => {
+      cpuStatus = status;
+      cpuError = message ?? '';
+    },
+  );
   let game = $derived(snapshot?.state);
   let spectator = $derived((snapshot?.seat ?? -1) < 0);
   let myTurn = $derived(
@@ -129,6 +147,7 @@
           offset = Date.parse(incoming.serverTime) - receivedAt;
           connected = true;
           busy = false;
+          cpu.update(payload.cpu as CPUWork | undefined);
           if (leaving && (incoming.seat < 0 || incoming.state?.phase === 'match_over')) {
             void goto(resolve('/'));
           }
@@ -141,6 +160,7 @@
       }
     };
     socket.onclose = () => {
+      cpu.stop();
       connected = false;
       busy = false;
       if (!disposed) retry = setTimeout(connect, 2000);
@@ -163,6 +183,7 @@
     const timer = setInterval(() => (now = Date.now()), 250);
     return () => {
       disposed = true;
+      cpu.stop();
       clearInterval(timer);
       clearTimeout(retry);
       socket?.close();
@@ -237,7 +258,7 @@
     return [command.type, command.kind, command.amount, command.mode].join(':');
   }
   function seatName(seat: number) {
-    return snapshot?.seats[seat]?.name ?? 'Esperando…';
+    return snapshot?.seats[seat]?.name || 'Esperando…';
   }
   async function leave() {
     if (spectator || game?.phase === 'match_over') {
@@ -333,16 +354,18 @@
         {#if spectator}
           <div class="spectator-bar">
             <span class="row"><Eye size={16} />Estás mirando</span>
-            {#each snapshot.seats as seat, i (seat.id)}
-              <Button
-                variant={snapshot.perspective === i ? 'secondary' : 'ghost'}
-                onclick={() => perspective(i)}
-              >
-                {seat.name}
-              </Button>
+            {#each snapshot.seats as seat, i (seat.id || `empty-${i}`)}
+              {#if seat.id}
+                <Button
+                  variant={snapshot.perspective === i ? 'secondary' : 'ghost'}
+                  onclick={() => perspective(i)}
+                >
+                  {seat.name}
+                </Button>
+              {/if}
             {/each}
 
-            {#if !game && snapshot.seats.length < snapshot.config.players}
+            {#if !game && snapshot.seats.filter((seat) => seat.id).length < snapshot.config.players}
               <Button disabled={busy} onclick={() => enter(true)}>Sentarme</Button>
             {/if}
           </div>
@@ -557,6 +580,23 @@
           {/if}
         </div>
         <VoiceControls {code} />
+        {#if cpuStatus !== 'idle'}
+          <section class="cpu-status" aria-label="Estado de la CPU">
+            <span role="status">
+              {cpuStatus === 'loading'
+                ? 'Preparando CPU…'
+                : cpuStatus === 'thinking'
+                  ? 'La CPU está pensando…'
+                  : cpuStatus === 'error'
+                    ? 'La CPU necesita ayuda'
+                    : 'CPU lista'}
+            </span>
+            {#if cpuError}
+              <p class="error" role="alert">{cpuError}</p>
+              <Button variant="outline" onclick={() => cpu.retry()}>Reintentar CPU</Button>
+            {/if}
+          </section>
+        {/if}
         <CantoHistory
           events={snapshot.cantoHistory ?? snapshot.events ?? []}
           viewerSeat={snapshot.seat}
@@ -705,6 +745,16 @@
     right: 28px;
     z-index: 5;
     width: 224px;
+  }
+  .cpu-status {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border: 1px solid #e8e4ce24;
+    border-radius: 14px;
+    background: #152d26;
+    font-size: 0.85rem;
   }
   .table-meta {
     margin-bottom: 20px;

@@ -31,6 +31,7 @@ export interface Wager {
   mode?: string;
 }
 export interface GameView {
+  config: Config;
   version: string;
   revision: number;
   phase: string;
@@ -76,11 +77,13 @@ export interface GameEvent {
   };
 }
 export interface Snapshot {
-  options?: { spectatorsCanSpeak: boolean };
+  options?: { spectatorsCanSpeak: boolean; cpuSeats?: number[] };
+  cpuController?: number;
+  cpuPaused?: boolean;
   code: string;
   private: boolean;
   config: Config;
-  seats: { id: string; name: string }[];
+  seats: { id: string; name: string; cpu?: boolean }[];
   seat: number;
   perspective: number;
   state?: GameView;
@@ -93,6 +96,7 @@ export interface Snapshot {
   cantoHistory?: GameEvent[];
 }
 export interface Listing {
+  cpuPlayers?: number;
   code: string;
   players: number;
   capacity: number;
@@ -100,6 +104,26 @@ export interface Listing {
   florRequired: boolean;
   started: boolean;
   host: string;
+}
+
+export interface CPUWork {
+  version: number;
+  controlled: boolean;
+  seat: number;
+  view?: GameView;
+}
+export interface CPURequest {
+  version: number;
+  seat: number;
+  entropy: number;
+  view: GameView;
+}
+export interface CPUResponse {
+  version: number;
+  revision: number;
+  seat: number;
+  command?: Command;
+  error?: string;
 }
 export interface HistoryEntry {
   code: string;

@@ -111,4 +111,76 @@ regions. DiceBear avatars are generated locally and Lucide supplies UI icons.
 
 Online matches use the server-authoritative rules engine. P1 voice uses Opus
 over WebRTC, with room-scoped signaling and optional coturn relay credentials
-from the API. CPU support is the remaining P1 work.
+from the API.
+
+## CPU rooms
+
+Choose a CPU opponent for 1v1, or select any of the three other seats for CPU
+players in 2v2. Unselected seats remain open for human players. The match browser
+shows the number of CPU players. The creator's browser normally controls the
+CPU; another connected human takes over after a disconnect. When everyone
+disconnects, the match waits for a human to return.
+
+One dedicated Worker handles all CPU seats assigned to that connection. The
+server sends only the acting CPU's authorized view and validates every returned
+move. The Go policy uses its own cards and visible plays; human opponents'
+hidden cards and the deck never enter the Worker. Duplicate snapshots, old
+revisions, revoked control, and late Worker errors cannot submit stale moves.
+Human-only matches never download the WASM module.
+
+Deploy the P1 backend before this frontend. The browser engine and its matching
+Go runtime are checked into `src/lib/cpu/vendor` so Cloudflare builds need no Go
+toolchain or backend checkout. The manifest records the backend commit,
+toolchain, and SHA-256 hashes. The Go license is also shipped at
+`/licenses/go.txt`.
+
+To update the engine after committing backend changes:
+
+```sh
+pnpm update:cpu
+# Or choose a different backend checkout:
+pnpm update:cpu /path/to/retruco-backend
+pnpm check
+pnpm lint
+pnpm test
+pnpm build
+```
+
+The update command builds WASM and copies its exact `wasm_exec.js` runtime as a
+pair. Never replace just one of those files. The engine rejects mismatched
+protocol/rules versions. Its assets are bundled with content hashes and loaded
+only after the server assigns CPU control. Worker failures show a retry action.
+
+## CPU measurements
+
+Measured on 2026-10-20 on an Apple M5 with Chromium 156.0.8078.4, using the
+production build served locally. Each run used a fresh browser context.
+The mobile profile used a Pixel 7 viewport with CDP 4× CPU throttling configured.
+These are emulation results, not measurements from a physical phone.
+
+| Profile              | Seats | Decisions | Worker startup | Median decision round trip |    P95 | Largest sampled WASM memory |
+| -------------------- | ----: | --------: | -------------: | -------------------------: | -----: | --------------------------: |
+| Desktop              |     4 |        84 |        22.8 ms |                     1.8 ms | 3.2 ms |                     5.5 MiB |
+| Mobile emulation, 4× |     2 |        38 |        56.8 ms |                     3.5 ms | 6.9 ms |                       5 MiB |
+| Mobile emulation, 4× |     4 |        42 |        47.8 ms |                     3.6 ms | 8.6 ms |                       5 MiB |
+
+Startup includes Worker initialization, the local WASM fetch, and runtime
+startup. The WASM download was 4,419,352 uncompressed bytes and took 5.2–8.1 ms
+over localhost; this does not predict real mobile-network download time.
+Decision round trips include serialization, Worker scheduling, Go execution,
+and the reply, but exclude the intentional 650 ms pause before showing a move.
+The longest observed round trip was 37.8 ms. Deals and decision counts differ
+between runs, so these are descriptive samples, not a controlled speedup claim.
+
+Memory was sampled after startup and between hands using CDP. WASM linear memory
+was measured separately from the JavaScript heap; the latter reached about
+0.83 MiB used and 2 MiB allocated. These counters do not include the entire
+browser process or guarantee a universal peak. See
+[`docs/cpu-performance.json`](docs/cpu-performance.json) for the raw measurements.
+Go/WASM was chosen to share the rules, not because a JavaScript performance
+advantage has been established.
+
+`tests/cpu.spec.ts` reproduces complete CPU games, room permissions and handoff,
+checks lazy loading, and attaches performance reports. Run against a disposable
+API/database; tests create real matches. Existing human-only multiplayer tests
+remain part of regression coverage.

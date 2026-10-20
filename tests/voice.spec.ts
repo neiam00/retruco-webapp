@@ -171,9 +171,9 @@ for (const players of [2, 4]) {
       }
       expect((await audioStats(spectator)).microphone).toBe(spectatorsCanSpeak);
       expect((await audioStats(second)).transmitting).toBe(false);
-      expect(
-        (await audioStats(second)).codecs.every((codec) => codec.toLowerCase() === 'audio/opus'),
-      ).toBe(true);
+      const negotiatedCodecs = (await audioStats(second)).codecs;
+      expect(negotiatedCodecs.length).toBeGreaterThan(0);
+      expect(negotiatedCodecs.every((codec) => codec.toLowerCase() === 'audio/opus')).toBe(true);
 
       await second.getByRole('button', { name: 'Abrir chat', exact: true }).click();
       await second.getByPlaceholder('Di algo…').click();
