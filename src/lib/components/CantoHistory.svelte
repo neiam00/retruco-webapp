@@ -23,7 +23,6 @@
 <section class="canto-history" aria-label="Historial de cantos">
   <header>
     <h2>Cantos de la partida</h2>
-    <p>Lo que se dijo, mano a mano.</p>
   </header>
   <!-- Keyboard users need to focus this scrollable history. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -65,15 +64,6 @@
     color: #e6dfb9;
     font-size: 13px;
     font-weight: 600;
-  }
-  header p,
-  .empty {
-    color: #a7bfaa;
-    font-size: 11px;
-    line-height: 1.5;
-  }
-  header p {
-    margin-top: 4px;
   }
   .history-scroll {
     max-height: min(440px, 55dvh);
