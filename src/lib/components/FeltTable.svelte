@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fly } from 'svelte/transition';
   import { Share2 } from '@lucide/svelte';
   import { resolve } from '$app/paths';
   import { Button } from '#lib/components/ui/button/index.js';
@@ -81,6 +82,7 @@
               <div
                 class={['played-card', { burned: play.burned }]}
                 style:--tilt={round * 7 - 7 + 'deg'}
+                in:fly={{ y: 28, duration: 180 }}
               >
                 <Card card={play.card} hidden={!play.card} width={70} />
                 <span>{play.burned ? 'Quemada' : round + 1 + '.ª'}</span>
@@ -112,10 +114,24 @@
       <span class="status-eyebrow">La partida tiene ganador</span>
       <h1>¡Ganó el equipo {game.winner + 1}!</h1>
       <p>{game.scores[0]} — {game.scores[1]}</p>
+      {#if game.envidoResults?.length}
+        <div class="envido-results" aria-label="Valores de envido">
+          {#each game.envidoResults as result (result.seat)}
+            <span>{seatName(result.seat)}: {result.eligible ? result.value : 'Flor inválida'}</span>
+          {/each}
+        </div>
+      {/if}
       <Button href={resolve('/')}>Volver a las mesas</Button>
     {:else if game.phase === 'hand_over'}
       <span class="status-eyebrow">Se cierra la mano</span>
       <h2>La próxima ya viene.</h2>
+      {#if game.envidoResults?.length}
+        <div class="envido-results" aria-label="Valores de envido">
+          {#each game.envidoResults as result (result.seat)}
+            <span>{seatName(result.seat)}: {result.eligible ? result.value : 'Flor inválida'}</span>
+          {/each}
+        </div>
+      {/if}
       {#each game.payouts as payout, i (i)}
         <p>Equipo {payout.team + 1}: +{payout.points} de {payout.kind}</p>
       {/each}
@@ -415,6 +431,14 @@
     letter-spacing: 0.13em;
     color: #c5ccac;
     text-transform: uppercase;
+  }
+  .envido-results {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 16px;
+    font-size: 11px;
+    color: #e1dec0;
   }
   @media (max-height: 760px) and (min-width: 651px) {
     .play-zone {

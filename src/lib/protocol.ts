@@ -59,6 +59,7 @@ export interface GameView {
   florValid: boolean;
   legal: Command[];
   payouts: { kind: string; team: number; points: number }[];
+  envidoResults?: { seat: number; value: number; eligible: boolean }[];
 }
 export interface Snapshot {
   code: string;
@@ -88,5 +89,6 @@ export interface HistoryEntry {
   scores: [number, number];
   winner: number;
   finished: boolean;
+  expired?: boolean;
   updatedAt: string;
 }

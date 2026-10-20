@@ -128,6 +128,19 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await cutter.getByLabel('Punto de corte (1–39)').fill('19');
     await cutter.getByRole('button', cutButton).click();
     await expect(first.locator('.hand-card')).toHaveCount(3);
+    const leyCall = { name: 'A ley, envido', exact: true };
+    await expect
+      .poll(
+        async () =>
+          (await first.getByRole('button', leyCall).isVisible()) ||
+          (await second.getByRole('button', leyCall).isVisible()),
+      )
+      .toBe(true);
+    const caller = (await first.getByRole('button', leyCall).isVisible()) ? first : second;
+    const responder = caller === first ? second : first;
+    await caller.getByRole('button', leyCall).click();
+    await responder.getByRole('button', { name: 'Quiero sin ley', exact: true }).click();
+    await expect(first.getByLabel('Valores de envido')).not.toBeVisible();
     expect(await first.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
@@ -173,13 +186,19 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
         await available.nth(1).click();
         await playBoth.click();
       } else {
-        await available.first().click();
+        if (move === 0) {
+          await available.first().press('Enter');
+        } else {
+          await available.first().click();
+        }
       }
       await expect
         .poll(() => active.locator('.hand-card.used').count())
         .toBeGreaterThan(usedBefore);
     }
     await expect(first.getByRole('heading', { name: 'La próxima ya viene.' })).toBeVisible();
+    await expect(first.getByLabel('Valores de envido')).toContainText('Prueba Ana');
+    await expect(first.getByLabel('Valores de envido')).toContainText('Prueba Beto');
 
     await first.getByRole('button', { name: 'Abrir chat', exact: true }).click();
     await second.getByRole('button', { name: 'Abrir chat', exact: true }).click();

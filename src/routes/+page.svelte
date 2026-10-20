@@ -439,7 +439,11 @@
         <div>
           <strong>{entry.code}</strong>
           <p class="muted">
-            {entry.scores[0]} — {entry.scores[1]} · {entry.finished ? 'Terminada' : 'En curso'}
+            {#if entry.expired}
+              Sin jugar · Mesa expirada
+            {:else}
+              {entry.scores[0]} — {entry.scores[1]} · {entry.finished ? 'Terminada' : 'En curso'}
+            {/if}
           </p>
         </div>
         {#if !entry.finished}

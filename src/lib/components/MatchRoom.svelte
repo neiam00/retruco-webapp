@@ -654,8 +654,8 @@
   .match-header :global(button) {
     color: #aec2b3;
     width: 34px;
-    height: 34px;
-    min-height: 34px;
+    height: 44px;
+    min-height: 44px;
   }
   .match-header :global(svg) {
     width: 15px;
@@ -805,8 +805,8 @@
     gap: 8px;
   }
   .stack-controls :global(button) {
-    min-height: 32px;
-    height: 32px;
+    min-height: 44px;
+    height: 44px;
     font-size: 10px;
   }
   .canto-actions {
@@ -817,8 +817,8 @@
     margin-top: 12px;
   }
   .canto-actions :global(button) {
-    min-height: 36px;
-    height: 36px;
+    min-height: 44px;
+    height: 44px;
     font-size: 11px;
     padding: 8px 16px;
     box-shadow: 0 4px 10px #071c1426;
@@ -835,8 +835,8 @@
   }
   .raise-field :global(input) {
     width: 55px;
-    min-height: 36px;
-    height: 36px;
+    min-height: 44px;
+    height: 44px;
   }
   .social-controls {
     position: absolute;
@@ -895,8 +895,8 @@
     font-size: 10px;
   }
   .spectator-bar :global(button) {
-    min-height: 30px;
-    height: 30px;
+    min-height: 44px;
+    height: 44px;
     padding: 5px 9px;
     font-size: 10px;
   }
@@ -988,8 +988,8 @@
     }
     .match-header :global(button) {
       width: 30px;
-      height: 30px;
-      min-height: 30px;
+      height: 44px;
+      min-height: 44px;
     }
     .game-surface {
       height: calc(100dvh - 54px);
@@ -1043,8 +1043,8 @@
     }
     .canto-actions :global(button) {
       font-size: 9px;
-      height: 31px;
-      min-height: 31px;
+      height: 44px;
+      min-height: 44px;
       padding: 5px 9px;
     }
     .stack-controls {
@@ -1065,8 +1065,8 @@
       bottom: 12px;
     }
     .social-controls :global(button) {
-      height: 34px;
-      min-height: 34px;
+      height: 44px;
+      min-height: 44px;
     }
     .chat-popover {
       right: 12px;
