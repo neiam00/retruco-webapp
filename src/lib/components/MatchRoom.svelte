@@ -20,6 +20,7 @@
   import * as Dialog from '#lib/components/ui/dialog/index.js';
   import Card from '#lib/components/Card.svelte';
   import ChatPanel from '#lib/components/ChatPanel.svelte';
+  import CantoHistory from '#lib/components/CantoHistory.svelte';
   import FeltTable from '#lib/components/FeltTable.svelte';
   import { signals } from '#lib/signal-options.js';
   import Hierarchy from '#lib/components/Hierarchy.svelte';
@@ -328,24 +329,6 @@
   {:else}
     <div class="match-grid">
       <main class="game-surface">
-        <div class="table-meta row spread">
-          <span class="row status">
-            {#if connected}
-              <Wifi size={14} />
-            {:else}
-              <WifiOff size={14} />
-            {/if}
-            {connected ? 'En línea' : 'Reconectando…'}
-          </span>
-          <span>
-            {snapshot.config.target} piedras · {snapshot.config.florRequired
-              ? 'Flor por derecho'
-              : 'Flor libre'}
-          </span>
-          {#if game}
-            <span>Mano {game.handNumber}</span>
-          {/if}
-        </div>
         {#if spectator}
           <div class="spectator-bar">
             <span class="row"><Eye size={16} />Estás mirando</span>
@@ -517,43 +500,63 @@
             {/if}
           </section>
         {/if}
-      </main>
-
-      <div class="social-controls">
-        {#if game?.phase === 'playing' && !spectator}
+        <div class="social-controls">
+          {#if game?.phase === 'playing' && !spectator}
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Hacer una seña"
+              onclick={() => (signalsOpen = true)}
+            >
+              <Smile />
+            </Button>
+          {/if}
           <Button
             variant="outline"
-            size="icon"
-            aria-label="Hacer una seña"
-            onclick={() => (signalsOpen = true)}
+            aria-label={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
+            aria-expanded={chatOpen}
+            onclick={() => (chatOpen = !chatOpen)}
           >
-            <Smile />
+            {#if chatOpen}<X size={16} />{:else}<MessageCircle size={16} />{/if}
+            Chat
+            {#if snapshot.chat.length}<span class="chat-count">{snapshot.chat.length}</span>{/if}
           </Button>
-        {/if}
-        <Button
-          variant="outline"
-          aria-label={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
-          aria-expanded={chatOpen}
-          onclick={() => (chatOpen = !chatOpen)}
-        >
-          {#if chatOpen}<X size={16} />{:else}<MessageCircle size={16} />{/if}
-          Chat
-          {#if snapshot.chat.length}<span class="chat-count">{snapshot.chat.length}</span>{/if}
-        </Button>
-      </div>
-      {#if chatOpen}
-        <div class="chat-popover"><ChatPanel {snapshot} {connected} onmessage={sendChat} /></div>
-      {/if}
-      {#if snapshot.signals.length}
-        <div class="visible-signals" aria-live="polite">
-          {#each snapshot.signals.slice(-2) as item (item.id)}
-            <span>
-              {signals.find((option) => option.kind === item.kind)?.emoji}
-              {seatName(item.seat)}: {signals.find((option) => option.kind === item.kind)?.label}
-            </span>
-          {/each}
         </div>
-      {/if}
+        {#if chatOpen}
+          <div class="chat-popover"><ChatPanel {snapshot} {connected} onmessage={sendChat} /></div>
+        {/if}
+        {#if snapshot.signals.length}
+          <div class="visible-signals" aria-live="polite">
+            {#each snapshot.signals.slice(-2) as item (item.id)}
+              <span>
+                {signals.find((option) => option.kind === item.kind)?.emoji}
+                {seatName(item.seat)}: {signals.find((option) => option.kind === item.kind)?.label}
+              </span>
+            {/each}
+          </div>
+        {/if}
+      </main>
+      <aside class="match-details" aria-label="Detalles de la partida">
+        <div class="table-meta row spread">
+          <span class="row status">
+            {#if connected}
+              <Wifi size={14} />
+            {:else}
+              <WifiOff size={14} />
+            {/if}
+            {connected ? 'En línea' : 'Reconectando…'}
+          </span>
+          <span>
+            {snapshot.config.target} piedras · {snapshot.config.florRequired
+              ? 'Flor por derecho'
+              : 'Flor libre'}
+          </span>
+          {#if game}
+            <span>Mano {game.handNumber}</span>
+          {/if}
+        </div>
+        <CantoHistory events={snapshot.cantoHistory ?? snapshot.events ?? []} />
+      </aside>
       <Dialog.Root bind:open={signalsOpen}>
         <Dialog.Content>
           <Dialog.Header>
@@ -683,6 +686,7 @@
     flex-direction: column;
     min-height: calc(100dvh - 64px);
     padding-bottom: 22px;
+    margin-right: 280px;
   }
   .table-area {
     position: relative;
@@ -690,11 +694,15 @@
     flex: 1;
     min-height: 520px;
   }
-  .table-meta {
+  .match-details {
     position: absolute;
     top: 30px;
     right: 28px;
     z-index: 5;
+    width: 224px;
+  }
+  .table-meta {
+    margin-bottom: 20px;
     flex-direction: column;
     align-items: flex-end;
     gap: 7px;
@@ -987,6 +995,22 @@
       width: 70%;
     }
   }
+  @media (max-width: 1150px) {
+    .game-surface {
+      margin-right: 0;
+    }
+    .match-details {
+      position: static;
+      width: auto;
+      margin: 0 24px 24px;
+    }
+    .table-meta {
+      position: absolute;
+      top: 30px;
+      right: 28px;
+      z-index: 5;
+    }
+  }
   @media (max-width: 650px) {
     .match-header {
       height: 54px;
@@ -1023,6 +1047,9 @@
       top: 12px;
       right: 12px;
       font-size: 8px;
+    }
+    .match-details {
+      margin: 0 12px 24px;
     }
     .table-meta > span:not(.status) {
       display: none;

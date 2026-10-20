@@ -146,6 +146,21 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await responder.getByRole('button', { name: 'Sin ley, quiero', exact: true }).click();
     await expect(first.getByLabel('Valores de envido')).not.toBeVisible();
     await caller.getByRole('button', { name: 'Truco', exact: true }).click();
+    const history = first.getByRole('region', { name: 'Historial de cantos', exact: true });
+    const firstHandHistory = history.getByRole('region', {
+      name: 'Cantos de la mano 1',
+      exact: true,
+    });
+    const callingTeam = caller === first ? 1 : 2;
+    await expect(firstHandHistory.getByRole('listitem').nth(0)).toHaveText(
+      `Equipo ${callingTeam} A ley, envido`,
+    );
+    await expect(firstHandHistory.getByRole('listitem').nth(1)).toHaveText(
+      `Equipo ${3 - callingTeam} Sin ley, quiero`,
+    );
+    await expect(firstHandHistory.getByRole('listitem').nth(2)).toHaveText(
+      `Equipo ${callingTeam} Truco`,
+    );
     await expect(responder.locator('.canto-actions button')).toHaveText([
       'Quiero',
       'No quiero',
@@ -261,13 +276,47 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await second.getByRole('button', { name: 'Abrir chat', exact: true }).click();
     await expect(second.getByText('¡Buenas manos!', { exact: true })).toBeVisible();
 
+    await first.getByRole('button', { name: 'Cerrar chat', exact: true }).click();
+    await second.getByRole('button', { name: 'Cerrar chat', exact: true }).click();
+    await expect(first.locator('.table-meta')).toContainText('Mano 2', { timeout: 10000 });
+    for (const page of [first, second]) {
+      const cut = page.getByRole('button', { name: 'Partir el mazo', exact: true });
+      if (await cut.isVisible()) {
+        await cut.click();
+        break;
+      }
+    }
+    await expect(first.locator('.table-status')).toContainText('1.ª vuelta');
+    const secondCaller = (await first
+      .getByRole('button', { name: 'Truco', exact: true })
+      .isVisible())
+      ? first
+      : second;
+    await secondCaller.getByRole('button', { name: 'Truco', exact: true }).click();
+    await expect(
+      history.getByRole('region', { name: 'Cantos de la mano 2', exact: true }),
+    ).toContainText('Truco');
+    await expect(firstHandHistory).toContainText('Sin ley, quiero');
+    await second.reload();
+    await expect(
+      second.getByRole('region', { name: 'Cantos de la mano 1', exact: true }),
+    ).toContainText('Sin ley, quiero');
+    await expect(
+      second.getByRole('region', { name: 'Cantos de la mano 2', exact: true }),
+    ).toContainText('Truco');
+    expect(await first.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await first.screenshot({
+      path: `output/playwright/canto-history-${testInfo.project.name}.png`,
+      fullPage: true,
+    });
     await first.getByRole('button', { name: 'Salir de la mesa', exact: true }).click();
     await first
       .getByRole('dialog')
       .getByRole('button', { name: 'Salir de la mesa', exact: true })
       .click();
     await expect(second.getByRole('heading', { name: '¡Ganó el equipo 2!' })).toBeVisible();
-    await second.getByRole('button', { name: 'Cerrar chat', exact: true }).click();
     await expectClearResults(second);
     await second.screenshot({
       path: `output/playwright/match-over-${testInfo.project.name}.png`,

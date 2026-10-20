@@ -61,6 +61,20 @@ export interface GameView {
   payouts: { kind: string; team: number; points: number }[];
   envidoResults?: { seat: number; value: number; eligible: boolean }[];
 }
+export interface GameEvent {
+  id: number;
+  hand: number;
+  event: {
+    type: string;
+    seat: number;
+    text?: string;
+    kind?: string;
+    canto?: string;
+    amount?: number;
+    mode?: string;
+    automatic?: boolean;
+  };
+}
 export interface Snapshot {
   code: string;
   private: boolean;
@@ -74,20 +88,8 @@ export interface Snapshot {
   sequence: number;
   chat: { id: number; name: string; text: string; spectator: boolean }[];
   signals: { id: number; seat: number; kind: string }[];
-  events?: {
-    id: number;
-    hand: number;
-    event: {
-      type: string;
-      seat: number;
-      text?: string;
-      kind?: string;
-      canto?: string;
-      amount?: number;
-      mode?: string;
-      automatic?: boolean;
-    };
-  }[];
+  events?: GameEvent[];
+  cantoHistory?: GameEvent[];
 }
 export interface Listing {
   code: string;
