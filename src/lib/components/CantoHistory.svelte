@@ -1,8 +1,9 @@
 <script lang="ts">
   import { eventLabel } from '#lib/game-events.js';
+  import { teamLabel } from '#lib/team-labels.js';
   import type { GameEvent } from '#lib/protocol.js';
 
-  let { events = [] }: { events?: GameEvent[] } = $props();
+  let { events = [], viewerSeat }: { events?: GameEvent[]; viewerSeat: number } = $props();
 
   let hands = $derived.by(() => {
     const grouped: Record<number, { id: number; label: string; team: number }[]> = {};
@@ -36,7 +37,9 @@
         <ol>
           {#each hand.entries as entry (entry.id)}
             <li>
-              <span class={['team', { 'team-two': entry.team === 2 }]}>Equipo {entry.team}</span>
+              <span class={['team', { 'team-two': entry.team === 2 }]}>
+                {teamLabel(entry.team - 1, viewerSeat)}
+              </span>
               <span class="canto-label">{entry.label}</span>
             </li>
           {/each}

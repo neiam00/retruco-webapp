@@ -13,7 +13,7 @@
     announcement = '',
   }: {
     name: string;
-    team: number;
+    team: string;
     remaining?: number;
     active?: boolean;
     answering?: boolean;
@@ -30,7 +30,7 @@
     <span>
       <Layers size={12} />{remaining}
       <i></i>
-      Equipo {team}
+      {team}
     </span>
   </div>
   {#if active || answering || mano}

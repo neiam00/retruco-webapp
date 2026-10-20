@@ -555,7 +555,10 @@
             <span>Mano {game.handNumber}</span>
           {/if}
         </div>
-        <CantoHistory events={snapshot.cantoHistory ?? snapshot.events ?? []} />
+        <CantoHistory
+          events={snapshot.cantoHistory ?? snapshot.events ?? []}
+          viewerSeat={snapshot.seat}
+        />
       </aside>
       <Dialog.Root bind:open={signalsOpen}>
         <Dialog.Content>

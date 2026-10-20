@@ -7,6 +7,7 @@
   import PlayerSeat from '#lib/components/PlayerSeat.svelte';
   import { cantoName } from '#lib/command-labels.js';
   import { eventLabel } from '#lib/game-events.js';
+  import { teamLabel, victoryLabel } from '#lib/team-labels.js';
   import type { Snapshot } from '#lib/protocol.js';
 
   let {
@@ -57,18 +58,18 @@
 >
   {#if latestEvent?.automatic && latestEvent.type === 'respond'}
     <div class="team-response" role="status">
-      Equipo {(latestEvent.seat % 2) + 1}: {eventLabel(latestEvent)}
+      {teamLabel(latestEvent.seat % 2, snapshot.seat)}: {eventLabel(latestEvent)}
     </div>
   {/if}
   <div class="table-outline" aria-hidden="true"></div>
   <div class="scoreboard" aria-label="Marcador">
     <div>
-      <span>Equipo 1</span>
+      <span>{teamLabel(0, snapshot.seat)}</span>
       <strong>{game?.scores[0] ?? 0}</strong>
     </div>
     <span class="score-target">A {snapshot.config.target}</span>
     <div>
-      <span>Equipo 2</span>
+      <span>{teamLabel(1, snapshot.seat)}</span>
       <strong>{game?.scores[1] ?? 0}</strong>
     </div>
   </div>
@@ -77,7 +78,7 @@
     <div class={['seat', 'seat-' + position(seat)]}>
       <PlayerSeat
         name={seatName(seat)}
-        team={(seat % 2) + 1}
+        team={teamLabel(seat % 2, snapshot.seat)}
         remaining={game?.seats[seat].remaining ?? 3}
         self={seat === snapshot.seat}
         mano={seat === game?.mano}
@@ -148,7 +149,7 @@
       <Button onclick={oninvite}><Share2 size={16} />Invitar a mis amigos</Button>
     {:else if game.phase === 'match_over'}
       <span class="status-eyebrow">La partida tiene ganador</span>
-      <h1>¡Ganó el equipo {game.winner + 1}!</h1>
+      <h1>{victoryLabel(game.winner, snapshot.seat)}</h1>
       <p>{game.scores[0]} — {game.scores[1]}</p>
       {#if game.envidoResults?.length}
         <div class="envido-results" aria-label="Valores de envido">
@@ -169,7 +170,7 @@
         </div>
       {/if}
       {#each game.payouts as payout, i (i)}
-        <p>Equipo {payout.team + 1}: +{payout.points} de {payout.kind}</p>
+        <p>{teamLabel(payout.team, snapshot.seat)}: +{payout.points} de {payout.kind}</p>
       {/each}
     {:else if game.phase === 'cutting'}
       <span class="status-eyebrow">Antes de repartir</span>
@@ -197,7 +198,9 @@
       </div>
       {#if game.pending}
         <p>
-          Responde el equipo {2 - game.pending.caller}{game.suspended ? ' · Truco en espera' : ''}
+          Responde: {teamLabel(1 - game.pending.caller, snapshot.seat)}{game.suspended
+            ? ' · Truco en espera'
+            : ''}
         </p>
       {:else}
         <p>

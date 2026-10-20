@@ -107,8 +107,10 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
 }, testInfo) => {
   const firstContext = await browser.newContext({ viewport: testInfo.project.use.viewport });
   const secondContext = await browser.newContext({ viewport: testInfo.project.use.viewport });
+  const spectatorContext = await browser.newContext({ viewport: testInfo.project.use.viewport });
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
+  const spectator = await spectatorContext.newPage();
 
   try {
     await first.goto('/');
@@ -132,6 +134,26 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await cutter.getByLabel('Punto de corte (1–39)').fill('19');
     await cutter.getByRole('button', cutButton).click();
     await expect(first.locator('.hand-card')).toHaveCount(3);
+    await expect(first.locator('.scoreboard > div > span')).toHaveText(['Nosotros', 'Ellos']);
+    await expect(second.locator('.scoreboard > div > span')).toHaveText(['Ellos', 'Nosotros']);
+    await expect(first.locator('.seat-top .identity')).toContainText('Ellos');
+    await expect(second.locator('.seat-bottom .identity')).toContainText('Nosotros');
+    await spectator.goto(tableURL);
+    await spectator.getByLabel('Tu nombre', { exact: true }).fill('Prueba Observador');
+    await spectator.getByRole('button', { name: 'Entrar a mirar', exact: true }).click();
+    await expect(spectator.locator('.scoreboard > div > span')).toHaveText([
+      'Equipo 1',
+      'Equipo 2',
+    ]);
+    await spectator
+      .locator('.spectator-bar')
+      .getByRole('button', { name: 'Prueba Beto', exact: true })
+      .click();
+    await expect(spectator.locator('.seat-top .identity')).toContainText('Equipo 1');
+    await expect(spectator.locator('.scoreboard > div > span')).toHaveText([
+      'Equipo 1',
+      'Equipo 2',
+    ]);
     const leyCall = { name: 'A ley, envido', exact: true };
     await expect
       .poll(
@@ -153,13 +175,24 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     });
     const callingTeam = caller === first ? 1 : 2;
     await expect(firstHandHistory.getByRole('listitem').nth(0)).toHaveText(
-      `Equipo ${callingTeam} A ley, envido`,
+      `${callingTeam === 1 ? 'Nosotros' : 'Ellos'} A ley, envido`,
     );
     await expect(firstHandHistory.getByRole('listitem').nth(1)).toHaveText(
-      `Equipo ${3 - callingTeam} Sin ley, quiero`,
+      `${callingTeam === 1 ? 'Ellos' : 'Nosotros'} Sin ley, quiero`,
     );
     await expect(firstHandHistory.getByRole('listitem').nth(2)).toHaveText(
-      `Equipo ${callingTeam} Truco`,
+      `${callingTeam === 1 ? 'Nosotros' : 'Ellos'} Truco`,
+    );
+    await expect(
+      spectator
+        .getByRole('region', { name: 'Cantos de la mano 1', exact: true })
+        .getByRole('listitem')
+        .nth(2),
+    ).toHaveText(`Equipo ${callingTeam} Truco`);
+    await expect(responder.locator('.table-status')).toContainText('Responde: Nosotros');
+    await expect(caller.locator('.table-status')).toContainText('Responde: Ellos');
+    await expect(spectator.locator('.table-status')).toContainText(
+      `Responde: Equipo ${3 - callingTeam}`,
     );
     await expect(responder.locator('.canto-actions button')).toHaveText([
       'Quiero',
@@ -316,7 +349,8 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       .getByRole('dialog')
       .getByRole('button', { name: 'Salir de la mesa', exact: true })
       .click();
-    await expect(second.getByRole('heading', { name: '¡Ganó el equipo 2!' })).toBeVisible();
+    await expect(second.getByRole('heading', { name: '¡Ganamos nosotros!' })).toBeVisible();
+    await expect(spectator.getByRole('heading', { name: '¡Ganó el equipo 2!' })).toBeVisible();
     await expectClearResults(second);
     await second.screenshot({
       path: `output/playwright/match-over-${testInfo.project.name}.png`,
@@ -325,6 +359,7 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
   } finally {
     await firstContext.close();
     await secondContext.close();
+    await spectatorContext.close();
   }
 });
 
