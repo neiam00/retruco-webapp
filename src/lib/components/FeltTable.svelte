@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { fly } from 'svelte/transition';
   import { Share2 } from '@lucide/svelte';
   import { resolve } from '$app/paths';
   import { Button } from '#lib/components/ui/button/index.js';
@@ -78,7 +77,7 @@
   </div>
 
   {#each Array.from({ length: snapshot.config.players }, (_, seat) => seat) as seat (seat)}
-    <div class={['seat', 'seat-' + position(seat)]}>
+    <div class={['seat', 'seat-' + position(seat)]} data-seat={seat}>
       <PlayerSeat
         name={seatName(seat)}
         team={teamLabel(seat % 2, snapshot.seat)}
@@ -89,6 +88,13 @@
         active={game?.turn === seat && !game.pending && game.phase === 'playing'}
         answering={respondingTeam === seat % 2}
       />
+      {#if game?.vira && seat !== perspective}
+        <div class="seat-hand" aria-hidden="true">
+          {#each Array.from({ length: game.seats[seat].remaining }, (_, index) => 3 - game.seats[seat].remaining + index) as card (card)}
+            <span data-card-back={card}><Card hidden width={20} /></span>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/each}
 
@@ -110,8 +116,9 @@
             {#if play.present}
               <div
                 class={['played-card', { burned: play.burned }]}
+                data-play-seat={index}
+                data-play-round={round}
                 style:--tilt={round * 7 - 7 + 'deg'}
-                in:fly={{ y: 28, duration: 180 }}
               >
                 <Card card={play.card} hidden={!play.card} width={70} />
                 <span>{play.burned ? 'Quemada' : round + 1 + '.ª'}</span>
@@ -123,13 +130,15 @@
     {/if}
   </div>
 
-  {#if game?.vira}
+  {#if game}
     <div class={['deck', 'deck-' + position((game.dealer + 1) % snapshot.config.players)]}>
-      <div class="deck-back"><Card hidden width={54} /></div>
-      <div class="vira">
-        <Card card={game.vira} width={54} />
-        <span>LA VIRA</span>
-      </div>
+      <div class="deck-back" data-deck><Card hidden width={54} /></div>
+      {#if game.vira}
+        <div class="vira">
+          <Card card={game.vira} width={54} />
+          <span>LA VIRA</span>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -289,6 +298,35 @@
   .seat {
     position: absolute;
     z-index: 3;
+  }
+  .seat-hand {
+    position: absolute;
+    bottom: 2px;
+    left: 9px;
+    display: flex;
+    pointer-events: none;
+    filter: drop-shadow(0 2px 2px #041a1660);
+  }
+  .seat-hand span + span {
+    margin-left: -11px;
+  }
+  .seat-hand span:first-child {
+    transform: rotate(-12deg);
+  }
+  .seat-hand span:last-child {
+    transform: rotate(12deg);
+  }
+  @media (max-width: 650px) {
+    .seat-hand {
+      left: 5px;
+    }
+    .seat-hand :global(img) {
+      width: 14px;
+      height: auto;
+    }
+    .seat-hand span + span {
+      margin-left: -8px;
+    }
   }
   .seat-top {
     top: 50px;

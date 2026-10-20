@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  import { CardMotion } from '#lib/card-motion.js';
   import VoiceControls from '#lib/components/VoiceControls.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
@@ -59,6 +60,8 @@
   let socket: WebSocket | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
+  let gameSurface = $state<HTMLElement>();
+  const cardMotion = new CardMotion();
   const cpu = new CPUController(
     (seat, revision, command) => {
       if (!disposed && socket?.readyState === WebSocket.OPEN) {
@@ -138,7 +141,13 @@
             top = null;
             stackMode = false;
           }
+          const animateCards = gameSurface
+            ? cardMotion.prepare(gameSurface, connected ? snapshot : null, incoming)
+            : undefined;
           snapshot = incoming;
+          void tick().then(() => {
+            if (!disposed && snapshot === incoming) animateCards?.();
+          });
           if (declaration === 'a_ley' && incoming.state?.round !== 0) {
             declaration = '';
           }
@@ -160,6 +169,7 @@
       }
     };
     socket.onclose = () => {
+      cardMotion.cancel();
       cpu.stop();
       connected = false;
       busy = false;
@@ -170,6 +180,9 @@
     };
   }
   onMount(() => {
+    const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+    const stopMotion = () => cardMotion.cancel();
+    motionPreference.addEventListener('change', stopMotion);
     void api<User | null>('/session')
       .then((value) => {
         user = value;
@@ -183,6 +196,8 @@
     const timer = setInterval(() => (now = Date.now()), 250);
     return () => {
       disposed = true;
+      cardMotion.cancel();
+      motionPreference.removeEventListener('change', stopMotion);
       cpu.stop();
       clearInterval(timer);
       clearTimeout(retry);
@@ -271,6 +286,9 @@
   }
 </script>
 
+<svelte:window onresize={() => cardMotion.cancel()} onscroll={() => cardMotion.cancel()} />
+<svelte:document onvisibilitychange={() => cardMotion.cancel()} />
+
 <svelte:head>
   <title>Mesa {code} — Retruco</title>
   <meta name="robots" content="noindex,nofollow" />
@@ -350,7 +368,7 @@
     </section>
   {:else}
     <div class="match-grid">
-      <main class="game-surface">
+      <main class="game-surface" bind:this={gameSurface}>
         {#if spectator}
           <div class="spectator-bar">
             <span class="row"><Eye size={16} />Estás mirando</span>
@@ -418,6 +436,7 @@
               {#each game.hand as held (held.index)}
                 <Button
                   class={`hand-card ${held.used ? 'used' : ''} ${bottom === held.index ? 'selected-bottom' : ''} ${top === held.index ? 'selected-top' : ''}`}
+                  data-hand-card={held.index}
                   variant="ghost"
                   disabled={held.used || !myTurn || busy}
                   aria-label={`${cardName(held.card)}${bottom === held.index ? ', abajo' : top === held.index ? ', arriba' : ''}`}
