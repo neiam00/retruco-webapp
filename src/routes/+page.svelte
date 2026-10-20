@@ -12,6 +12,7 @@
     BookOpen,
     LogOut,
     History,
+    Settings,
   } from '@lucide/svelte';
   import { Button } from '#lib/components/ui/button/index.js';
   import { Input } from '#lib/components/ui/input/index.js';
@@ -29,6 +30,7 @@
   let target = $state(24);
   let florRequired = $state(true);
   let privateMatch = $state(false);
+  let spectatorsCanSpeak = $state(false);
   let tables = $state.raw<Listing[]>([]);
   let loading = $state(true);
   let busy = $state(false);
@@ -79,6 +81,7 @@
       const match = await api<{ code: string }>('/matches', {
         private: privateMatch,
         config: { players, target, florRequired },
+        options: { spectatorsCanSpeak },
       });
       await goto(resolve('/mesa/[code]', { code: match.code }));
     });
@@ -121,6 +124,14 @@
       <span class="brand-dot">•</span>
     </a>
     <nav class="row" aria-label="Navegación principal">
+      <Button
+        href={resolve('/configuracion')}
+        variant="ghost"
+        size="icon"
+        aria-label="Configuración de voz"
+      >
+        <Settings />
+      </Button>
       <Button href="/reglas" variant="ghost">
         <BookOpen />
         <span class="nav-label">Cómo se juega</span>
@@ -233,6 +244,16 @@
           onclick={() => (florRequired = !florRequired)}
         >
           {florRequired ? 'Sí, se canta' : 'No, siempre vale'}
+        </Button>
+      </div>
+      <div class="row spread option-row">
+        <span>Espectadores pueden hablar</span>
+        <Button
+          variant="outline"
+          aria-pressed={spectatorsCanSpeak}
+          onclick={() => (spectatorsCanSpeak = !spectatorsCanSpeak)}
+        >
+          {spectatorsCanSpeak ? 'Sí' : 'Solo escuchan'}
         </Button>
       </div>
       <div class="row spread option-row">

@@ -76,6 +76,7 @@ export interface GameEvent {
   };
 }
 export interface Snapshot {
+  options?: { spectatorsCanSpeak: boolean };
   code: string;
   private: boolean;
   config: Config;

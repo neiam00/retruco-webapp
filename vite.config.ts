@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => {
             'style-src': ['self', 'unsafe-inline'],
             'img-src': ['self', 'data:', ...(assetOrigin ? [configuredOrigin(assetOrigin)] : [])],
             'connect-src': connections,
+            'media-src': ['self', 'blob:'],
             'frame-ancestors': ['none'],
             'base-uri': ['self'],
             'object-src': ['none'],

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import VoiceControls from '#lib/components/VoiceControls.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import {
@@ -555,6 +556,7 @@
             <span>Mano {game.handNumber}</span>
           {/if}
         </div>
+        <VoiceControls {code} />
         <CantoHistory
           events={snapshot.cantoHistory ?? snapshot.events ?? []}
           viewerSeat={snapshot.seat}

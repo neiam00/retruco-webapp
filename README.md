@@ -7,6 +7,18 @@ Read [DESIGN.md](DESIGN.md) before changing the interface.
 
 ## Develop and verify
 
+Voice preferences live at `/configuracion`. Each match has an explicit audio
+join control, with listening, open-mic, and push-to-talk modes. Hold V or the
+on-screen button to talk; typing in inputs never activates the microphone.
+Leaving audio or navigating away releases microphone tracks and connections.
+Room creators choose whether spectators may speak; everyone may listen.
+Voice requires microphone permission and HTTPS outside localhost.
+
+`tests/voice.spec.ts` exercises native WebRTC with synthetic microphone audio.
+Set `TEST_API_ORIGIN` when testing against a separate backend; it defaults to
+`http://127.0.0.1:8080`. Production relay setup is documented in the backend's
+`deploy/VOICE.md`.
+
 Use Node 26 and the pnpm version pinned in `package.json`.
 
 ```sh
@@ -97,5 +109,6 @@ See `static/cards/ATTRIBUTION.md` and `/creditos` for attribution. Card faces ha
 an opaque ivory CSS backing because the source artwork contains transparent
 regions. DiceBear avatars are generated locally and Lucide supplies UI icons.
 
-P0 is online, server-authoritative play. It does not load a WASM engine. Voice
-chat and local CPU matches belong to P1 and require a separate request.
+Online matches use the server-authoritative rules engine. P1 voice uses Opus
+over WebRTC, with room-scoped signaling and optional coturn relay credentials
+from the API. CPU support is the remaining P1 work.
