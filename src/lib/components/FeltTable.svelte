@@ -68,12 +68,16 @@
   <div class="table-outline" aria-hidden="true"></div>
   <div class="scoreboard" aria-label="Marcador">
     <div>
-      <span>{teamLabel(0, snapshot.seat)}</span>
+      <span>
+        {teamLabel(0, snapshot.seat)}{#if game?.privando?.[0]}<small>Privando</small>{/if}
+      </span>
       <strong>{game?.scores[0] ?? 0}</strong>
     </div>
     <span class="score-target">A {snapshot.config.target}</span>
     <div>
-      <span>{teamLabel(1, snapshot.seat)}</span>
+      <span>
+        {teamLabel(1, snapshot.seat)}{#if game?.privando?.[1]}<small>Privando</small>{/if}
+      </span>
       <strong>{game?.scores[1] ?? 0}</strong>
     </div>
   </div>
@@ -294,6 +298,12 @@
   .scoreboard strong {
     font-size: 22px;
     font-weight: 600;
+  }
+  .scoreboard small {
+    display: block;
+    margin-top: 3px;
+    font-size: 8px;
+    color: #e6d59c;
   }
   .score-target {
     border-inline: 1px solid #92ac9826;

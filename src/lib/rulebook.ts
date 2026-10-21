@@ -42,6 +42,16 @@ export const rulebook = [
     ],
   },
   {
+    title: 'Privando: a una piedra de ganar',
+    paragraphs: [
+      'Al repartir una nueva mano, un equipo con 11 de 12 o 23 de 24 está privando. El servidor anuncia solamente el mayor envido de ese equipo, sin mentiras ni revelar sus cartas o los tantos individuales.',
+      'Se abre un envido fijo de 2 piedras que no se puede subir. El rival responde «Privo y Truco» para jugar la mano, o «No jugar» para conceder 1 piedra y la partida. «Privo y Truco» no sube el truco: sigue valiendo 1 hasta que se cante normalmente. Agotar el tiempo de respuesta equivale a «No jugar».',
+      'Si el equipo que priva tiene flor, gana inmediatamente. Si solo el rival tiene flor, su dueño puede «Presentar flor»: gana exactamente 3 piedras y termina la mano, sin envido ni truco. También puede jugar y conservar la flor, cumpliendo las declaraciones habituales.',
+      'Si ambos equipos privan, ambos anuncian su mayor envido y aceptan automáticamente el envido de 2. Los empates usan el orden original desde mano. La flor tiene prioridad inmediata; si ambos tienen flor, gana el equipo de mano.',
+      'Cuando se juega la mano, se paga primero el envido, luego las flores válidas y finalmente el truco. Si el envido decide la partida, ya no se suman los puntos posteriores.',
+    ],
+  },
+  {
     title: 'Truco, retruco y vale partida',
     paragraphs: [
       'Una mano sin apuesta de truco vale 1 piedra. Truco vale 3, retruco 6, vale 9 vale 9 y vale partida puede decidir la partida completa. Se puede cantar en cualquiera de las vueltas mientras corresponda el turno y la voz.',

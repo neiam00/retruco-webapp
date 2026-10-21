@@ -23,6 +23,7 @@ export default defineConfig({
         '**/vacant-rooms.spec.ts',
         '**/seats.spec.ts',
         '**/lobby-account.spec.ts',
+        '**/privando.spec.ts',
       ],
     },
   ],

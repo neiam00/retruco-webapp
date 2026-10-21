@@ -11,7 +11,7 @@
       const label = eventLabel(item.event);
       if (!label) continue;
       const entries = grouped[item.hand] ?? [];
-      entries.push({ id: item.id, label, team: (item.event.seat % 2) + 1 });
+      entries.push({ id: item.id, label, team: (item.event.team ?? item.event.seat % 2) + 1 });
       grouped[item.hand] = entries;
     }
     return Object.entries(grouped)

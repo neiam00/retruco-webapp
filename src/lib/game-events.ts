@@ -4,6 +4,11 @@ import type { Snapshot } from './protocol.js';
 type PublicEvent = NonNullable<Snapshot['events']>[number]['event'];
 
 export function eventLabel(event: PublicEvent): string {
+  if (event.type === 'privo') {
+    return event.kind === 'flor'
+      ? 'Privando con flor: gana la partida'
+      : `Privando: ${event.amount} de envido`;
+  }
   if (event.type === 'call' || event.type === 'respond') {
     const label = commandLabel(
       {

@@ -34,6 +34,7 @@
   import CantoHistory from '#lib/components/CantoHistory.svelte';
   import FeltTable from '#lib/components/FeltTable.svelte';
   import SeatSelector from '#lib/components/SeatSelector.svelte';
+  import PrivoSummary from '#lib/components/PrivoSummary.svelte';
   import { signals } from '#lib/signal-options.js';
   import Hierarchy from '#lib/components/Hierarchy.svelte';
   import { api, ApiError, socketURL } from '#lib/api.js';
@@ -136,7 +137,7 @@
     game?.legal.filter(
       (command) =>
         command.type === 'respond' &&
-        (command.declaration ?? '') === declaration &&
+        (game.pending?.kind === 'privo' || (command.declaration ?? '') === declaration) &&
         (command.kind !== 'raise' || command.amount === raise || game?.pending?.kind === 'truco'),
     ) ?? [],
   );
@@ -169,7 +170,7 @@
         const payload = JSON.parse(event.data);
         if (payload.type === 'snapshot') {
           const incoming = payload.data as Snapshot;
-          if (incoming.state && incoming.state.version !== '1') {
+          if (incoming.state && !['1', '2'].includes(incoming.state.version)) {
             error = 'Actualiza la página para usar la nueva versión del juego.';
             socket?.close();
             return;
@@ -180,6 +181,10 @@
             top = null;
             stackMode = false;
             burnMode = false;
+          }
+          if (incoming.state?.pending?.kind === 'privo') {
+            declaration = '';
+            declarationOpen = false;
           }
           const animateCards = gameSurface
             ? cardMotion.prepare(gameSurface, connected ? snapshot : null, incoming)
@@ -486,6 +491,7 @@
         </div>
 
         {#if game && game.phase !== 'cutting'}
+          <PrivoSummary {game} viewerSeat={snapshot.seat} />
           <section class="hand-area" aria-label="Tu mano">
             <div class="row spread hand-label">
               <div>
@@ -528,13 +534,15 @@
               {/each}
             </div>
             {#if !spectator && game.phase === 'playing'}
-              <div class="declaration-control">
-                <Button variant="outline" onclick={() => (declarationOpen = true)}>
-                  <Speech size={16} />{declaration
-                    ? declarations.find((option) => option.value === declaration)?.label
-                    : 'Decir…'}
-                </Button>
-              </div>
+              {#if game.pending?.kind !== 'privo'}
+                <div class="declaration-control">
+                  <Button variant="outline" onclick={() => (declarationOpen = true)}>
+                    <Speech size={16} />{declaration
+                      ? declarations.find((option) => option.value === declaration)?.label
+                      : 'Decir…'}
+                  </Button>
+                </div>
+              {/if}
               <Dialog.Root bind:open={declarationOpen}>
                 <Dialog.Content>
                   <Dialog.Header>

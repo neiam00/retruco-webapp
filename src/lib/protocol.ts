@@ -61,6 +61,8 @@ export interface GameView {
   legal: Command[];
   payouts: { kind: string; team: number; points: number }[];
   envidoResults?: { seat: number; value: number; eligible: boolean }[];
+  privando?: [boolean, boolean];
+  privoEnvido?: { team: number; value: number }[];
 }
 export interface GameEvent {
   id: number;
@@ -74,6 +76,7 @@ export interface GameEvent {
     amount?: number;
     mode?: string;
     automatic?: boolean;
+    team?: number;
   };
 }
 export interface Snapshot {

@@ -86,7 +86,9 @@ export class CardMotion {
     const flights: Flight[] = [];
     const angles = new Map<HTMLElement, number>();
     const image = (selector: string) => root.querySelector<HTMLElement>(`${selector} img`);
-    const dealing = before.phase === 'cutting' && after.phase === 'playing';
+    // Privando with flor can decide the match in the deal itself. Show the
+    // actual deal before revealing its result, but never animate an undealt exit.
+    const dealing = before.phase === 'cutting' && after.vira !== undefined;
     if (dealing) {
       this.cancel();
       const deck = image('[data-deck]');

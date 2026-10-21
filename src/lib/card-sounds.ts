@@ -64,7 +64,7 @@ export class CardSounds {
     }
     const now = this.context.currentTime;
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (before.phase === 'cutting' && after.phase === 'playing') {
+    if (before.phase === 'cutting' && after.vira !== undefined) {
       this.stop();
       const cards = next.config.players * 3;
       for (let index = 0; index < cards; index++) {

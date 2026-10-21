@@ -16,6 +16,7 @@ export function cantoName(kind: string) {
         envido: 'Envido',
         ley_envido: 'A ley, envido',
         flor: 'Flor tengo y la mía envida',
+        privo: 'Privo',
       } as Record<string, string>
     )[kind] ?? kind
   );
@@ -35,6 +36,11 @@ export function commandLabel(command: Command, pendingKind?: string) {
 }
 
 function actionLabel(command: Command, pendingKind?: string) {
+  if (pendingKind === 'privo') {
+    if (command.kind === 'accept') return 'Privo y Truco';
+    if (command.kind === 'decline') return 'No jugar';
+    if (command.kind === 'present_flor') return 'Presentar flor';
+  }
   if (command.type === 'call') {
     if (command.kind === 'truco')
       return (
