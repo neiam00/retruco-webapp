@@ -37,6 +37,42 @@
   let cpuSeats = $state<number[]>([]);
   let openHumanSeats = $derived(players - cpuSeats.length - 1);
   let tables = $state.raw<Listing[]>([]);
+  let tableSearch = $state('');
+  let hideFullTables = $state(false);
+  let hideCPUTables = $state(false);
+  let tableSort = $state('default');
+  let visibleTables = $derived.by(() => {
+    const search = normalizeName(tableSearch.trim());
+    const matches = tables.filter(
+      (table) =>
+        normalizeName(table.host).includes(search) &&
+        (!hideFullTables || table.players < table.capacity) &&
+        (!hideCPUTables || (table.cpuPlayers ?? 0) === 0),
+    );
+    if (tableSort === 'default') return matches;
+    return matches.toSorted((first, second) => {
+      const difference = first.players - second.players;
+      return (
+        (tableSort === 'players-asc' ? difference : -difference) ||
+        first.host.localeCompare(second.host, 'es') ||
+        first.code.localeCompare(second.code)
+      );
+    });
+  });
+
+  function normalizeName(value: string) {
+    return value
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLocaleLowerCase('es');
+  }
+
+  function resetTableFilters() {
+    tableSearch = '';
+    hideFullTables = false;
+    hideCPUTables = false;
+    tableSort = 'default';
+  }
   let loading = $state(true);
   let busy = $state(false);
   let error = $state('');
@@ -380,7 +416,7 @@
         <div>
           <span class="eyebrow">La comunidad está en la mesa</span>
           <h2 id="tables-heading">
-            Mesas abiertas <span class="table-count">{tables.length}</span>
+            Mesas abiertas <span class="table-count">{visibleTables.length}</span>
           </h2>
         </div>
         <Button variant="ghost" size="icon" aria-label="Actualizar mesas" onclick={refresh}>
@@ -388,6 +424,37 @@
         </Button>
       </div>
       <p class="muted">Súmate a una partida o entra a mirar cómo se juega.</p>
+      <fieldset class="table-filters">
+        <legend class="sr-only">Buscar y filtrar mesas</legend>
+        <div>
+          <Label for="table-search">Buscar por nombre</Label>
+          <Input
+            id="table-search"
+            type="search"
+            placeholder="Nombre del anfitrión"
+            bind:value={tableSearch}
+          />
+        </div>
+        <div>
+          <Label for="table-sort">Ordenar mesas</Label>
+          <select id="table-sort" class="cn-input" bind:value={tableSort}>
+            <option value="default">Orden predeterminado</option>
+            <option value="players-asc">Jugadores: menos a más</option>
+            <option value="players-desc">Jugadores: más a menos</option>
+          </select>
+        </div>
+        <label class="table-filter-toggle">
+          <input type="checkbox" bind:checked={hideFullTables} />
+          Ocultar mesas llenas
+        </label>
+        <label class="table-filter-toggle">
+          <input type="checkbox" bind:checked={hideCPUTables} />
+          Ocultar mesas con CPU
+        </label>
+      </fieldset>
+      {#if !loading && !listError}
+        <p class="filter-count" role="status">{visibleTables.length} de {tables.length} mesas</p>
+      {/if}
       <div class="table-browser">
         {#if loading}
           <div class="empty-state">
@@ -409,8 +476,14 @@
             </p>
             <span class="empty-caption">AQUÍ SIEMPRE CABE UNA MÁS</span>
           </div>
+        {:else if !visibleTables.length}
+          <div class="empty-state">
+            <h3>No hay mesas que coincidan.</h3>
+            <p>Prueba otro nombre o cambia los filtros.</p>
+            <Button variant="outline" onclick={resetTableFilters}>Limpiar filtros</Button>
+          </div>
         {:else}
-          {#each tables as table (table.code)}
+          {#each visibleTables as table (table.code)}
             <article class="table-row">
               <div class="row">
                 <PlayerAvatar name={table.host} />
@@ -759,6 +832,43 @@
     border-radius: 12px;
     min-height: 360px;
     background: #eeeede70;
+  }
+  .table-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 20px 0 4px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .table-filters :global(input[type='search']),
+  .table-filters select {
+    width: 100%;
+    min-width: 0;
+  }
+  .table-filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .table-filter-toggle input {
+    width: 18px;
+    height: 18px;
+    accent-color: #257c5d;
+  }
+  .filter-count {
+    font-size: 0.75rem;
+    color: #606c61;
+  }
+  @media (max-width: 480px) {
+    .table-filters {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
   }
   .empty-state {
     min-height: 360px;

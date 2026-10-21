@@ -26,6 +26,7 @@ export default defineConfig({
         '**/privando.spec.ts',
         '**/vira-layout.spec.ts',
         '**/game-interaction.spec.ts',
+        '**/table-browser.spec.ts',
       ],
     },
   ],
