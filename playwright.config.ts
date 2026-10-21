@@ -21,6 +21,8 @@ export default defineConfig({
         '**/renderer.spec.ts',
         '**/burning.spec.ts',
         '**/vacant-rooms.spec.ts',
+        '**/seats.spec.ts',
+        '**/lobby-account.spec.ts',
       ],
     },
   ],

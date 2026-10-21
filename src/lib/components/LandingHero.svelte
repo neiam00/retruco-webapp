@@ -133,7 +133,9 @@
     background: #f4efe3d9;
   }
   .hero-stamp strong {
-    font: italic 1rem Georgia;
+    font:
+      italic 1rem 'Nunito Variable',
+      sans-serif;
     letter-spacing: 0;
   }
   .spark {

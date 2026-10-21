@@ -132,4 +132,6 @@ export interface HistoryEntry {
   finished: boolean;
   expired?: boolean;
   updatedAt: string;
+  team: number;
+  players: { name: string; seat: number; team: number; cpu: boolean }[];
 }

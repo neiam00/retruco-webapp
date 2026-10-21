@@ -32,6 +32,7 @@ test('public browsing, spectator switching, account history and private code joi
     await expect(publicTable).toBeVisible();
     await publicTable.getByRole('button', { name: 'Sentarme', exact: true }).click();
     await expect(guest).toHaveURL(new RegExp(`/mesa/${publicCode}$`));
+    await guest.getByRole('button', { name: 'Elegir puesto 2, equipo 2' }).click();
     await expect(guest.getByText('En línea', { exact: true })).toBeVisible();
 
     await spectator.goto('/');
@@ -66,6 +67,9 @@ test('public browsing, spectator switching, account history and private code joi
     await owner.getByRole('button', { name: 'Mi historial', exact: true }).click();
     await expect(owner.getByRole('dialog')).toContainText(publicCode);
     await expect(owner.getByRole('dialog')).toContainText('Terminada');
+    await expect(owner.getByRole('dialog')).toContainText('Jugaste en el equipo 1 · Nosotros');
+    await expect(owner.getByRole('dialog')).toContainText('Ganador: Ellos · Equipo 2');
+    await expect(owner.getByRole('dialog')).toContainText('Beto público');
     await owner.keyboard.press('Escape');
 
     // A fresh browser context has no session cookie from the account creation.
@@ -92,9 +96,13 @@ test('public browsing, spectator switching, account history and private code joi
     await expect(guest.getByRole('article').filter({ hasText: `Mesa de ${username}` })).toHaveCount(
       0,
     );
-    await guest.getByLabel('Código de la mesa', { exact: true }).fill(privateCode.toLowerCase());
+    await guest
+      .getByLabel('Código de la mesa', { exact: true })
+      .pressSequentially(privateCode.replace('-', '').toLowerCase());
+    await expect(guest.getByLabel('Código de la mesa', { exact: true })).toHaveValue(privateCode);
     await guest.locator('.join-form').getByRole('button', { name: 'Entrar', exact: true }).click();
     await expect(guest).toHaveURL(new RegExp(`/mesa/${privateCode}$`));
+    await guest.getByRole('button', { name: 'Elegir puesto 2, equipo 2' }).click();
     await expect(guest.getByText('En línea', { exact: true })).toBeVisible();
   } finally {
     await Promise.all(contexts.map((context) => context.close()));

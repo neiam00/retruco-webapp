@@ -181,7 +181,8 @@ test('human-only matches never load the CPU engine', async ({ browser, baseURL }
     const second = await contexts[1].newPage();
     await second.goto(`${baseURL}/mesa/${code}`);
     await second.getByLabel('Tu nombre', { exact: true }).fill('Beto humano');
-    await second.getByRole('button', { name: 'Sentarme a jugar', exact: true }).click();
+    await second.getByRole('button', { name: 'Elegir mi puesto', exact: true }).click();
+    await second.getByRole('button', { name: 'Elegir puesto 2, equipo 2' }).click();
     await expect
       .poll(() => first.evaluate(() => window.cpuGame?.data.state?.phase))
       .toBe('cutting');
@@ -320,6 +321,7 @@ test('mixed CPU room keeps human seats open and transfers one worker between pla
     await expect(room.getByText('2 jugadores CPU', { exact: true })).toBeVisible();
     await room.getByRole('button', { name: 'Sentarme', exact: true }).click();
     await expect(partner).toHaveURL(new RegExp(`/mesa/${code}$`));
+    await partner.getByRole('button', { name: 'Elegir puesto 3, equipo 1' }).click();
     await expect.poll(() => partner.evaluate(() => window.cpuGame?.data.seat)).toBe(2);
     await watcher.goto(`${baseURL}/mesa/${code}`);
     await watcher.getByLabel('Tu nombre').fill('Carla mira');

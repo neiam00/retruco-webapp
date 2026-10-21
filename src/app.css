@@ -3,7 +3,7 @@
 
 :root {
   font-family:
-    Inter,
+    'Nunito Variable',
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -79,8 +79,8 @@ p {
 h1,
 h2,
 h3 {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-weight: 500;
+  font-family: inherit;
+  font-weight: 750;
 }
 .cn-button {
   gap: 0.5rem;
@@ -179,8 +179,8 @@ h3 {
 }
 .cn-dialog-title {
   font:
-    500 1.9rem Georgia,
-    serif;
+    750 1.9rem 'Nunito Variable',
+    sans-serif;
 }
 .cn-dialog-description {
   color: var(--muted-foreground);
@@ -212,8 +212,8 @@ h3 {
   align-items: center;
   text-decoration: none;
   font:
-    700 1.8rem Georgia,
-    serif;
+    800 1.8rem 'Nunito Variable',
+    sans-serif;
   letter-spacing: -0.07em;
 }
 .brand-mark {

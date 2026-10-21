@@ -125,7 +125,8 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     const tableURL = first.url();
     await second.goto(tableURL);
     await second.getByLabel('Tu nombre', { exact: true }).fill('Prueba Beto');
-    await second.getByRole('button', { name: 'Sentarme a jugar' }).click();
+    await second.getByRole('button', { name: 'Elegir mi puesto' }).click();
+    await second.getByRole('button', { name: 'Elegir puesto 2, equipo 2' }).click();
     await expect(second.getByText('En línea', { exact: true })).toBeVisible();
     await expect(first.getByText('Mano 1', { exact: true })).toBeAttached();
 

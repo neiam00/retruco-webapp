@@ -22,6 +22,8 @@
   import LandingHero from '#lib/components/LandingHero.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
   import { api } from '#lib/api.js';
+  import { formatRoomCode, formatRoomCodeInput } from '#lib/room-code.js';
+  import { teamLabel } from '#lib/team-labels.js';
   import type { User, Listing, HistoryEntry } from '#lib/protocol.js';
 
   let user = $state<User | null>(null);
@@ -120,13 +122,12 @@
       await goto(resolve('/mesa/[code]', { code: match.code }));
     });
   }
-  function join(matchCode = code, spectator = false) {
+  function join(matchCode = code) {
     void act(async () => {
       await identify();
-      const normalized = matchCode.trim().toUpperCase();
+      const normalized = formatRoomCode(matchCode);
       if (!/^[A-Z]{4}-[0-9]{4}$/.test(normalized))
         throw new Error('El código tiene el formato ABCD-1234.');
-      if (!spectator) await api(`/matches/${normalized}/join`, {});
       await goto(resolve('/mesa/[code]', { code: normalized }));
     });
   }
@@ -351,9 +352,11 @@
       >
         <Label for="room-code" class="sr-only">Código de la mesa</Label><Input
           id="room-code"
-          bind:value={code}
+          value={code}
+          oninput={(event) => (code = formatRoomCodeInput(event.currentTarget))}
           placeholder="ABCD-1234"
-          maxlength={9}
+          autocomplete="off"
+          spellcheck="false"
           class="min-w-0 flex-1 uppercase tracking-widest"
         /><Button type="submit" variant="outline" disabled={busy}>Entrar <ArrowRight /></Button>
       </form>
@@ -431,7 +434,7 @@
                   variant="ghost"
                   aria-label={`Mirar mesa de ${table.host}`}
                   disabled={busy}
-                  onclick={() => join(table.code, true)}
+                  onclick={() => join(table.code)}
                 >
                   <Eye />
                 </Button><Button
@@ -533,7 +536,7 @@
     {/if}
 
     {#each history as entry (entry.code)}
-      <div class="row spread history-row">
+      <article class="history-row">
         <div>
           <strong>{entry.code}</strong>
           <p class="muted">
@@ -544,15 +547,66 @@
             {/if}
           </p>
         </div>
+        {#if entry.team >= 0}
+          <p>Jugaste en el equipo {entry.team + 1} · Nosotros</p>
+        {/if}
+        {#if entry.finished && entry.winner >= 0}
+          <p class="history-result">
+            Ganador: {teamLabel(entry.winner, entry.team ?? -1)} · Equipo {entry.winner + 1}
+          </p>
+        {/if}
+        <div class="history-teams">
+          {#each [0, 1] as team (team)}
+            <div>
+              <strong>{teamLabel(team, entry.team ?? -1)} · Equipo {team + 1}</strong>
+              <ul>
+                {#each (entry.players ?? []).filter((player) => player.team === team) as player (player.seat)}
+                  <li>
+                    {player.name}
+                    <span class="muted">
+                      · Puesto {player.seat + 1}{player.cpu ? ' · CPU' : ''}
+                    </span>
+                  </li>
+                {:else}
+                  <li class="muted">Sin jugadores registrados</li>
+                {/each}
+              </ul>
+            </div>
+          {/each}
+        </div>
         {#if !entry.finished}
           <Button href={`/mesa/${entry.code}`} variant="outline">Volver</Button>
         {/if}
-      </div>
+      </article>
     {/each}
   </Dialog.Content>
 </Dialog.Root>
 
 <style>
+  .history-result {
+    font-weight: 800;
+    margin-top: 8px;
+  }
+  .history-teams {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .history-teams ul {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0;
+  }
+  .history-teams li {
+    margin: 4px 0;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 480px) {
+    .history-teams {
+      grid-template-columns: 1fr;
+    }
+  }
   .cpu-picker {
     border: 0;
     padding: 0;
@@ -685,8 +739,8 @@
   }
   .table-count {
     font:
-      600 0.75rem ui-sans-serif,
-      system-ui;
+      600 0.75rem 'Nunito Variable',
+      sans-serif;
     background: #e4e7d7;
     border-radius: 50%;
     display: inline-grid;
@@ -733,7 +787,9 @@
     transform: rotate(-8deg);
     width: 52px;
     height: 70px;
-    font: 2.5rem Georgia;
+    font:
+      750 2.5rem 'Nunito Variable',
+      sans-serif;
     background: #f6f5e9;
     box-shadow: 5px 4px 0 #e1e5d4;
   }

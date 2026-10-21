@@ -32,6 +32,7 @@
   import ChatPanel from '#lib/components/ChatPanel.svelte';
   import CantoHistory from '#lib/components/CantoHistory.svelte';
   import FeltTable from '#lib/components/FeltTable.svelte';
+  import SeatSelector from '#lib/components/SeatSelector.svelte';
   import { signals } from '#lib/signal-options.js';
   import Hierarchy from '#lib/components/Hierarchy.svelte';
   import { api, ApiError, socketURL } from '#lib/api.js';
@@ -254,12 +255,12 @@
       socket?.close();
     };
   });
-  async function enter(sit: boolean) {
+  async function enter(seat?: number) {
     busy = true;
     error = '';
     try {
       if (!user) user = await api<User>('/guest', { name });
-      if (sit) await api(`/matches/${code}/join`, {});
+      if (seat !== undefined) await api(`/matches/${code}/join`, { seat });
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ perspective: 0 }));
       } else connect();
@@ -401,7 +402,7 @@
         class="fields"
         onsubmit={(e) => {
           e.preventDefault();
-          void enter(true);
+          void enter();
         }}
       >
         <div>
@@ -413,10 +414,10 @@
             required
           />
         </div>
-        <Button type="submit" disabled={busy}>Sentarme a jugar</Button><Button
+        <Button type="submit" disabled={busy}>Elegir mi puesto</Button><Button
           variant="outline"
           disabled={busy}
-          onclick={() => enter(false)}
+          onclick={() => enter()}
         >
           <Eye />Entrar a mirar
         </Button>
@@ -436,7 +437,7 @@
     <div class="match-grid">
       <main class="game-surface" bind:this={gameSurface}>
         {#if spectator}
-          <div class="spectator-bar">
+          <div class={['spectator-bar', { 'waiting-spectator': !game }]}>
             <span class="row"><Eye size={16} />Estás mirando</span>
             {#each snapshot.seats as seat, i (seat.id || `empty-${i}`)}
               {#if seat.id}
@@ -448,11 +449,15 @@
                 </Button>
               {/if}
             {/each}
-
-            {#if !game && snapshot.seats.filter((seat) => seat.id).length < snapshot.config.players}
-              <Button disabled={busy} onclick={() => enter(true)}>Sentarme</Button>
-            {/if}
           </div>
+        {/if}
+
+        {#if spectator && !game}
+          <SeatSelector
+            {snapshot}
+            disabled={busy || !connected}
+            onselect={(seat) => void enter(seat)}
+          />
         {/if}
 
         <div class="table-area" class:four-player={snapshot.config.players === 4}>
@@ -1101,6 +1106,15 @@
     height: 44px;
     padding: 5px 9px;
     font-size: 10px;
+  }
+  .spectator-bar.waiting-spectator {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 20px 20px 0;
+    max-width: none;
+    font-size: 12px;
   }
   .cut-controls {
     position: absolute;

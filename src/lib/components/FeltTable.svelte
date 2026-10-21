@@ -372,8 +372,8 @@
     display: grid;
     place-items: center;
     font:
-      italic 70px Georgia,
-      serif;
+      italic 70px 'Nunito Variable',
+      sans-serif;
     opacity: 0.06;
   }
   .played-group {

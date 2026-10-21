@@ -1,4 +1,6 @@
 <script lang="ts">
+  import '@fontsource-variable/nunito/wght.css';
+  import '@fontsource-variable/nunito/wght-italic.css';
   import '../app.css';
   import { afterNavigate } from '$app/navigation';
   import { trackPage } from '#lib/analytics.js';
