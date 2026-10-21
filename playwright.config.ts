@@ -20,6 +20,7 @@ export default defineConfig({
         '**/card-sounds.spec.ts',
         '**/renderer.spec.ts',
         '**/burning.spec.ts',
+        '**/vacant-rooms.spec.ts',
       ],
     },
   ],

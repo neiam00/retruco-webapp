@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import { API_ORIGIN } from '$app/env/public';
   import {
     ArrowRight,
     Plus,
@@ -44,15 +45,21 @@
   let password = $state('');
   let historyOpen = $state(false);
   let history = $state<HistoryEntry[]>([]);
+  let listingRevision = 0;
 
   async function refresh() {
+    const revision = ++listingRevision;
     try {
-      tables = await api<Listing[]>('/matches');
-      listError = '';
+      const latest = await api<Listing[]>('/matches');
+      if (revision === listingRevision) {
+        tables = latest;
+        listError = '';
+      }
     } catch (e) {
-      listError = e instanceof Error ? e.message : 'No pudimos cargar las mesas.';
+      if (revision === listingRevision)
+        listError = e instanceof Error ? e.message : 'No pudimos cargar las mesas.';
     } finally {
-      loading = false;
+      if (revision === listingRevision) loading = false;
     }
   }
   onMount(() => {
@@ -60,8 +67,27 @@
       .then((value) => (user = value))
       .catch(() => {});
     void refresh();
-    const timer = setInterval(() => void refresh(), 10000);
-    return () => clearInterval(timer);
+    const updates = new EventSource(`${API_ORIGIN}/api/matches/events`, { withCredentials: true });
+    updates.onmessage = (event) => {
+      try {
+        const latest = JSON.parse(event.data) as Listing[];
+        // A slower HTTP refresh must not restore a room removed by the stream.
+        listingRevision++;
+        tables = latest;
+        loading = false;
+        listError = '';
+      } catch {
+        void refresh();
+      }
+    };
+    // EventSource reconnects automatically. Keep HTTP refresh as a fallback.
+    const timer = setInterval(() => {
+      if (updates.readyState !== EventSource.OPEN) void refresh();
+    }, 10000);
+    return () => {
+      updates.close();
+      clearInterval(timer);
+    };
   });
   async function act(work: () => Promise<void>) {
     busy = true;

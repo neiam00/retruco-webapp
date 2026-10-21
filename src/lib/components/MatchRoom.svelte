@@ -57,6 +57,8 @@
   let declarationOpen = $state(false);
   let leaveOpen = $state(false);
   let leaving = $state(false);
+  let roomClosed = false;
+  let roomUnavailable = $state(false);
   let declaration = $state('');
   let bottom = $state<number | null>(null);
   let top = $state<number | null>(null);
@@ -148,7 +150,10 @@
       error = cause instanceof Error ? cause.message : 'No pudimos conectar con la mesa.';
       if (cause instanceof ApiError && cause.status === 401) {
         user = null;
-      } else if (!(cause instanceof ApiError && cause.status === 404)) {
+      } else if (cause instanceof ApiError && cause.status === 404) {
+        roomUnavailable = true;
+        snapshot = null;
+      } else {
         retry = setTimeout(() => void connect(), 2000);
       }
       return;
@@ -197,9 +202,13 @@
           if (leaving && (incoming.seat < 0 || incoming.state?.phase === 'match_over')) {
             void goto(resolve('/'));
           }
+        } else if (payload.type === 'room_closed') {
+          roomClosed = true;
+          void goto(resolve('/'));
         } else if (payload.type === 'error') {
           error = payload.error;
           busy = false;
+          leaving = false;
         }
       } catch {
         error = 'No pudimos leer el estado de la mesa.';
@@ -211,7 +220,7 @@
       cpu.stop();
       connected = false;
       busy = false;
-      if (!disposed) retry = setTimeout(connect, 2000);
+      if (!disposed && !roomClosed) retry = setTimeout(connect, 2000);
     };
     socket.onerror = () => {
       connected = false;
@@ -415,8 +424,12 @@
     </section>
   {:else if !snapshot}
     <section class="entry-panel">
-      <h1>Conectando con {code}…</h1>
-      <p class="muted">Si la mesa no existe, revisa el código de la invitación.</p>
+      <h1>{roomUnavailable ? 'Esta mesa ya no está disponible.' : `Conectando con ${code}…`}</h1>
+      <p class="muted">
+        {roomUnavailable
+          ? 'Vuelve al inicio para buscar otra mesa.'
+          : 'Si la mesa no existe, revisa el código de la invitación.'}
+      </p>
       <Button href="/" variant="outline">Volver al inicio</Button>
     </section>
   {:else}
