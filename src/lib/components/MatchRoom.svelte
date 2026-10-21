@@ -41,6 +41,7 @@
   import { signals } from '#lib/signal-options.js';
   import Hierarchy from '#lib/components/Hierarchy.svelte';
   import { api, ApiError, socketURL } from '#lib/api.js';
+  import { displayNameError, focusField, focusAlert } from '#lib/form-validation.js';
   import { cardName } from '#lib/cards.js';
   import { declarations, commandLabel } from '#lib/command-labels.js';
   import { CPUController, type CPUStatus } from '#lib/cpu/controller.js';
@@ -50,6 +51,8 @@
   let snapshot = $state.raw<Snapshot | null>(null);
   let user = $state<User | null>(null);
   let name = $state('');
+  let nameError = $state('');
+  let nameRevision = 0;
   let connected = $state(false);
   let error = $state('');
   let cpuStatus = $state<CPUStatus>('idle');
@@ -288,16 +291,35 @@
     };
   });
   async function enter(seat?: number) {
+    nameError = user ? '' : displayNameError(name);
+    if (nameError) {
+      await focusField('table-name');
+      return;
+    }
     busy = true;
     error = '';
+    const revision = nameRevision;
     try {
-      if (!user) user = await api<User>('/guest', { name });
+      if (!user) {
+        try {
+          user = await api<User>('/guest', { name });
+        } catch (cause) {
+          if (revision !== nameRevision) return;
+          if (cause instanceof ApiError && cause.status === 400) {
+            nameError = cause.message;
+            await focusField('table-name');
+            return;
+          }
+          throw cause;
+        }
+      }
       if (seat !== undefined) await api(`/matches/${code}/join`, { seat });
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ perspective: 0 }));
       } else connect();
     } catch (e) {
-      error = e instanceof Error ? e.message : 'No pudimos entrar a la mesa.';
+      if (revision === nameRevision)
+        error = e instanceof Error ? e.message : 'No pudimos entrar a la mesa.';
     } finally {
       busy = false;
     }
@@ -423,7 +445,11 @@
   {/if}
 
   {#if error}
-    <div class="error match-error" role="alert">{error}</div>
+    {#key error}
+      <div class="error match-error" role="alert" tabindex="-1" {@attach focusAlert}>
+        {error}
+      </div>
+    {/key}
   {/if}
 
   {#if !ready}
@@ -435,6 +461,7 @@
       <p>Entra con tu nombre para jugar o mirar la partida.</p>
       <form
         class="fields"
+        novalidate
         onsubmit={(e) => {
           e.preventDefault();
           void enter();
@@ -444,10 +471,22 @@
           <Label for="table-name">Tu nombre</Label><Input
             id="table-name"
             bind:value={name}
+            oninput={() => {
+              nameError = '';
+              error = '';
+              nameRevision++;
+            }}
+            aria-invalid={!!nameError}
+            aria-describedby={nameError ? 'table-name-error' : undefined}
             minlength={2}
             maxlength={24}
             required
           />
+          {#if nameError}
+            <p id="table-name-error" class="field-error" role="alert">
+              {nameError}
+            </p>
+          {/if}
         </div>
         <Button type="submit" disabled={busy}>Elegir mi puesto</Button><Button
           variant="outline"
@@ -884,6 +923,7 @@
       repeating-linear-gradient(0deg, #ffffff02 0 1px, transparent 1px 3px),
       radial-gradient(ellipse at center, #194637, #0b211b);
     --border: #a9c1ac30;
+    --field-error: #ffc2ad;
     --input: #a9c1ac30;
     --background: #162e26;
     --foreground: #f1f2e8;

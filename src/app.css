@@ -156,6 +156,15 @@ h3 {
   color: #173d31;
   font-size: 16px;
 }
+.cn-input[aria-invalid='true'] {
+  border-color: var(--field-error, #a03027);
+}
+.field-error {
+  margin-top: 6px;
+  color: var(--field-error, #a03027);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
 .cn-label {
   font-size: 0.85rem;
   font-weight: 650;

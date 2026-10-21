@@ -27,6 +27,7 @@ export default defineConfig({
         '**/vira-layout.spec.ts',
         '**/game-interaction.spec.ts',
         '**/table-browser.spec.ts',
+        '**/form-errors.spec.ts',
       ],
     },
   ],

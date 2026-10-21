@@ -21,7 +21,15 @@
   import * as Dialog from '#lib/components/ui/dialog/index.js';
   import LandingHero from '#lib/components/LandingHero.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
-  import { api } from '#lib/api.js';
+  import { api, ApiError } from '#lib/api.js';
+  import {
+    displayNameError,
+    usernameError,
+    passwordError,
+    FieldError,
+    focusField,
+    focusAlert,
+  } from '#lib/form-validation.js';
   import { formatRoomCode, formatRoomCodeInput } from '#lib/room-code.js';
   import { teamLabel } from '#lib/team-labels.js';
   import type { User, Listing, HistoryEntry } from '#lib/protocol.js';
@@ -76,6 +84,10 @@
   let loading = $state(true);
   let busy = $state(false);
   let error = $state('');
+  let fieldErrors = $state<Record<string, string>>({});
+  let authError = $state('');
+  let credentialsError = $state('');
+  let formRevision = 0;
   let listError = $state('');
   let authOpen = $state(false);
   let register = $state(false);
@@ -85,7 +97,7 @@
   let history = $state<HistoryEntry[]>([]);
   let listingRevision = 0;
 
-  async function refresh() {
+  async function refresh(focusOnError = false) {
     const revision = ++listingRevision;
     try {
       const latest = await api<Listing[]>('/matches');
@@ -94,8 +106,11 @@
         listError = '';
       }
     } catch (e) {
-      if (revision === listingRevision)
+      if (revision === listingRevision) {
         listError = e instanceof Error ? e.message : 'No pudimos cargar las mesas.';
+        loading = false;
+        if (focusOnError) await focusField('table-list-error');
+      }
     } finally {
       if (revision === listingRevision) loading = false;
     }
@@ -120,7 +135,7 @@
     void api<User | null>('/session')
       .then((value) => (user = value))
       .catch(() => {});
-    void refresh();
+    void refresh(true);
     let updates = openListingStream();
     // Ordinary disconnects reconnect automatically; HTTP errors such as a
     // deployment-time 404 can close EventSource permanently, so reopen it.
@@ -133,21 +148,69 @@
       clearInterval(timer);
     };
   });
-  async function act(work: () => Promise<void>) {
+  function clearFieldError(field: string) {
+    fieldErrors[field] = '';
+    error = '';
+    authError = '';
+    if (field === 'username' || field === 'password') credentialsError = '';
+    formRevision++;
+  }
+
+  function validateFields(errors: Record<string, string>) {
+    Object.assign(fieldErrors, errors);
+    const firstInvalid = Object.keys(errors).find((field) => errors[field]);
+    if (firstInvalid) void focusField(firstInvalid);
+    return !firstInvalid;
+  }
+
+  function resetAuthErrors() {
+    fieldErrors.username = '';
+    fieldErrors.password = '';
+    authError = '';
+    credentialsError = '';
+    formRevision++;
+  }
+
+  async function act(work: () => Promise<void>, context: 'page' | 'auth' = 'page') {
     busy = true;
     error = '';
+    authError = '';
+    const revision = formRevision;
     try {
       await work();
     } catch (e) {
-      error = e instanceof Error ? e.message : 'No se pudo completar la acción.';
+      // A response for an older value must not put an error back after editing.
+      if (revision !== formRevision) return;
+      if (e instanceof FieldError) {
+        fieldErrors[e.field] = e.message;
+        await focusField(e.field);
+      } else if (context === 'auth' && e instanceof ApiError && e.status === 409) {
+        fieldErrors.username = e.message;
+        await focusField('username');
+      } else if (context === 'auth' && e instanceof ApiError && e.status === 401) {
+        credentialsError = e.message;
+        await focusField('username');
+      } else {
+        const message = e instanceof Error ? e.message : 'No se pudo completar la acción.';
+        if (context === 'auth') authError = message;
+        else error = message;
+      }
     } finally {
       busy = false;
     }
   }
   async function identify() {
-    if (!user) user = await api<User>('/guest', { name });
+    if (user) return;
+    try {
+      user = await api<User>('/guest', { name });
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 400)
+        throw new FieldError('guest-name', cause.message);
+      throw cause;
+    }
   }
   function create() {
+    if (!validateFields({ 'guest-name': user ? '' : displayNameError(name) })) return;
     void act(async () => {
       await identify();
       const match = await api<{ code: string }>('/matches', {
@@ -158,21 +221,45 @@
       await goto(resolve('/mesa/[code]', { code: match.code }));
     });
   }
-  function join(matchCode = code) {
+  function join(matchCode?: string) {
+    const normalized = formatRoomCode(matchCode ?? code);
+    const codeError = /^[A-Z]{4}-[0-9]{4}$/.test(normalized)
+      ? ''
+      : 'El código tiene el formato ABCD-1234.';
+    if (
+      !validateFields({
+        'guest-name': user ? '' : displayNameError(name),
+        ...(matchCode === undefined ? { 'room-code': codeError } : {}),
+      })
+    )
+      return;
     void act(async () => {
       await identify();
-      const normalized = formatRoomCode(matchCode);
-      if (!/^[A-Z]{4}-[0-9]{4}$/.test(normalized))
-        throw new Error('El código tiene el formato ABCD-1234.');
+      try {
+        await api(`/matches/${normalized}`);
+      } catch (cause) {
+        if (matchCode === undefined && cause instanceof ApiError && cause.status === 404) {
+          throw new FieldError('room-code', 'No encontramos una mesa con ese código.');
+        }
+        throw cause;
+      }
       await goto(resolve('/mesa/[code]', { code: normalized }));
     });
   }
   function authenticate() {
+    credentialsError = '';
+    if (
+      !validateFields({
+        username: usernameError(username),
+        password: passwordError(password, register),
+      })
+    )
+      return;
     void act(async () => {
       user = await api<User>(register ? '/register' : '/login', { username, password });
       password = '';
       authOpen = false;
-    });
+    }, 'auth');
   }
   function showHistory() {
     void act(async () => {
@@ -233,6 +320,7 @@
           variant="outline"
           onclick={() => {
             register = false;
+            resetAuthErrors();
             authOpen = true;
           }}
         >
@@ -243,8 +331,12 @@
   </header>
 
   <LandingHero />
-  {#if error}
-    <div class="error mb-5" role="alert">{error}</div>
+  {#if error && !authOpen}
+    {#key error}
+      <div class="error mb-5" role="alert" tabindex="-1" {@attach focusAlert}>
+        {error}
+      </div>
+    {/key}
   {/if}
 
   <div class="lobby-grid">
@@ -260,10 +352,18 @@
           <Label for="guest-name">Tu nombre en la mesa</Label><Input
             id="guest-name"
             bind:value={name}
+            oninput={() => clearFieldError('guest-name')}
+            aria-invalid={!!fieldErrors['guest-name']}
+            aria-describedby={fieldErrors['guest-name'] ? 'guest-name-error' : undefined}
             maxlength={24}
             placeholder="¿Cómo te dicen?"
             autocomplete="nickname"
           />
+          {#if fieldErrors['guest-name']}
+            <p id="guest-name-error" class="field-error" role="alert">
+              {fieldErrors['guest-name']}
+            </p>
+          {/if}
         </div>
       {:else}
         <div class="row identity">
@@ -381,20 +481,34 @@
       <div class="or-divider"><span>O entra con un código</span></div>
       <form
         class="row join-form"
+        novalidate
         onsubmit={(event) => {
           event.preventDefault();
           join();
         }}
       >
-        <Label for="room-code" class="sr-only">Código de la mesa</Label><Input
-          id="room-code"
-          value={code}
-          oninput={(event) => (code = formatRoomCodeInput(event.currentTarget))}
-          placeholder="ABCD-1234"
-          autocomplete="off"
-          spellcheck="false"
-          class="min-w-0 flex-1 uppercase tracking-widest"
-        /><Button type="submit" variant="outline" disabled={busy}>Entrar <ArrowRight /></Button>
+        <div class="code-field">
+          <Label for="room-code" class="sr-only">Código de la mesa</Label><Input
+            id="room-code"
+            value={code}
+            oninput={(event) => {
+              code = formatRoomCodeInput(event.currentTarget);
+              clearFieldError('room-code');
+            }}
+            aria-invalid={!!fieldErrors['room-code']}
+            aria-describedby={fieldErrors['room-code'] ? 'room-code-error' : undefined}
+            placeholder="ABCD-1234"
+            autocomplete="off"
+            spellcheck="false"
+            class="min-w-0 flex-1 uppercase tracking-widest"
+          />
+          {#if fieldErrors['room-code']}
+            <p id="room-code-error" class="field-error" role="alert">
+              {fieldErrors['room-code']}
+            </p>
+          {/if}
+        </div>
+        <Button type="submit" variant="outline" disabled={busy}>Entrar <ArrowRight /></Button>
       </form>
       {#if !user?.registered}
         <p class="account-note">
@@ -402,6 +516,7 @@
             variant="link"
             onclick={() => {
               register = true;
+              resetAuthErrors();
               authOpen = true;
             }}
           >
@@ -419,7 +534,12 @@
             Mesas abiertas <span class="table-count">{visibleTables.length}</span>
           </h2>
         </div>
-        <Button variant="ghost" size="icon" aria-label="Actualizar mesas" onclick={refresh}>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Actualizar mesas"
+          onclick={() => void refresh(true)}
+        >
           <RefreshCw />
         </Button>
       </div>
@@ -462,8 +582,8 @@
           </div>
         {:else if listError}
           <div class="empty-state">
-            <p class="error" role="alert">{listError}</p>
-            <Button variant="outline" onclick={refresh}>Volver a intentar</Button>
+            <p id="table-list-error" class="error" role="alert" tabindex="-1">{listError}</p>
+            <Button variant="outline" onclick={() => void refresh(true)}>Volver a intentar</Button>
           </div>
         {:else if !tables.length}
           <div class="empty-state">
@@ -555,6 +675,7 @@
     </Dialog.Header>
     <form
       class="fields"
+      novalidate
       onsubmit={(event) => {
         event.preventDefault();
         authenticate();
@@ -564,24 +685,57 @@
         <Label for="username">Usuario</Label><Input
           id="username"
           bind:value={username}
+          oninput={() => clearFieldError('username')}
+          aria-invalid={!!fieldErrors.username || !!credentialsError}
+          aria-describedby={fieldErrors.username
+            ? 'username-error'
+            : credentialsError
+              ? 'credentials-error'
+              : undefined}
           autocomplete="username"
           minlength={3}
           maxlength={24}
           required
         />
+        {#if fieldErrors.username}
+          <p id="username-error" class="field-error" role="alert">
+            {fieldErrors.username}
+          </p>
+        {/if}
       </div>
       <div>
         <Label for="password">Contraseña</Label><Input
           id="password"
           type="password"
           bind:value={password}
+          oninput={() => clearFieldError('password')}
+          aria-invalid={!!fieldErrors.password || !!credentialsError}
+          aria-describedby={fieldErrors.password
+            ? 'password-error'
+            : credentialsError
+              ? 'credentials-error'
+              : undefined}
           autocomplete={register ? 'new-password' : 'current-password'}
           minlength={register ? 10 : 1}
           required
         />
+        {#if fieldErrors.password}
+          <p id="password-error" class="field-error" role="alert">
+            {fieldErrors.password}
+          </p>
+        {/if}
+        {#if credentialsError}
+          <p id="credentials-error" class="field-error" role="alert">
+            {credentialsError}
+          </p>
+        {/if}
       </div>
-      {#if error}
-        <p class="error" role="alert">{error}</p>
+      {#if authError}
+        {#key authError}
+          <p class="error" role="alert" tabindex="-1" {@attach focusAlert}>
+            {authError}
+          </p>
+        {/key}
       {/if}
       <Button type="submit" disabled={busy}>
         {register ? 'Crear mi cuenta' : 'Entrar'}
@@ -590,6 +744,7 @@
         onclick={() => {
           register = !register;
           error = '';
+          resetAuthErrors();
         }}
       >
         {register ? 'Ya tengo una cuenta' : 'Quiero crear una cuenta'}
@@ -804,6 +959,13 @@
   }
   .browser-panel {
     padding-top: 10px;
+  }
+  .join-form {
+    align-items: flex-start;
+  }
+  .code-field {
+    flex: 1;
+    min-width: 0;
   }
   .browser-heading h2 {
     font-size: 1.9rem;
