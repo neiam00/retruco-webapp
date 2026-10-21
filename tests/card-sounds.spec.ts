@@ -100,9 +100,15 @@ test('card effects play through Web Audio and mute independently of voice', asyn
     await expect(observer.locator('.played-card')).toHaveCount(1);
     expect(await observer.evaluate(() => window.cardAudio.starts)).toBe(6);
     await expect.poll(() => pages[1].evaluate(() => window.cardAudio.starts)).toBe(7);
+    const details = observer.getByRole('button', { name: 'Detalles de la partida', exact: true });
+    if (await details.isVisible()) await details.click();
     await expect(
       observer.getByRole('button', { name: 'Entrar al audio', exact: true }),
     ).toBeVisible();
+    const closeDetails = observer
+      .locator('.match-details')
+      .getByRole('button', { name: 'Cerrar detalles', exact: true });
+    if (await closeDetails.isVisible()) await closeDetails.click();
 
     await observer.getByRole('button', { name: 'Activar sonidos de cartas', exact: true }).click();
     await observer.emulateMedia({ reducedMotion: 'reduce' });

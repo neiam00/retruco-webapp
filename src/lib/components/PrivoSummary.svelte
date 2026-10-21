@@ -14,13 +14,22 @@
       </div>
     {/each}
     {#if game.phase === 'playing'}
-      <p>Envido fijo: 2 piedras, sin subidas. Se cuenta antes del truco.</p>
-    {/if}
-    {#if game.pending?.kind === 'privo'}
-      <p>«Privo y Truco» acepta jugar; el truco sigue valiendo 1 hasta que alguien lo cante.</p>
-      {#if game.legal.some((command) => command.kind === 'present_flor')}
-        <p>Puedes presentar tu flor para cerrar la mano con 3 piedras, o jugar y conservarla.</p>
-      {/if}
+      <details>
+        <summary>Envido fijo: 2 piedras · Ver regla</summary>
+        <div class="explanation">
+          <p>Envido fijo: 2 piedras, sin subidas. Se cuenta antes del truco.</p>
+          {#if game.pending?.kind === 'privo'}
+            <p>
+              «Privo y Truco» acepta jugar; el truco sigue valiendo 1 hasta que alguien lo cante.
+            </p>
+            {#if game.legal.some((command) => command.kind === 'present_flor')}
+              <p>
+                Puedes presentar tu flor para cerrar la mano con 3 piedras, o jugar y conservarla.
+              </p>
+            {/if}
+          {/if}
+        </div>
+      </details>
     {/if}
   </section>
 {/if}
@@ -29,12 +38,13 @@
   .privo-summary {
     position: relative;
     max-width: 600px;
-    margin: 16px auto;
-    padding: 16px 20px;
+    margin: 4px auto;
+    padding: 6px 12px;
     border: 1px solid #ddd09c70;
     border-radius: 16px;
     background: #16362c;
     color: #f5efda;
+    font-size: 11px;
   }
   .privo-team {
     display: flex;
@@ -55,10 +65,26 @@
     line-height: 1.5;
     color: #bfcebf;
   }
+  summary {
+    cursor: pointer;
+    padding: 4px;
+    color: #bfcebf;
+  }
+  .explanation {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    padding: 12px;
+    border: 1px solid #ddd09c70;
+    border-radius: 12px;
+    background: #16362c;
+    z-index: 10;
+  }
   @media (max-width: 640px) {
     .privo-summary {
-      margin: 12px;
-      padding: 14px;
+      margin: 4px;
+      padding: 6px 10px;
     }
   }
 </style>

@@ -24,6 +24,8 @@
     X,
     Volume2,
     VolumeX,
+    MoreHorizontal,
+    List,
   } from '@lucide/svelte';
   import { Button } from '#lib/components/ui/button/index.js';
   import { Input } from '#lib/components/ui/input/index.js';
@@ -33,6 +35,7 @@
   import ChatPanel from '#lib/components/ChatPanel.svelte';
   import CantoHistory from '#lib/components/CantoHistory.svelte';
   import FeltTable from '#lib/components/FeltTable.svelte';
+  import TableViewport from '#lib/components/TableViewport.svelte';
   import SeatSelector from '#lib/components/SeatSelector.svelte';
   import PrivoSummary from '#lib/components/PrivoSummary.svelte';
   import { signals } from '#lib/signal-options.js';
@@ -58,6 +61,8 @@
   let chatOpen = $state(false);
   let signalsOpen = $state(false);
   let declarationOpen = $state(false);
+  let moreActionsOpen = $state(false);
+  let detailsOpen = $state(false);
   let leaveOpen = $state(false);
   let leaving = $state(false);
   let roomClosed = false;
@@ -140,6 +145,23 @@
         (game.pending?.kind === 'privo' || (command.declaration ?? '') === declaration) &&
         (command.kind !== 'raise' || command.amount === raise || game?.pending?.kind === 'truco'),
     ) ?? [],
+  );
+  let availableActions = $derived(
+    game?.pending ? [...responseActions, ...callActions] : callActions,
+  );
+  let primaryActions = $derived.by(() => {
+    if (game?.pending) {
+      return availableActions.filter((command) =>
+        ['accept', 'decline', 'present_flor', 'flowers_no'].includes(command.kind ?? ''),
+      );
+    }
+    const truco = callActions.find((command) => command.kind === 'truco');
+    const envido = callActions.find((command) => command.kind === 'envido');
+    const commonCalls = [truco, envido].filter((command) => command !== undefined);
+    return commonCalls.length ? commonCalls : callActions.slice(0, 2);
+  });
+  let moreActions = $derived(
+    availableActions.filter((command) => !primaryActions.includes(command)),
   );
 
   async function connect() {
@@ -352,7 +374,10 @@
 <svelte:window
   onresize={() => cardMotion.cancel()}
   onpointerup={() => cardSounds.unlock()}
-  onkeydown={() => cardSounds.unlock()}
+  onkeydown={(event) => {
+    cardSounds.unlock();
+    if (event.key === 'Escape') detailsOpen = false;
+  }}
   onstorage={syncCardSounds}
 />
 <svelte:document
@@ -366,7 +391,7 @@
   <title>Mesa {code} — Retruco</title>
   <meta name="robots" content="noindex,nofollow" />
 </svelte:head>
-<div class="match-page">
+<div class={['match-page', { 'active-match': !!game, 'details-open': detailsOpen }]}>
   <header class="match-header">
     <a href={resolve('/')} class="brand">
       <span class="brand-mark">r.</span>
@@ -471,7 +496,13 @@
         {/if}
 
         <div class="table-area" class:four-player={snapshot.config.players === 4}>
-          <FeltTable {snapshot} {seconds} {myTurn} {cardsMoving} oninvite={copy} />
+          {#if game}
+            <TableViewport>
+              <FeltTable {snapshot} {seconds} {myTurn} {cardsMoving} oninvite={copy} />
+            </TableViewport>
+          {:else}
+            <FeltTable {snapshot} {seconds} {myTurn} {cardsMoving} oninvite={copy} />
+          {/if}
           {#if game?.phase === 'cutting' && game.turn === snapshot.seat}
             <div class="cut-controls">
               <Label for="cut-point">Punto de corte (1–39)</Label><Input
@@ -491,8 +522,8 @@
         </div>
 
         {#if game && game.phase !== 'cutting'}
-          <PrivoSummary {game} viewerSeat={snapshot.seat} />
           <section class="hand-area" aria-label="Tu mano">
+            <PrivoSummary {game} viewerSeat={snapshot.seat} />
             <div class="row spread hand-label">
               <div>
                 <span class="eyebrow">
@@ -506,6 +537,11 @@
                         ? ` · Flor ${game.florValid ? 'válida' : 'quemada'}`
                         : ''}
                   </p>
+                {/if}
+                {#if burnMode}
+                  <p role="status">Elige una carta para quemarla y pasar el turno.</p>
+                {:else if stacking && canStack}
+                  <p role="status">Primero elige abajo; después, arriba.</p>
                 {/if}
               </div>
               {#if game.preview}
@@ -524,12 +560,14 @@
                   aria-label={`${cardName(held.card)}${bottom === held.index ? ', abajo' : top === held.index ? ', arriba' : ''}`}
                   onclick={() => play(held.index)}
                 >
-                  <Card card={held.card} width={126} intro={false} />
-                  {#if bottom === held.index}
-                    <span>Abajo · 2.ª</span>
-                  {:else if top === held.index}
-                    <span>Arriba · 3.ª</span>
-                  {/if}
+                  <span class="card-face">
+                    <Card card={held.card} width={126} intro={false} />
+                    {#if bottom === held.index}
+                      <span class="card-selection">Abajo · 2.ª</span>
+                    {:else if top === held.index}
+                      <span class="card-selection">Arriba · 3.ª</span>
+                    {/if}
+                  </span>
                 </Button>
               {/each}
             </div>
@@ -610,11 +648,7 @@
                           : 'Quemar carta'}
                     </Button>
                   {/if}
-                  {#if burnMode}
-                    <span>Elige una carta para quemarla y pasar el turno.</span>
-                  {/if}
                   {#if stacking}
-                    <span>Primero elige abajo; después, arriba.</span>
                     <Button
                       disabled={bottom === null ||
                         top === null ||
@@ -631,19 +665,7 @@
               {/if}
 
               <div class="canto-actions">
-                {#if game.pending && game.pending.caller !== snapshot.seat % 2 && game.pending.kind !== 'truco' && !game.pending.terminal}
-                  <div class="raise-field">
-                    <Label for="raise">Piedras para subir</Label><Input
-                      id="raise"
-                      type="number"
-                      min={1}
-                      max={snapshot.config.target}
-                      bind:value={raise}
-                    />
-                  </div>
-                {/if}
-
-                {#each game.pending ? [...responseActions, ...callActions] : callActions as command (actionKey(command))}
+                {#each primaryActions as command (actionKey(command))}
                   <Button
                     variant={command.kind === 'decline' ? 'outline' : 'default'}
                     disabled={!connected || busy}
@@ -652,11 +674,66 @@
                     {commandLabel(command, game.pending?.kind)}
                   </Button>
                 {/each}
+                {#if moreActions.length}
+                  <Button variant="outline" onclick={() => (moreActionsOpen = true)}>
+                    <MoreHorizontal size={16} />{game.pending ? 'Subir / otros' : 'Más cantos'}
+                  </Button>
+                {/if}
               </div>
+              <Dialog.Root bind:open={moreActionsOpen}>
+                <Dialog.Content>
+                  <Dialog.Header>
+                    <Dialog.Title>{game.pending ? 'Subir o responder' : 'Cantar'}</Dialog.Title>
+                    <Dialog.Description>
+                      Elige otro canto o una subida disponible.
+                    </Dialog.Description>
+                  </Dialog.Header>
+                  <div class="more-cantos">
+                    {#if game.pending && game.pending.caller !== snapshot.seat % 2 && game.pending.kind !== 'truco' && !game.pending.terminal}
+                      <div class="raise-field">
+                        <Label for="raise">Piedras para subir</Label><Input
+                          id="raise"
+                          type="number"
+                          min={1}
+                          max={snapshot.config.target}
+                          bind:value={raise}
+                        />
+                      </div>
+                    {/if}
+
+                    {#each moreActions as command (actionKey(command))}
+                      <Button
+                        variant={command.kind === 'decline' ? 'outline' : 'default'}
+                        disabled={!connected || busy}
+                        onclick={() => {
+                          moreActionsOpen = false;
+                          send(command);
+                        }}
+                      >
+                        {commandLabel(command, game.pending?.kind)}
+                      </Button>
+                    {/each}
+                  </div>
+                </Dialog.Content>
+              </Dialog.Root>
             {/if}
           </section>
         {/if}
         <div class="social-controls">
+          <span class="connection-status">
+            {#if connected}<Wifi size={12} />{:else}<WifiOff size={12} />{/if}
+            {connected ? 'En línea' : 'Reconectando…'}
+          </span>
+          <Button
+            class="details-toggle"
+            variant="outline"
+            aria-label={detailsOpen ? 'Cerrar detalles' : 'Detalles de la partida'}
+            aria-expanded={detailsOpen}
+            aria-controls="match-details"
+            onclick={() => (detailsOpen = !detailsOpen)}
+          >
+            <List size={18} />
+          </Button>
           <Button
             variant="outline"
             size="icon"
@@ -702,16 +779,11 @@
           </div>
         {/if}
       </main>
-      <aside class="match-details" aria-label="Detalles de la partida">
+      <aside id="match-details" class="match-details" aria-label="Detalles de la partida">
+        <Button class="details-close" variant="outline" onclick={() => (detailsOpen = false)}>
+          <X size={16} />Cerrar detalles
+        </Button>
         <div class="table-meta row spread">
-          <span class="row status">
-            {#if connected}
-              <Wifi size={14} />
-            {:else}
-              <WifiOff size={14} />
-            {/if}
-            {connected ? 'En línea' : 'Reconectando…'}
-          </span>
           <span>
             {snapshot.config.target} piedras · {snapshot.config.florRequired
               ? 'Flor por derecho'
@@ -823,6 +895,19 @@
     --accent: #315240;
     --accent-foreground: #f1f2e8;
   }
+  .more-cantos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .more-cantos :global(button) {
+    max-width: 100%;
+    white-space: normal;
+  }
+  :global(.details-close),
+  :global(.details-toggle) {
+    display: none;
+  }
   .match-header {
     height: 64px;
     padding: 0 28px;
@@ -906,8 +991,13 @@
     color: #94b09e;
     font-size: 9px;
   }
-  .status {
-    gap: 5px;
+  .connection-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #94b09e;
+    font-size: 9px;
+    margin-right: auto;
   }
   .hand-area {
     position: relative;
@@ -951,29 +1041,42 @@
     border-radius: 8px;
     position: relative;
     background: transparent;
+    box-shadow: none;
+    transition: none;
+  }
+  .card-face {
+    display: block;
+    position: relative;
+    pointer-events: none;
     transform-origin: 50% 100%;
-    transition:
-      transform 0.18s ease,
-      opacity 0.18s ease;
+    transition: transform 80ms ease-out;
     box-shadow: 0 8px 14px #061a1550;
   }
   .hand-cards :global(.hand-card + .hand-card) {
     margin-left: -27px;
   }
-  .hand-cards :global(.hand-card:nth-child(1)) {
+  .hand-cards :global(.hand-card:nth-child(1) .card-face) {
     transform: translateY(8px) rotate(-10deg);
   }
-  .hand-cards :global(.hand-card:nth-child(2)) {
+  .hand-cards :global(.hand-card:nth-child(2) .card-face) {
     transform: translateY(-5px);
     z-index: 1;
   }
-  .hand-cards :global(.hand-card:nth-child(3)) {
+  .hand-cards :global(.hand-card:nth-child(3) .card-face) {
     transform: translateY(8px) rotate(10deg);
     z-index: 2;
   }
-  .hand-cards :global(.hand-card:not(:disabled):hover) {
-    transform: translateY(-22px);
+  .hand-cards :global(.hand-card:not(:disabled):hover),
+  .hand-cards :global(.hand-card:focus-visible) {
     z-index: 4;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .hand-cards :global(.hand-card:not(:disabled):hover .card-face) {
+      transform: translateY(-12px);
+    }
+  }
+  .hand-cards :global(.hand-card:focus-visible .card-face) {
+    transform: translateY(-12px);
   }
   .hand-cards :global(.hand-card:disabled) {
     opacity: 1;
@@ -982,13 +1085,13 @@
     opacity: 0.14;
     box-shadow: none;
   }
-  .hand-cards :global(.hand-card.selected-bottom),
-  .hand-cards :global(.hand-card.selected-top) {
+  .hand-cards :global(.hand-card.selected-bottom .card-face),
+  .hand-cards :global(.hand-card.selected-top .card-face) {
     outline: 3px solid #e0cb81;
     transform: translateY(-18px);
     z-index: 3;
   }
-  .hand-cards :global(.hand-card > span) {
+  .card-selection {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -1257,9 +1360,6 @@
     .match-details {
       margin: 0 12px 24px;
     }
-    .table-meta > span:not(.status) {
-      display: none;
-    }
     .hand-area {
       width: calc(100% - 24px);
     }
@@ -1307,9 +1407,6 @@
       gap: 5px;
       flex-wrap: wrap;
     }
-    .stack-controls > span {
-      font-size: 8px;
-    }
     .preview {
       right: 0;
       top: 48px;
@@ -1352,6 +1449,165 @@
     }
     .cut-controls :global(button) {
       width: 100%;
+    }
+  }
+
+  /* The table uses the space left by the hand and controls, rather than
+     pushing those controls below a fixed minimum table height. */
+  .active-match {
+    height: 100dvh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .active-match .match-header {
+    flex: 0 0 48px;
+    height: 48px;
+  }
+  .active-match .match-grid {
+    flex: 1;
+    min-height: 0;
+  }
+  .active-match .game-surface {
+    height: 100%;
+    min-height: 0;
+    padding: 0 8px 4px;
+  }
+  .active-match .table-area {
+    display: block;
+    flex: 1;
+    min-height: 0;
+  }
+  .active-match .hand-area {
+    width: 100%;
+    max-width: 880px;
+  }
+  .active-match .hand-label {
+    margin-bottom: 2px;
+  }
+  .active-match .hand-label p {
+    margin-top: 0;
+  }
+  .active-match .hand-cards {
+    height: clamp(76px, 17dvh, 150px);
+    min-height: 0;
+    padding: 12px 0 6px;
+  }
+  .active-match .hand-cards :global(.hand-card) {
+    height: 100%;
+    min-height: 0;
+  }
+  .active-match .card-face {
+    height: 100%;
+  }
+  .active-match .hand-cards :global(img) {
+    height: 100%;
+    width: auto;
+  }
+  .active-match .canto-actions {
+    margin-top: 4px;
+    gap: 4px;
+  }
+  .active-match .canto-actions :global(button) {
+    white-space: normal;
+    line-height: 1.15;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 32%;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .active-match .stack-controls {
+    margin-top: 2px;
+  }
+  .active-match .stack-controls :global(button) {
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 4px 8px;
+    white-space: normal;
+    line-height: 1.15;
+  }
+  .active-match .social-controls {
+    position: static;
+    justify-content: flex-end;
+    gap: 4px;
+    flex: 0 0 44px;
+    margin-top: 4px;
+  }
+  .active-match .social-controls :global(button) {
+    min-height: 44px;
+    height: 44px;
+  }
+  .active-match .match-details {
+    top: 8px;
+    bottom: 8px;
+    overflow: auto;
+  }
+  .active-match .spectator-bar:not(.waiting-spectator) {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    max-width: none;
+    gap: 4px;
+  }
+  @media (max-width: 1150px) {
+    .active-match :global(.details-toggle),
+    .active-match :global(.details-close) {
+      display: inline-flex;
+    }
+    .active-match .match-details {
+      display: none;
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      bottom: 4px;
+      width: min(320px, calc(100% - 8px));
+      margin: 0;
+      padding: 12px;
+      border: 1px solid #a9c1ac30;
+      border-radius: 12px;
+      background: #102c23;
+      z-index: 20;
+    }
+    .active-match.details-open .match-details {
+      display: block;
+    }
+    .active-match .table-meta {
+      position: static;
+      margin-top: 8px;
+    }
+  }
+  @media (max-height: 500px) and (min-width: 600px) {
+    .active-match .game-surface {
+      margin-right: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(270px, 40%);
+      grid-template-rows: minmax(0, 1fr) 44px;
+      column-gap: 12px;
+    }
+    .active-match .table-area {
+      grid-column: 1;
+      grid-row: 1 / 3;
+    }
+    .active-match .hand-area {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: end;
+    }
+    .active-match .social-controls {
+      grid-column: 2;
+      grid-row: 2;
+      margin: 0;
+    }
+    .active-match .hand-cards {
+      height: 90px;
+    }
+  }
+  @media (max-height: 650px) {
+    .active-match .hand-cards {
+      height: 80px;
     }
   }
 </style>

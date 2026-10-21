@@ -46,6 +46,16 @@ export async function expectClearTableCards(page: Page) {
           if (overlaps(bounds, hand)) collisions.push('Hand overlaps a played card');
           if (overlaps(bounds, status)) collisions.push('Turn indicator overlaps a played card');
           if (overlaps(bounds, deck)) collisions.push('Deck overlaps a played card');
+          for (const other of document.querySelectorAll('.played-card img')) {
+            if (
+              card.closest('[data-play-seat]')?.getAttribute('data-play-seat') ===
+              other.closest('[data-play-seat]')?.getAttribute('data-play-seat')
+            )
+              continue;
+            if (overlaps(bounds, other.getBoundingClientRect())) {
+              collisions.push('Different players’ played cards overlap');
+            }
+          }
         }
         return collisions;
       }),

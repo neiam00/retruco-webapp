@@ -1,74 +1,6 @@
 import { expect, test } from '@playwright/test';
-import type { Snapshot } from '../src/lib/protocol.js';
+import { tableSnapshot } from './fixtures/table.js';
 import { expectClearTableCards } from './table-layout.js';
-
-function tableSnapshot(players: number, dealer: number, spectator: boolean): Snapshot {
-  const config = { players, target: 24, florRequired: true };
-  return {
-    code: 'VIRA-1234',
-    private: true,
-    config,
-    seats: Array.from({ length: players }, (_, seat) => ({
-      id: `player-${seat}`,
-      name: seat === 0 ? 'Un nombre bastante largo' : `CPU ${seat}`,
-      cpu: seat !== 0,
-    })),
-    seat: spectator ? -1 : 0,
-    perspective: spectator ? players - 1 : 0,
-    sequence: 1,
-    chat: [],
-    signals: [],
-    events: Array.from({ length: players }, (_, seat) => ({
-      id: seat + 1,
-      hand: 1,
-      event: { type: 'respond', seat, kind: 'decline' },
-    })),
-    cantoHistory: [],
-    serverTime: new Date().toISOString(),
-    deadline: new Date(Date.now() + 30_000).toISOString(),
-    state: {
-      config,
-      version: '2',
-      revision: 1,
-      phase: 'playing',
-      handNumber: 1,
-      dealer,
-      mano: (dealer + 1) % players,
-      turn: 0,
-      round: 1,
-      scores: [3, 5],
-      winner: -1,
-      handWinner: -1,
-      vira: { suit: 'cups', number: 12 },
-      trucoValue: 1,
-      mandatoryStack: false,
-      florValid: false,
-      hand: spectator
-        ? []
-        : [1, 2, 3].map((number, index) => ({
-            index,
-            card: { suit: 'spades' as const, number },
-            used: index === 0,
-          })),
-      seats: Array.from({ length: players }, (_, seat) => ({
-        seat,
-        team: seat % 2,
-        remaining: 2,
-        plays: [
-          {
-            card: { suit: 'spades' as const, number: seat + 1 },
-            present: true,
-            burned: false,
-            concealed: false,
-          },
-        ],
-      })),
-      payouts: [],
-      envidoResults: [],
-      legal: [],
-    },
-  };
-}
 
 for (const width of [320, 390, 768, 1280]) {
   for (const players of [2, 4]) {
@@ -143,7 +75,11 @@ for (const width of [320, 390, 768, 1280]) {
                       deck.right <= table.right &&
                       deck.top >= table.top &&
                       deck.bottom <= table.bottom,
-                    largeEnough: vira.width >= (innerWidth <= 650 ? 52 : 72),
+                    largeEnough:
+                      vira.width >= 40 &&
+                      vira.width >
+                        document.querySelector('.deck-back img')!.getBoundingClientRect().width *
+                          1.3,
                     onDealersRight,
                   };
                 },

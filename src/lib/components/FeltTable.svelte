@@ -41,6 +41,9 @@
       const item = events[index];
       if (item.event.automatic && item.event.type === 'respond') continue;
       if (item.event.seat === seat && item.hand === game?.handNumber) {
+        // Playing, stacking, or burning ends this player's turn. Older cantos
+        // remain in the match history, but no longer belong above their seat.
+        if (['play', 'stack', 'burn'].includes(item.event.type)) return '';
         const label = eventLabel(item.event);
         if (label) return label;
       }
@@ -58,7 +61,7 @@
 <section
   class="felt-table"
   class:four-player={snapshot.config.players === 4}
-  class:playing={game?.phase === 'playing' && !snapshot.cpuPaused}
+  class:active={!!game}
   aria-label="Mesa de truco"
 >
   {#if latestEvent?.automatic && latestEvent.type === 'respond'}
@@ -210,12 +213,14 @@
       <div class="turn-message">
         <span class="turn-dot"></span>
         {#if game.pending}
-          <strong>{cantoName(game.pending.kind)}</strong>
+          <strong title={cantoName(game.pending.kind)}>{cantoName(game.pending.kind)}</strong>
           <span class="wager-value">
             {game.pending.value === 100 ? 'Vale partida' : game.pending.value + ' piedras'}
           </span>
         {:else}
-          <strong>{myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}</strong>
+          <strong title={myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}>
+            {myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}
+          </strong>
         {/if}
         <span
           class={['timer', { urgent: seconds <= 10 }]}
@@ -690,62 +695,230 @@
     visibility: hidden;
   }
 
-  /* Wide tables have room for four corner spaces beside the played cards. */
-  @media (min-width: 1250px) {
-    .felt-table.playing {
-      grid-template-rows: 140px auto minmax(380px, 1fr);
-    }
-    .playing .play-zone {
-      grid-row: 3;
-      height: 380px;
-    }
-    .playing .table-status {
-      grid-row: 2;
-    }
-    .playing .seat-left,
-    .playing .seat-right {
-      position: absolute;
-      grid-row: auto;
-      top: 270px;
-      margin: 0;
-    }
-    .playing .seat-left {
-      left: 28px;
-    }
-    .playing .seat-right {
-      right: 28px;
-    }
-    .playing .seat-bottom {
-      position: absolute;
-      grid-row: auto;
-      bottom: 20px;
-      left: 28px;
-    }
-    .playing .deck {
-      grid-row: 3;
-      justify-self: center;
-      margin: 0;
-    }
-    .playing .dealer-top,
-    .playing .dealer-left {
-      transform: translateX(-165px);
-    }
-    .playing .dealer-right,
-    .playing .dealer-bottom {
-      transform: translateX(165px);
-    }
-    .playing .dealer-top,
-    .playing .dealer-right {
-      align-self: start;
-    }
-    .playing .dealer-bottom,
-    .playing .dealer-left {
-      align-self: end;
-    }
+  /* A bounded tabletop keeps the four corner spaces and all player positions
+     stable. TableViewport fits this stage into the space above the controls. */
+  .felt-table.active {
+    display: block;
+    height: 520px;
+    padding: 0;
   }
-  @media (min-width: 1250px) and (max-height: 800px) {
-    .felt-table.playing {
-      grid-template-rows: 115px auto minmax(380px, 1fr);
+  .active .seat {
+    position: absolute;
+    margin: 0;
+  }
+  .active .seat-top {
+    top: 45px;
+    left: 50%;
+  }
+  .active .seat-left,
+  .active .seat-right {
+    top: 245px;
+  }
+  .active .seat-left {
+    left: 20px;
+  }
+  .active .seat-right {
+    right: 20px;
+  }
+  .active .seat-bottom {
+    bottom: 12px;
+    left: 20px;
+  }
+  .active .table-status:not(.expanded) {
+    position: absolute;
+    top: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+  }
+  .active .play-zone {
+    position: absolute;
+    top: 200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 460px;
+    height: 270px;
+  }
+  .active .played-card :global(img) {
+    width: 56px;
+    height: auto;
+  }
+  .active .turn-message {
+    max-width: 180px;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .active .turn-message strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .active .deck {
+    position: absolute;
+    margin: 0;
+    transform: none;
+  }
+  .active .dealer-top,
+  .active .dealer-left {
+    left: calc(50% - 230px);
+  }
+  .active .dealer-right,
+  .active .dealer-bottom {
+    right: calc(50% - 230px);
+  }
+  .active .dealer-top,
+  .active .dealer-right {
+    top: 110px;
+  }
+  .active .dealer-bottom,
+  .active .dealer-left {
+    bottom: 10px;
+  }
+  .active .table-status.expanded {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+  }
+  @container (max-width: 900px) {
+    .felt-table.active {
+      height: 420px;
+    }
+    .active .scoreboard {
+      top: 8px;
+      left: 8px;
+      padding: 6px 8px;
+      gap: 8px;
+    }
+    .active .scoreboard strong {
+      font-size: 19px;
+    }
+    .active .scoreboard span {
+      font-size: 9px;
+    }
+    .active .seat-top {
+      top: 52px;
+    }
+    .active .seat-left,
+    .active .seat-right {
+      top: 240px;
+    }
+    .active .seat-left {
+      left: 10px;
+    }
+    .active .seat-right {
+      right: 10px;
+    }
+    .active .seat-bottom {
+      display: none;
+    }
+    .active .seat :global(.player-seat) {
+      width: 90px;
+      min-width: 0;
+      padding: 6px;
+      gap: 5px;
+    }
+    .active .seat :global(.identity strong) {
+      max-width: 48px;
+      font-size: 11px;
+    }
+    .active .seat :global(.identity > span) {
+      font-size: 9px;
+      gap: 2px;
+    }
+    .active .seat :global(.identity svg),
+    .active .seat :global(.identity i) {
+      display: none;
+    }
+    .active .seat :global(.avatar) {
+      width: 22px;
+      height: 22px;
+    }
+    .active .seat :global(.seat-tag) {
+      font-size: 8px;
+      right: 0;
+    }
+    .active .seat :global(.speech-bubble) {
+      font-size: 9px;
+      padding: 4px 6px;
+      width: max-content;
+      max-width: 130px;
+    }
+    .active .seat-right :global(.speech-bubble) {
+      left: auto;
+      right: 0;
+    }
+    .active .seat-top :global(.speech-bubble) {
+      left: calc(100% + 6px);
+      bottom: auto;
+      top: 0;
+      width: max-content;
+      max-width: 130px;
+    }
+    .active .table-status:not(.expanded) {
+      top: 106px;
+    }
+    .active .turn-message {
+      padding: 6px 10px;
+      gap: 8px;
+      max-width: 190px;
+    }
+    .active .turn-message strong {
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .active .table-status p {
+      margin-top: 4px;
+      font-size: 10px;
+    }
+    .active .play-zone {
+      top: 160px;
+      width: 190px;
+      height: 230px;
+    }
+    .active .played-top {
+      top: 0;
+    }
+    .active .played-bottom {
+      bottom: 0;
+    }
+    .active .played-card :global(img) {
+      width: 42px;
+      height: auto;
+    }
+    .active .played-card + .played-card {
+      margin-left: -32px;
+    }
+    .active .deck {
+      gap: 6px;
+    }
+    .active .deck-back :global(img) {
+      width: 30px;
+      height: auto;
+    }
+    .active .vira :global(img) {
+      width: 56px;
+      height: auto;
+    }
+    .active .dealer-top,
+    .active .dealer-left {
+      left: 10px;
+    }
+    .active .dealer-right,
+    .active .dealer-bottom {
+      right: 10px;
+    }
+    .active .dealer-top,
+    .active .dealer-right {
+      top: 80px;
+    }
+    .active .dealer-bottom,
+    .active .dealer-left {
+      bottom: 4px;
     }
   }
 </style>

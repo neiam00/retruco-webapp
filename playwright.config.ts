@@ -25,6 +25,7 @@ export default defineConfig({
         '**/lobby-account.spec.ts',
         '**/privando.spec.ts',
         '**/vira-layout.spec.ts',
+        '**/game-interaction.spec.ts',
       ],
     },
   ],

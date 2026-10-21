@@ -116,12 +116,18 @@ for (const [label, kind] of [
     await expect(page.getByLabel('Piedras para subir')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Decir…', exact: true })).toHaveCount(0);
     await expect(page.locator('.hand-card:not(:disabled)')).toHaveCount(0);
+    const details = page.getByRole('button', { name: 'Detalles de la partida', exact: true });
+    if (await details.isVisible()) await details.click();
     await expect(page.getByRole('region', { name: 'Historial de cantos' })).toContainText(
       'Privando: 37 de envido',
     );
     await expect(page.getByRole('region', { name: 'Historial de cantos' })).not.toContainText(
       'Tiempo agotado',
     );
+    const closeDetails = page
+      .locator('.match-details')
+      .getByRole('button', { name: 'Cerrar detalles', exact: true });
+    if (await closeDetails.isVisible()) await closeDetails.click();
     for (const name of ['Privo y Truco', 'No jugar', 'Presentar flor']) {
       await expect(page.getByRole('button', { name, exact: true })).toHaveCount(1);
     }

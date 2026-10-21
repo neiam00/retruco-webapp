@@ -17,30 +17,40 @@ interface Flight {
   dealing: boolean;
 }
 
-function position(element: HTMLElement, angles: Map<HTMLElement, number>): CardPosition {
+interface CardTransform {
+  angle: number;
+  scale: number;
+}
+
+function position(element: HTMLElement, transforms: Map<HTMLElement, CardTransform>): CardPosition {
   const bounds = element.getBoundingClientRect();
-  const angle = ancestorAngle(element.parentElement, angles);
+  const { angle, scale } = ancestorTransform(element.parentElement, transforms);
   return {
     x: bounds.left + window.scrollX + bounds.width / 2,
     y: bounds.top + window.scrollY + bounds.height / 2,
-    width: element.offsetWidth,
-    height: element.offsetHeight,
+    width: element.offsetWidth * scale,
+    height: element.offsetHeight * scale,
     angle,
   };
 }
 
-function ancestorAngle(element: HTMLElement | null, cache: Map<HTMLElement, number>): number {
-  if (!element) return 0;
+function ancestorTransform(
+  element: HTMLElement | null,
+  cache: Map<HTMLElement, CardTransform>,
+): CardTransform {
+  if (!element) return { angle: 0, scale: 1 };
   const cached = cache.get(element);
   if (cached !== undefined) return cached;
   const transform = getComputedStyle(element).transform;
-  let angle = ancestorAngle(element.parentElement, cache);
+  let { angle, scale } = ancestorTransform(element.parentElement, cache);
   if (transform !== 'none') {
     const matrix = new DOMMatrixReadOnly(transform);
     angle += (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+    scale *= Math.hypot(matrix.a, matrix.b);
   }
-  cache.set(element, angle);
-  return angle;
+  const result = { angle, scale };
+  cache.set(element, result);
+  return result;
 }
 
 /** Presentation only: confirmed snapshots always update immediately. */
@@ -84,7 +94,7 @@ export class CardMotion {
     }
 
     const flights: Flight[] = [];
-    const angles = new Map<HTMLElement, number>();
+    const angles = new Map<HTMLElement, CardTransform>();
     const image = (selector: string) => root.querySelector<HTMLElement>(`${selector} img`);
     // Privando with flor can decide the match in the deal itself. Show the
     // actual deal before revealing its result, but never animate an undealt exit.
@@ -240,7 +250,7 @@ export class CardMotion {
         })
         .filter((item) => item !== null);
       if (!root.isConnected || !ready.length) return;
-      const angles = new Map<HTMLElement, number>();
+      const angles = new Map<HTMLElement, CardTransform>();
       const bounds = root.getBoundingClientRect();
       const origin = { x: bounds.left + window.scrollX, y: bounds.top + window.scrollY };
       // Finish every layout read before writing styles or appending any images.

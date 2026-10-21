@@ -88,6 +88,10 @@ h3 {
   font-size: 0.9rem;
   font-weight: 650;
   cursor: pointer;
+  transition:
+    background-color 80ms linear,
+    color 80ms linear,
+    border-color 80ms linear;
 }
 .cn-button svg {
   width: 1.1rem;
