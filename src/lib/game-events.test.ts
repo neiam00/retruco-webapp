@@ -3,6 +3,10 @@ import { eventLabel } from './game-events.js';
 import { commandLabel } from './command-labels.js';
 
 it('distinguishes truthful team announcements from timeout responses', () => {
+  // The server omits zero-valued event amounts from JSON.
+  expect(eventLabel({ type: 'privo', seat: -1, team: 0, kind: 'envido', automatic: true })).toBe(
+    'Privando: 0 de envido',
+  );
   expect(
     eventLabel({ type: 'privo', seat: -1, team: 0, kind: 'envido', amount: 33, automatic: true }),
   ).toBe('Privando: 33 de envido');

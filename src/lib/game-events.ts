@@ -7,7 +7,7 @@ export function eventLabel(event: PublicEvent): string {
   if (event.type === 'privo') {
     return event.kind === 'flor'
       ? 'Privando con flor: gana la partida'
-      : `Privando: ${event.amount} de envido`;
+      : `Privando: ${event.amount ?? 0} de envido`;
   }
   if (event.type === 'call' || event.type === 'respond') {
     const label = commandLabel(
