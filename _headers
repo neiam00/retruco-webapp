@@ -3,3 +3,7 @@
   X-Frame-Options: DENY
   Referrer-Policy: same-origin
   Permissions-Policy: camera=(), microphone=(self), geolocation=()
+
+# Generated card filenames include a content hash; artwork changes get a new URL.
+/cards/*.webp
+  Cache-Control: public, max-age=31536000, immutable

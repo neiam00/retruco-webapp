@@ -115,6 +115,12 @@ run this conversion. Gameplay loads only the lossless, 576px-wide WebP copies:
 the intricate SVG paths otherwise cause long rendering stalls in Safari.
 Content hashes in filenames prevent stale images after design changes. If using
 `CARD_ASSET_ORIGIN`, upload the generated WebP deck before deploying the client.
+The Cloudflare `_headers` rule serves card WebPs with
+`Cache-Control: public, max-age=31536000, immutable`, allowing browsers to reuse
+them for a year without revalidation. Keep the content-hashed filenames when
+changing artwork; never replace the bytes at an existing card URL. The optional
+B2 uploader sets the same cache policy. Attribution and HTML keep their normal
+cache policies.
 Card faces retain an opaque ivory CSS backing because the artwork contains
 transparent regions. DiceBear avatars are generated locally and Lucide supplies UI icons.
 
