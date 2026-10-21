@@ -58,6 +58,7 @@
 <section
   class="felt-table"
   class:four-player={snapshot.config.players === 4}
+  class:playing={game?.phase === 'playing' && !snapshot.cpuPaused}
   aria-label="Mesa de truco"
 >
   {#if latestEvent?.automatic && latestEvent.type === 'respond'}
@@ -137,11 +138,11 @@
   </div>
 
   {#if game}
-    <div class={['deck', 'deck-' + position((game.dealer + 1) % snapshot.config.players)]}>
+    <div class={['deck', 'dealer-' + position(game.dealer)]}>
       <div class="deck-back" data-deck><Card hidden width={54} /></div>
       {#if game.vira}
         <div class="vira">
-          <Card card={game.vira} width={54} />
+          <Card card={game.vira} width={72} />
           <span>LA VIRA</span>
         </div>
       {/if}
@@ -245,8 +246,9 @@
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    /* Keep the seat, turn message, and played cards in separate vertical bands. */
-    grid-template-rows: 140px auto minmax(280px, 1fr);
+    /* Reserve space for the deck on either side of the central playing area.
+       Only the row containing the deck grows; player panels never cover it. */
+    grid-template-rows: 140px auto var(--side-seat-height, 0px) auto minmax(280px, 1fr) auto 80px;
     padding-bottom: 20px;
     color: #f1f0e6;
     overflow: hidden;
@@ -347,23 +349,34 @@
     transform: translateX(-50%);
   }
   .seat-left {
-    top: 230px;
-    left: 5%;
+    position: relative;
+    grid-column: 1;
+    grid-row: 3;
+    place-self: center start;
+    margin-left: 5%;
     transform: rotate(-3deg);
   }
   .seat-right {
-    top: 230px;
-    right: 5%;
+    position: relative;
+    grid-column: 1;
+    grid-row: 3;
+    place-self: center end;
+    margin-right: 5%;
     transform: rotate(3deg);
   }
   .seat-bottom {
-    bottom: 32px;
-    left: 28px;
+    position: relative;
+    grid-column: 1;
+    grid-row: 7;
+    place-self: center;
+  }
+  .four-player {
+    --side-seat-height: 100px;
   }
   .play-zone {
     position: relative;
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 5;
     place-self: center;
     width: min(460px, calc(100% - 24px));
     height: 280px;
@@ -430,31 +443,31 @@
     opacity: 0.4;
   }
   .deck {
-    position: absolute;
+    position: relative;
+    grid-column: 1;
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: 12px;
+    /* Leave room for the next seat's canto bubble as well as its panel. */
+    margin: 20px 28px 40px;
     z-index: 1;
   }
-  .deck-top {
-    top: 110px;
-    left: 28px;
-    transform: rotate(-10deg);
+  /* Right is from the dealer's seat, facing the centre of the table. */
+  .dealer-top {
+    grid-row: 2;
+    justify-self: start;
   }
-  .deck-right {
-    top: 110px;
-    right: 28px;
-    transform: rotate(10deg);
+  .dealer-right {
+    grid-row: 2;
+    justify-self: end;
   }
-  .deck-bottom {
-    bottom: 120px;
-    left: 28px;
-    transform: rotate(-10deg);
+  .dealer-bottom {
+    grid-row: 6;
+    justify-self: end;
   }
-  .deck-left {
-    top: 110px;
-    left: 28px;
-    transform: rotate(10deg);
+  .dealer-left {
+    grid-row: 6;
+    justify-self: start;
   }
   .deck-back {
     border-radius: 5px;
@@ -474,7 +487,7 @@
   .table-status {
     position: relative;
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 4;
     place-self: center;
     margin-bottom: 16px;
     z-index: 4;
@@ -569,7 +582,7 @@
   }
   @media (max-height: 800px) and (min-width: 651px) {
     .felt-table {
-      grid-template-rows: 115px auto minmax(240px, 1fr);
+      grid-template-rows: 115px auto var(--side-seat-height, 0px) auto minmax(240px, 1fr) auto 80px;
       padding-bottom: 16px;
     }
     .seat-top {
@@ -588,10 +601,10 @@
   }
   @media (max-width: 650px) {
     .felt-table {
-      grid-template-rows: 140px auto minmax(220px, 1fr);
+      grid-template-rows: 140px auto var(--side-seat-height, 0px) auto minmax(220px, 1fr) auto 0px;
     }
     .felt-table.four-player {
-      grid-template-rows: 220px auto minmax(220px, 1fr);
+      --side-seat-height: 80px;
     }
     .scoreboard {
       top: 8px;
@@ -615,12 +628,10 @@
       top: 80px;
     }
     .seat-left {
-      top: 150px;
-      left: 10px;
+      margin-left: 10px;
     }
     .seat-right {
-      top: 150px;
-      right: 10px;
+      margin-right: 10px;
     }
     .seat-bottom {
       display: none;
@@ -640,22 +651,11 @@
       width: 34px;
       height: auto;
     }
-    .deck-top {
-      top: 60px;
-      left: 12px;
+    .deck {
+      margin: 16px 16px 40px;
     }
-    .deck-right {
-      top: 60px;
-      right: 12px;
-    }
-    .deck-bottom {
-      top: 60px;
-      bottom: auto;
-      left: 12px;
-    }
-    .deck-left {
-      top: 60px;
-      left: 12px;
+    .vira :global(img) {
+      width: 52px;
     }
     .turn-message {
       padding: 9px 11px;
@@ -680,7 +680,7 @@
   /* Results can grow with scores and payouts without covering the hand below. */
   .table-status.results {
     position: relative;
-    grid-row: 2 / 4;
+    grid-row: 4 / 6;
     top: auto;
     left: auto;
     transform: none;
@@ -688,5 +688,64 @@
   }
   .waiting-for-cards {
     visibility: hidden;
+  }
+
+  /* Wide tables have room for four corner spaces beside the played cards. */
+  @media (min-width: 1250px) {
+    .felt-table.playing {
+      grid-template-rows: 140px auto minmax(380px, 1fr);
+    }
+    .playing .play-zone {
+      grid-row: 3;
+      height: 380px;
+    }
+    .playing .table-status {
+      grid-row: 2;
+    }
+    .playing .seat-left,
+    .playing .seat-right {
+      position: absolute;
+      grid-row: auto;
+      top: 270px;
+      margin: 0;
+    }
+    .playing .seat-left {
+      left: 28px;
+    }
+    .playing .seat-right {
+      right: 28px;
+    }
+    .playing .seat-bottom {
+      position: absolute;
+      grid-row: auto;
+      bottom: 20px;
+      left: 28px;
+    }
+    .playing .deck {
+      grid-row: 3;
+      justify-self: center;
+      margin: 0;
+    }
+    .playing .dealer-top,
+    .playing .dealer-left {
+      transform: translateX(-165px);
+    }
+    .playing .dealer-right,
+    .playing .dealer-bottom {
+      transform: translateX(165px);
+    }
+    .playing .dealer-top,
+    .playing .dealer-right {
+      align-self: start;
+    }
+    .playing .dealer-bottom,
+    .playing .dealer-left {
+      align-self: end;
+    }
+  }
+  @media (min-width: 1250px) and (max-height: 800px) {
+    .felt-table.playing {
+      grid-template-rows: 115px auto minmax(380px, 1fr);
+    }
   }
 </style>

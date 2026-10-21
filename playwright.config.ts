@@ -24,6 +24,7 @@ export default defineConfig({
         '**/seats.spec.ts',
         '**/lobby-account.spec.ts',
         '**/privando.spec.ts',
+        '**/vira-layout.spec.ts',
       ],
     },
   ],
