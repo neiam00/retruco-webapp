@@ -27,6 +27,7 @@ export const rulebook = [
     paragraphs: [
       'La voz pertenece al equipo y no es lo mismo que el turno de jugar. Ambos equipos empiezan con voz. Para iniciar un canto o subirlo más tarde debe ser tu turno y tu equipo debe tener la voz correspondiente.',
       'Un canto pendiente detiene las cartas. Cualquiera de los dos integrantes del equipo rival puede responder: la primera respuesta vale para todo el equipo. No necesita ser su turno. Una subida entrega la respuesta al otro equipo.',
+      'En truco, un equipo no puede subir el último valor que él mismo cantó, ni siquiera mediante su compañero o en una vuelta posterior. Solo el equipo rival puede hacer la siguiente subida. Esta restricción no se traslada a los cantos de envido o flor.',
       'Aceptar truco conserva para el equipo que acepta el derecho exclusivo a la próxima subida. Aceptar envido cierra toda la apuesta de envido y flor envidada por esa mano, pero no impide que el otro equipo inicie truco.',
     ],
   },
@@ -56,7 +57,7 @@ export const rulebook = [
     paragraphs: [
       'Una mano sin apuesta de truco vale 1 piedra. Truco vale 3, retruco 6, vale 9 vale 9 y vale partida puede decidir la partida completa. Se puede cantar en cualquiera de las vueltas mientras corresponda el turno y la voz.',
       'Las subidas pueden saltar niveles: a truco se puede responder directamente «Quiero y vale 9». Si se rechaza una subida, quien la propuso gana la apuesta inmediatamente anterior, no un nivel intermedio que nadie aceptó. Rechazar truco inicial entrega 1 piedra.',
-      'El equipo que acepta queda con la voz para volver a subir, en esa vuelta o en otra. La voz se alterna después de cada subida aceptada. La mano la sigue decidiendo el resultado de las cartas y los empardes.',
+      'El equipo que acepta queda con la voz para volver a subir, en esa vuelta o en otra. Por ejemplo, si Nosotros cantamos truco, solo Ellos pueden subir a retruco. Si Ellos cantan retruco, solo Nosotros podemos subir a vale 9 o vale partida. La mano la sigue decidiendo el resultado de las cartas y los empardes.',
       'Vale partida no evita los pagos anteriores: si flor o envido ya decidieron la partida, no se aplica. Solo decide el ganador del truco cuando esos pagos dejaron la partida abierta.',
     ],
   },
