@@ -13,11 +13,13 @@
     snapshot,
     seconds,
     myTurn,
+    cardsMoving = false,
     oninvite,
   }: {
     snapshot: Snapshot;
     seconds: number;
     myTurn: boolean;
+    cardsMoving?: boolean;
     oninvite: () => void;
   } = $props();
 
@@ -91,7 +93,7 @@
       {#if game?.vira && seat !== perspective}
         <div class="seat-hand" aria-hidden="true">
           {#each Array.from({ length: game.seats[seat].remaining }, (_, index) => 3 - game.seats[seat].remaining + index) as card (card)}
-            <span data-card-back={card}><Card hidden width={20} /></span>
+            <span data-card-back={card}><Card hidden width={20} intro={false} /></span>
           {/each}
         </div>
       {/if}
@@ -120,7 +122,7 @@
                 data-play-round={round}
                 style:--tilt={round * 7 - 7 + 'deg'}
               >
-                <Card card={play.card} hidden={!play.card} width={70} />
+                <Card card={play.card} hidden={!play.card} width={70} intro={false} />
                 <span>{play.burned ? 'Quemada' : round + 1 + '.ª'}</span>
               </div>
             {/if}
@@ -148,6 +150,8 @@
       {
         expanded: !game || game.phase !== 'playing',
         results: game?.phase === 'hand_over' || game?.phase === 'match_over',
+        'waiting-for-cards':
+          cardsMoving && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
       },
     ]}
   >
@@ -305,7 +309,6 @@
     left: 9px;
     display: flex;
     pointer-events: none;
-    filter: drop-shadow(0 2px 2px #041a1660);
   }
   .seat-hand span + span {
     margin-left: -11px;
@@ -402,7 +405,6 @@
   .played-card {
     position: relative;
     transform: rotate(var(--tilt));
-    filter: drop-shadow(0 7px 7px #041a1640);
   }
   .played-card + .played-card {
     margin-left: -35px;
@@ -673,5 +675,8 @@
     left: auto;
     transform: none;
     margin: 16px 0;
+  }
+  .waiting-for-cards {
+    visibility: hidden;
   }
 </style>

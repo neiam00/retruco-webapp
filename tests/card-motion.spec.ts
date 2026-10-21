@@ -140,7 +140,7 @@ for (const players of [2, 4]) {
             observer.disconnect();
           }
         });
-        observer.observe(document.body, { childList: true });
+        observer.observe(document.body, { childList: true, subtree: true });
       });
       await page.locator('.hand-card:not(:disabled)').first().press('Enter');
       const flight = page.locator('[data-card-flight="play"]');

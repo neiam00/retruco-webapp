@@ -17,6 +17,7 @@ export class CPUController {
   constructor(
     private readonly send: (seat: number, revision: number, command: Command) => void,
     private readonly changed: (status: CPUStatus, error?: string) => void,
+    private readonly presentationBusy: () => boolean = () => false,
   ) {}
 
   update(work?: CPUWork) {
@@ -125,13 +126,20 @@ export class CPUController {
     }
     // A short visible pause makes calls and card plays readable. The decision
     // itself has already finished off the main thread.
-    this.delay = setTimeout(() => {
+    const submit = () => {
       if (this.pending !== key || this.key(this.work) !== key) return;
+      // Let dealt cards arrive before a CPU plays one. Decisions are still
+      // computed immediately; only the existing presentation pause is extended.
+      if (this.presentationBusy()) {
+        this.delay = setTimeout(submit, 50);
+        return;
+      }
       this.lastSubmitted = key;
       this.pending = undefined;
       this.send(result.seat, result.revision, result.command!);
       this.changed('ready');
-    }, 650);
+    };
+    this.delay = setTimeout(submit, 650);
   }
 
   private fail(error: string) {

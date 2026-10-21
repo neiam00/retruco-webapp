@@ -53,6 +53,30 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test('waits for card presentation and still cancels a waiting move on lease loss', () => {
+  const send = vi.fn();
+  let moving = true;
+  const controller = new CPUController(send, vi.fn(), () => moving);
+  controller.update(work(1));
+  const worker = TestWorker.instances[0];
+  worker.ready();
+  worker.answer(0);
+  vi.advanceTimersByTime(700);
+  expect(send).not.toHaveBeenCalled();
+  moving = false;
+  vi.advanceTimersByTime(50);
+  expect(send).toHaveBeenCalledTimes(1);
+
+  moving = true;
+  controller.update(work(2));
+  worker.answer(1);
+  vi.advanceTimersByTime(700);
+  controller.stop();
+  moving = false;
+  vi.advanceTimersByTime(1000);
+  expect(send).toHaveBeenCalledTimes(1);
+});
+
 test('ignores obsolete decisions and submits a revision only once despite duplicate snapshots', () => {
   const send = vi.fn();
   const controller = new CPUController(send, vi.fn());

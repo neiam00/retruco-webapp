@@ -5,14 +5,18 @@
     card,
     width = 80,
     hidden = false,
-  }: { card?: Card; width?: number; hidden?: boolean } = $props();
+    intro = true,
+  }: { card?: Card; width?: number; hidden?: boolean; intro?: boolean } = $props();
+  let hasRendered = false;
 
   function flip(node: Element) {
+    const shouldFlip = hasRendered || intro;
+    hasRendered = true;
     const reducedMotion =
       node.ownerDocument.defaultView?.matchMedia('(prefers-reduced-motion: reduce)').matches ??
       true;
     return {
-      duration: reducedMotion ? 0 : 180,
+      duration: reducedMotion || !shouldFlip ? 0 : 180,
       css: (progress: number) =>
         `opacity: ${0.4 + progress * 0.6}; transform: perspective(500px) rotateY(${(1 - progress) * -85}deg)`,
     };
@@ -27,6 +31,7 @@
     {width}
     height={Math.round((width * 319) / 207)}
     draggable="false"
+    decoding="async"
     in:flip
   />
 {/key}

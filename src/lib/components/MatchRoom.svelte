@@ -69,7 +69,10 @@
   let retry: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   let gameSurface = $state<HTMLElement>();
-  const cardMotion = new CardMotion();
+  let cardsMoving = $state(false);
+  const cardMotion = new CardMotion((moving) => {
+    cardsMoving = moving;
+  });
   const cardSounds = new CardSounds();
   let cardsMuted = $state(false);
 
@@ -99,6 +102,7 @@
       cpuStatus = status;
       cpuError = message ?? '';
     },
+    () => cardMotion.moving,
   );
   let game = $derived(snapshot?.state);
   let spectator = $derived((snapshot?.seat ?? -1) < 0);
@@ -170,7 +174,13 @@
           cardSounds.update(connected ? snapshot : null, incoming);
           snapshot = incoming;
           void tick().then(() => {
-            if (!disposed && snapshot === incoming) animateCards?.();
+            if (
+              !disposed &&
+              snapshot?.state?.revision === incoming.state?.revision &&
+              snapshot?.seat === incoming.seat &&
+              snapshot?.perspective === incoming.perspective
+            )
+              animateCards?.();
           });
           if (declaration === 'a_ley' && incoming.state?.round !== 0) {
             declaration = '';
@@ -316,7 +326,6 @@
 
 <svelte:window
   onresize={() => cardMotion.cancel()}
-  onscroll={() => cardMotion.cancel()}
   onpointerup={() => cardSounds.unlock()}
   onkeydown={() => cardSounds.unlock()}
   onstorage={syncCardSounds}
@@ -429,7 +438,7 @@
         {/if}
 
         <div class="table-area" class:four-player={snapshot.config.players === 4}>
-          <FeltTable {snapshot} {seconds} {myTurn} oninvite={copy} />
+          <FeltTable {snapshot} {seconds} {myTurn} {cardsMoving} oninvite={copy} />
           {#if game?.phase === 'cutting' && game.turn === snapshot.seat}
             <div class="cut-controls">
               <Label for="cut-point">Punto de corte (1–39)</Label><Input
@@ -472,7 +481,7 @@
               {/if}
             </div>
             <div class="hand-cards">
-              {#each game.hand as held (held.index)}
+              {#each game.hand as held (`${game.handNumber}:${held.index}`)}
                 <Button
                   class={`hand-card ${held.used ? 'used' : ''} ${bottom === held.index ? 'selected-bottom' : ''} ${top === held.index ? 'selected-top' : ''}`}
                   data-hand-card={held.index}
@@ -481,7 +490,7 @@
                   aria-label={`${cardName(held.card)}${bottom === held.index ? ', abajo' : top === held.index ? ', arriba' : ''}`}
                   onclick={() => play(held.index)}
                 >
-                  <Card card={held.card} width={126} />
+                  <Card card={held.card} width={126} intro={false} />
                   {#if bottom === held.index}
                     <span>Abajo · 2.ª</span>
                   {:else if top === held.index}

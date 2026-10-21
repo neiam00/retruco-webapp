@@ -291,7 +291,7 @@ h3 {
   object-fit: contain;
   background: #fffdf6;
   border-radius: 6px;
-  filter: drop-shadow(0 4px 4px #0003);
+  box-shadow: 0 4px 7px #0003;
 }
 @media (max-width: 640px) {
   .page-shell {
