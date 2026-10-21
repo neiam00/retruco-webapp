@@ -124,20 +124,23 @@ export class CardMotion {
         (held) => held.used && !before.hand.find((old) => old.index === held.index)?.used,
       );
       for (const [seatIndex, seat] of after.seats.entries()) {
+        const remainingSources = [...newlyUsed];
         for (const [round, play] of seat.plays.entries()) {
           if (!play.present || before.seats[seatIndex]?.plays[round]?.present) continue;
           const held =
-            newlyUsed.find(
+            remainingSources.find(
               (held) =>
                 held.card.suit === play.card?.suit && held.card.number === play.card?.number,
             ) ??
-            newlyUsed.find(
+            remainingSources.find(
               (held) =>
                 !seat.plays.some(
                   (other) =>
                     other.card?.suit === held.card.suit && other.card?.number === held.card.number,
                 ),
             );
+          // Two concealed burns still leave from two different hand cards.
+          if (held) remainingSources.splice(remainingSources.indexOf(held), 1);
           const source =
             seatIndex === perspective && held
               ? image(`[data-hand-card="${held.index}"]`)

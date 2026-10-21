@@ -15,7 +15,12 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
-      testMatch: ['**/card-motion.spec.ts', '**/card-sounds.spec.ts', '**/renderer.spec.ts'],
+      testMatch: [
+        '**/card-motion.spec.ts',
+        '**/card-sounds.spec.ts',
+        '**/renderer.spec.ts',
+        '**/burning.spec.ts',
+      ],
     },
   ],
 });

@@ -61,6 +61,7 @@
   let bottom = $state<number | null>(null);
   let top = $state<number | null>(null);
   let stackMode = $state(false);
+  let burnMode = $state(false);
   let cutPoint = $state(20);
   let raise = $state(2);
   let now = $state(Date.now());
@@ -118,8 +119,9 @@
       ? Math.max(0, Math.ceil((Date.parse(snapshot.deadline) - now - offset) / 1000))
       : 0,
   );
-  let stacking = $derived(stackMode || game?.mandatoryStack === true);
+  let stacking = $derived(!burnMode && (stackMode || game?.mandatoryStack === true));
   let canStack = $derived(game?.legal.some((command) => command.type === 'stack') ?? false);
+  let canBurn = $derived(game?.legal.some((command) => command.type === 'burn') ?? false);
   let callActions = $derived(
     game?.legal.filter(
       (command) => command.type === 'call' && (command.declaration ?? '') === declaration,
@@ -167,6 +169,7 @@
             bottom = null;
             top = null;
             stackMode = false;
+            burnMode = false;
           }
           const animateCards = gameSurface
             ? cardMotion.prepare(gameSurface, connected ? snapshot : null, incoming)
@@ -269,7 +272,9 @@
     declaration = '';
   }
   function play(index: number) {
-    if (stacking) {
+    if (burnMode) {
+      send({ type: 'burn', card: index, declaration });
+    } else if (stacking) {
       if (bottom === index) {
         bottom = null;
       } else if (bottom === null) {
@@ -535,19 +540,48 @@
                   </div>
                 </Dialog.Content>
               </Dialog.Root>
-              {#if canStack}
+              {#if canStack || canBurn}
                 <div class="row stack-controls">
-                  <Button
-                    variant="outline"
-                    disabled={game.mandatoryStack}
-                    onclick={() => {
-                      stackMode = !stackMode;
-                      bottom = null;
-                      top = null;
-                    }}
-                  >
-                    {stacking ? 'Jugando pegado' : 'Jugar pegado'}
-                  </Button>
+                  {#if canStack}
+                    <Button
+                      variant="outline"
+                      disabled={game.mandatoryStack}
+                      onclick={() => {
+                        stackMode = !stackMode;
+                        burnMode = false;
+                        bottom = null;
+                        top = null;
+                      }}
+                    >
+                      {stacking ? 'Jugando pegado' : 'Jugar pegado'}
+                    </Button>
+                  {/if}
+                  {#if canBurn}
+                    <Button
+                      variant="outline"
+                      disabled={busy || !connected}
+                      aria-pressed={burnMode}
+                      onclick={() => {
+                        if (game.mandatoryStack) {
+                          send({ type: 'burn', declaration });
+                        } else {
+                          burnMode = !burnMode;
+                          stackMode = false;
+                          bottom = null;
+                          top = null;
+                        }
+                      }}
+                    >
+                      {game.mandatoryStack
+                        ? 'Quemar las dos'
+                        : burnMode
+                          ? 'Cancelar quemado'
+                          : 'Quemar carta'}
+                    </Button>
+                  {/if}
+                  {#if burnMode}
+                    <span>Elige una carta para quemarla y pasar el turno.</span>
+                  {/if}
                   {#if stacking}
                     <span>Primero elige abajo; después, arriba.</span>
                     <Button

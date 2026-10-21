@@ -96,6 +96,8 @@ export const rulebook = [
       'Si el equipo que ganó la primera también gana la tercera con una carta única que no fue jugada pegada, la mano ya está decidida: las cartas de abajo siguen ocultas. Las penalizaciones del pegado se calculan igualmente.',
       'En pegado voluntario, tu propia carta de abajo debe ganar la segunda para que la de arriba siga válida. Si pierde, se quema la de arriba aunque tu compañero haya ganado. La excepción es que ambas cartas de tu equipo emparden arriba de las dos rivales: entonces tu tercera sigue válida, aunque la segunda sea emparde.',
       'Si solo una persona juega pegado y la segunda está pendiente, abre la tercera quien está a su derecha. Si lo hacen varias, abre la primera persona que aún tenga carta en el orden desde mano. Se omite a quienes ya jugaron las dos. El castigo de quemar la de arriba no se aplica al pegado obligatorio.',
+      'En la segunda o tercera vuelta puedes elegir «Quemar carta» y seleccionar una carta para pasar tu turno. Se juega boca abajo, queda inválida y ya no puedes volver a usarla. En pegado obligatorio, «Quemar las dos» descarta ambas cartas restantes. Nunca se puede quemar voluntariamente en la primera vuelta.',
+      'Quemar voluntariamente exige las mismas declaraciones de flor que jugar: «Flor», «Presento flor» para la última carta o «Flor flor» al quemar las dos en pegado obligatorio. La receta sigue protegida y el valor original de envido no cambia.',
     ],
   },
   {
