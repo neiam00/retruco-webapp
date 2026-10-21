@@ -1,5 +1,41 @@
 import { expect, test } from '@playwright/test';
 
+test('the room browser recovers when the live-list endpoint is temporarily unavailable', async ({
+  page,
+}) => {
+  const api = process.env.TEST_API_ORIGIN ?? 'http://127.0.0.1:8080';
+  await page.route(`${api}/api/session`, (route) => route.fulfill({ json: null }));
+  await page.route(`${api}/api/matches`, (route) => route.fulfill({ json: [] }));
+  let attempts = 0;
+  await page.route(`${api}/api/matches/events`, async (route) => {
+    if (++attempts === 1) {
+      await route.fulfill({ status: 404, json: { error: 'Deployment in progress' } });
+      return;
+    }
+    const rooms = [
+      {
+        code: 'TEST-1234',
+        host: 'Recovered stream',
+        players: 1,
+        capacity: 4,
+        target: 12,
+        florRequired: false,
+        started: false,
+        cpuPlayers: 0,
+      },
+    ];
+    await route.fulfill({
+      contentType: 'text/event-stream',
+      body: `data: ${JSON.stringify(rooms)}\n\n`,
+    });
+  });
+  await page.goto('/');
+  await expect(
+    page.getByRole('button', { name: 'Mirar mesa de Recovered stream', exact: true }),
+  ).toBeVisible({ timeout: 15_000 });
+  expect(attempts).toBeGreaterThan(1);
+});
+
 for (const departure of ['leave', 'disconnect'] as const) {
   test(`vacant waiting rooms disappear live after ${departure} and cannot be rejoined`, async ({
     browser,

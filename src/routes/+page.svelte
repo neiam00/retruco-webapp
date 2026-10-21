@@ -62,11 +62,7 @@
       if (revision === listingRevision) loading = false;
     }
   }
-  onMount(() => {
-    void api<User | null>('/session')
-      .then((value) => (user = value))
-      .catch(() => {});
-    void refresh();
+  function openListingStream() {
     const updates = new EventSource(`${API_ORIGIN}/api/matches/events`, { withCredentials: true });
     updates.onmessage = (event) => {
       try {
@@ -80,9 +76,19 @@
         void refresh();
       }
     };
-    // EventSource reconnects automatically. Keep HTTP refresh as a fallback.
+    return updates;
+  }
+  onMount(() => {
+    void api<User | null>('/session')
+      .then((value) => (user = value))
+      .catch(() => {});
+    void refresh();
+    let updates = openListingStream();
+    // Ordinary disconnects reconnect automatically; HTTP errors such as a
+    // deployment-time 404 can close EventSource permanently, so reopen it.
     const timer = setInterval(() => {
       if (updates.readyState !== EventSource.OPEN) void refresh();
+      if (updates.readyState === EventSource.CLOSED) updates = openListingStream();
     }, 10000);
     return () => {
       updates.close();
