@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { CardMotion } from '#lib/card-motion.js';
+  import { preloadDeck } from '#lib/card-preload.js';
   import { CardSounds } from '#lib/card-sounds.js';
   import {
     CARD_SOUND_STORAGE_KEY,
@@ -72,6 +73,7 @@
   let socket: WebSocket | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
+  let stopPreloading: (() => void) | undefined;
   let gameSurface = $state<HTMLElement>();
   let cardsMoving = $state(false);
   const cardMotion = new CardMotion((moving) => {
@@ -162,6 +164,7 @@
     if (disposed) return;
     socket = new WebSocket(socketURL(code));
     socket.onmessage = (event) => {
+      if (disposed) return;
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'snapshot') {
@@ -171,6 +174,7 @@
             socket?.close();
             return;
           }
+          if (incoming.state?.phase !== 'match_over') stopPreloading ??= preloadDeck();
           if (incoming.state?.revision !== snapshot?.state?.revision) {
             bottom = null;
             top = null;
@@ -246,6 +250,7 @@
     const timer = setInterval(() => (now = Date.now()), 250);
     return () => {
       disposed = true;
+      stopPreloading?.();
       cardMotion.cancel();
       cardSounds.close();
       motionPreference.removeEventListener('change', stopMotion);

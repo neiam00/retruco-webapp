@@ -9,10 +9,18 @@ export function cardName(card: Card) {
   return `${card.number} de ${suitNames[card.suit]}`;
 }
 export function cardURL(card?: Card) {
-  const origin = CARD_ASSET_ORIGIN.replace(/\/$/, '');
-  if (!card) return `${origin}/cards/${cardAssets.card_back}`;
+  if (!card) return assetURL(cardAssets.card_back);
   const suit = card.suit === 'spades' ? 'swords' : card.suit;
-  return `${origin}/cards/${cardAssets[`card_${suit}_${String(card.number).padStart(2, '0')}`]}`;
+  return assetURL(cardAssets[`card_${suit}_${String(card.number).padStart(2, '0')}`]);
+}
+
+export function deckImageURLs(): string[] {
+  return Object.values(cardAssets).map(assetURL);
+}
+
+function assetURL(filename: string): string {
+  const origin = CARD_ASSET_ORIGIN.replace(/\/$/, '');
+  return `${origin}/cards/${filename}`;
 }
 export const hierarchy = [
   'Perico',

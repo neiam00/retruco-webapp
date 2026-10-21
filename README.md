@@ -121,6 +121,12 @@ them for a year without revalidation. Keep the content-hashed filenames when
 changing artwork; never replace the bytes at an existing card URL. The optional
 B2 uploader sets the same cache policy. Attribution and HTML keep their normal
 cache policies.
+After the first valid room snapshot, the client warms all 41 public card images
+in the background, including while players are waiting to join. Two low-priority
+loads run at a time and decode asynchronously, yielding between cards. Decoded
+images remain referenced for the room's lifetime and are released when leaving;
+the HTTP cache persists. Warmup never blocks gameplay, and animations retain
+their decode-before-start safeguard for an immediate deal or a failed preload.
 Card faces retain an opaque ivory CSS backing because the artwork contains
 transparent regions. DiceBear avatars are generated locally and Lucide supplies UI icons.
 

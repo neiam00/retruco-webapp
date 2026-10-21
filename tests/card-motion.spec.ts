@@ -5,6 +5,7 @@ declare global {
   interface Window {
     cardFlights: { kind: string; source: string }[];
     cardFrameGaps: number[];
+    decodedCardImages: string[];
   }
 }
 
@@ -27,6 +28,12 @@ for (const players of [2, 4]) {
         await context.addInitScript(() => {
           window.cardFlights = [];
           window.cardFrameGaps = [];
+          window.decodedCardImages = [];
+          const decode = HTMLImageElement.prototype.decode;
+          HTMLImageElement.prototype.decode = async function () {
+            await decode.call(this);
+            if (/\/cards\/.*\.webp$/.test(this.src)) window.decodedCardImages.push(this.src);
+          };
           let previousFrame = performance.now();
           const frame = (now: number) => {
             window.cardFrameGaps.push(now - previousFrame);
@@ -71,6 +78,15 @@ for (const players of [2, 4]) {
       });
       expect(created.ok()).toBe(true);
       const { code } = await created.json();
+      const pages = await Promise.all(contexts.map((context) => context.newPage()));
+      await pages[0].goto(`/mesa/${code}`);
+      await expect(pages[0].getByText('En línea', { exact: true })).toBeVisible();
+      // No deal exists yet: every face and the back must warm independently of
+      // the player's hidden hand or a card animation requesting an image.
+      await expect
+        .poll(() => pages[0].evaluate(() => new Set(window.decodedCardImages).size))
+        .toBe(41);
+      await expect(pages[0].locator('.hand-card')).toHaveCount(0);
       for (const context of contexts.slice(1)) {
         const joined = await context.request.post(`${api}/api/matches/${code}/join`, {
           headers,
@@ -78,8 +94,7 @@ for (const players of [2, 4]) {
         });
         expect(joined.ok()).toBe(true);
       }
-      const pages = await Promise.all(contexts.map((context) => context.newPage()));
-      await Promise.all(pages.map((page) => page.goto(`/mesa/${code}`)));
+      await Promise.all(pages.slice(1).map((page) => page.goto(`/mesa/${code}`)));
       for (const page of pages)
         await expect(page.getByText('En línea', { exact: true })).toBeVisible();
       const cutter = (
