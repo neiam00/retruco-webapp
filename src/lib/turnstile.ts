@@ -25,7 +25,7 @@ declare global {
 
 let loading: Promise<TurnstileAPI> | undefined;
 
-/** Load only when registration opens, and share one script across dialog visits. */
+/** Load only when an authentication dialog opens, and share one script across dialog visits. */
 export function loadTurnstile(): Promise<TurnstileAPI> {
   if (window.turnstile) return Promise.resolve(window.turnstile);
   if (loading) return loading;

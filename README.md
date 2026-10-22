@@ -71,13 +71,12 @@ compatibility warning when upgrading rather than suppressing it.
 
 ## Account verification
 
-Registration loads Cloudflare Turnstile only when its dialog opens. Configure
+Login and registration load Cloudflare Turnstile only when the account dialog opens. Configure
 `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` in the backend `.env`; the frontend
-fetches the public key from `/api/registration`. Never put the secret in frontend
-variables. Missing keys disable registration, while login and guest play remain
-available. The backend validates every token through Siteverify before creating
-an account, including its `register` action and hostname against `ALLOWED_ORIGINS`.
-Expired, spent, or failed tokens must be replaced before retrying registration.
+fetches the public key from `/api/turnstile`. Never put the secret in frontend
+variables. Missing keys disable login and registration; guest play remains available. The backend validates every token through Siteverify before creating
+an account or checking credentials, including the matching `register` or `login` action and hostname against `ALLOWED_ORIGINS`.
+Expired, spent, or failed tokens must be replaced before retrying either form. Switching forms requires a fresh verification.
 
 `registration-check.spec.ts` mocks the external widget SDK to exercise token
 expiry, retries, dialog cleanup, and missing-token handling; Go API tests verify
@@ -93,7 +92,7 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 Set `ALLOWED_ORIGINS` to your test frontend origin. Cloudflare returns synthetic
 metadata for dummy credentials, so only this exact public pair and dummy token
 in development use the verification success flag without action/hostname checks.
-Production and real keys always require the configured hostname and `register`. Direct registration fixtures
+Production and real keys always require the configured hostname and matching action. Direct registration fixtures
 use the public dummy token; real credentials are never committed to tests.
 See [Cloudflare's testing guide](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
 

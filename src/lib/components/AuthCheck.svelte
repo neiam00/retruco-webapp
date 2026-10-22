@@ -3,13 +3,22 @@
   import { loadTurnstile, type TurnstileAPI } from '#lib/turnstile.js';
   import { Button } from '#lib/components/ui/button/index.js';
 
-  let { onverify, error = '' }: { onverify: (token: string) => void; error?: string } = $props();
+  let {
+    action,
+    onverify,
+    error = '',
+  }: {
+    action: 'register' | 'login';
+    onverify: (token: string) => void;
+    error?: string;
+  } = $props();
   let attempt = $state(0);
   let message = $state('');
   let loading = $state(true);
   let verified = $state(false);
 
   function mount(container: HTMLElement) {
+    const challengeAction = action;
     let disposed = false;
     let widget: string | undefined;
     let turnstile: TurnstileAPI | undefined;
@@ -27,14 +36,15 @@
 
     async function start() {
       try {
-        const config = await api<{ siteKey: string }>('/registration');
+        const config = await api<{ siteKey: string }>('/turnstile');
         if (disposed) return;
-        if (!config?.siteKey) throw new Error('El registro no está disponible en este momento.');
+        if (!config?.siteKey)
+          throw new Error('La verificación de seguridad no está disponible en este momento.');
         turnstile = await loadTurnstile();
         if (disposed) return;
         widget = turnstile.render(container, {
           sitekey: config.siteKey,
-          action: 'register',
+          action: challengeAction,
           theme: 'dark',
           language: 'es',
           size: container.clientWidth < 300 ? 'compact' : 'flexible',
@@ -68,7 +78,7 @@
   }
 </script>
 
-<div id="registration-check" class="registration-check" tabindex="-1">
+<div id="auth-check" class="auth-check" tabindex="-1">
   <p class="check-label">Verificación de seguridad</p>
   {#key attempt}
     <div class="widget" {@attach mount}></div>
@@ -86,12 +96,12 @@
 </div>
 
 <style>
-  .registration-check {
+  .auth-check {
     min-width: 0;
     display: grid;
     gap: 8px;
   }
-  .registration-check:focus-visible {
+  .auth-check:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 4px;
   }

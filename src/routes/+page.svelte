@@ -23,7 +23,7 @@
   import { Label } from '#lib/components/ui/label/index.js';
   import * as Dialog from '#lib/components/ui/dialog/index.js';
   import LobbyBackdrop from '#lib/components/LobbyBackdrop.svelte';
-  import RegistrationCheck from '#lib/components/RegistrationCheck.svelte';
+  import AuthCheck from '#lib/components/AuthCheck.svelte';
   import Card from '#lib/components/Card.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
   import { api, ApiError } from '#lib/api.js';
@@ -202,7 +202,7 @@
         await focusField('username');
       } else if (context === 'auth' && e instanceof ApiError && e.status === 403) {
         turnstileError = e.message;
-        await focusField('registration-check');
+        await focusField('auth-check');
       } else {
         const message = e instanceof Error ? e.message : 'No se pudo completar la acción.';
         if (context === 'auth') authError = message;
@@ -268,9 +268,9 @@
       })
     )
       return;
-    if (register && !turnstileToken) {
-      turnstileError = 'Completa la verificación para crear tu cuenta.';
-      void focusField('registration-check');
+    if (!turnstileToken) {
+      turnstileError = 'Completa la verificación para continuar.';
+      void focusField('auth-check');
       return;
     }
     const registering = register;
@@ -280,16 +280,14 @@
         user = await api<User>(registering ? '/register' : '/login', {
           username,
           password,
-          ...(registering ? { turnstileToken: verification } : {}),
+          turnstileToken: verification,
         });
         password = '';
         authOpen = false;
       } finally {
-        // Siteverify tokens are single-use, even when creating the account fails.
-        if (registering) {
-          turnstileToken = '';
-          turnstileAttempt++;
-        }
+        // Siteverify tokens are single-use, including rejected credentials or usernames.
+        turnstileToken = '';
+        turnstileAttempt++;
       }
     }, 'auth');
   }
@@ -779,9 +777,10 @@
           </p>
         {/if}
       </div>
-      {#if register && authOpen}
-        {#key turnstileAttempt}
-          <RegistrationCheck
+      {#if authOpen}
+        {#key `${register ? 'register' : 'login'}:${turnstileAttempt}`}
+          <AuthCheck
+            action={register ? 'register' : 'login'}
             error={turnstileError}
             onverify={(token) => {
               turnstileToken = token;

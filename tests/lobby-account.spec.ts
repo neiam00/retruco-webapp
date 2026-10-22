@@ -81,6 +81,7 @@ test('public browsing, spectator switching, account history and private code joi
       .click();
     await returning.getByLabel('Usuario', { exact: true }).fill(username);
     await returning.getByLabel('Contraseña', { exact: true }).fill(password);
+    await expect(returning.getByText('Verificación completada.', { exact: true })).toBeVisible();
     await returning
       .getByRole('dialog')
       .getByRole('button', { name: 'Entrar', exact: true })

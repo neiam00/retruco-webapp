@@ -4,7 +4,11 @@ import { mockTurnstile } from './fixtures/turnstile.js';
 declare global {
   interface Window {
     turnstileTest: {
-      options: { callback: (token: string) => void; 'expired-callback': () => void };
+      options: {
+        action: string;
+        callback: (token: string) => void;
+        'expired-callback': () => void;
+      };
       id: string;
       removed: boolean;
     };
@@ -36,7 +40,7 @@ test('registration verifies, invalidates expired tokens, refreshes used tokens a
   const verify = page.getByRole('button', { name: 'Verificar prueba' });
   await expect(verify).toBeVisible();
   await submit.click();
-  await expect(page.locator('#registration-check')).toBeFocused();
+  await expect(page.locator('#auth-check')).toBeFocused();
   expect(registrations).toEqual([]);
   await verify.click();
   await page.evaluate(() => window.turnstileTest.options['expired-callback']());
@@ -57,8 +61,8 @@ test('registration verifies, invalidates expired tokens, refreshes used tokens a
   await expect.poll(() => registrations.length).toBe(2);
   expect(registrations[1].turnstileToken).toBe('test-token-2');
   await page.getByRole('button', { name: 'Ya tengo una cuenta', exact: true }).click();
-  await expect(page.locator('#registration-check')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.turnstileTest.removed)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.turnstileTest.options.action)).toBe('login');
+  await expect(page.getByText('Verificación completada.', { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
@@ -81,4 +85,66 @@ test('registration fails closed when the verification script is unavailable and 
   await expect(page.getByRole('button', { name: 'Verificar prueba' })).toBeVisible();
   await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.turnstileTest.removed)).toBe(true);
+});
+
+test('login requires its own fresh verification and retries after incorrect credentials', async ({
+  page,
+}) => {
+  const logins: Record<string, string>[] = [];
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/login') {
+      logins.push(route.request().postDataJSON());
+      if (logins.length === 1) {
+        await route.fulfill({ status: 401, json: { error: 'Nombre o contraseña incorrectos.' } });
+      } else {
+        await route.fulfill({ json: { id: 'player', name: 'player', registered: true } });
+      }
+    } else if (path === '/api/matches/events') {
+      await route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' });
+    } else await route.fulfill({ json: path === '/api/matches' ? [] : null });
+  });
+  await mockTurnstile(page, false);
+  await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: 'Entrar', exact: true }).click();
+  const verify = page.getByRole('button', { name: 'Verificar prueba' });
+  await expect(verify).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.turnstileTest.options.action)).toBe('login');
+  await verify.click();
+  await page.getByRole('button', { name: 'Quiero crear una cuenta', exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.turnstileTest.options.action))
+    .toBe('register');
+  await expect(page.getByText('Verificación completada.', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Ya tengo una cuenta', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.turnstileTest.options.action)).toBe('login');
+  await page.getByLabel('Usuario', { exact: true }).fill('player');
+  await page.getByLabel('Contraseña', { exact: true }).fill('wrong-password');
+  const submit = page.getByRole('dialog').getByRole('button', { name: 'Entrar', exact: true });
+  await submit.click();
+  await expect(page.locator('#auth-check')).toBeFocused();
+  expect(logins).toHaveLength(0);
+  await verify.click();
+  await page.evaluate(() => window.turnstileTest.options['expired-callback']());
+  await submit.click();
+  expect(logins).toHaveLength(0);
+  await verify.click();
+  await submit.click();
+  await expect(page.locator('#credentials-error')).toBeVisible();
+  expect(logins).toEqual([
+    { username: 'player', password: 'wrong-password', turnstileToken: 'test-token-3' },
+  ]);
+  await page.getByLabel('Contraseña', { exact: true }).fill('correct-password');
+  await expect(verify).toBeVisible();
+  await submit.click();
+  expect(logins).toHaveLength(1);
+  await verify.click();
+  await submit.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(logins[1]).toEqual({
+    username: 'player',
+    password: 'correct-password',
+    turnstileToken: 'test-token-4',
+  });
+  await expect(page.getByRole('button', { name: 'Mi historial', exact: true })).toBeVisible();
 });
