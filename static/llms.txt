@@ -1,0 +1,21 @@
+# Retruco
+
+> Retruco es un juego de truco venezolano online, en español, para jugar desde el navegador con amigos, otros jugadores o CPU. Sitio oficial: https://retru.co.ve/.
+
+Se puede jugar como invitado, sin crear una cuenta. Las cuentas permiten guardar el historial de partidas.
+
+- Modalidades de 1 contra 1 y 2 contra 2, con partidas a 12 o 24 piedras.
+- Mesas públicas y privadas; las invitaciones usan un código de mesa.
+- Jugadores humanos, asientos CPU y espectadores, con chat y voz durante la partida.
+- Baraja española, vira, envido, flor y truco según las reglas venezolanas implementadas en Retruco.
+
+La página de reglas describe esta variante del juego y sus opciones. Las mesas y sus códigos son temporales; no son páginas de referencia.
+
+## Jugar y aprender
+
+- [Inicio y mesas abiertas](https://retru.co.ve/): Crear una mesa, buscar una partida pública, entrar con un código o acceder a una cuenta.
+- [Cómo se juega](https://retru.co.ve/reglas): Reglas de Retruco, valor de las cartas, vira, cantos y puntuación.
+
+## Créditos
+
+- [Créditos y cartas](https://retru.co.ve/creditos): Autoría del proyecto, procedencia de las cartas y sus licencias.

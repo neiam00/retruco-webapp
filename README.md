@@ -5,6 +5,14 @@ shadcn-svelte, Tailwind, and WebP cards generated from editable SVG artwork. The
 [retruco-backend](https://github.com/neiam00/retruco-backend).
 Read [DESIGN.md](DESIGN.md) before changing the interface.
 
+## Public site information
+
+`static/llms.txt` publishes a concise Spanish overview and annotated links to the
+public pages at `/llms.txt`, following the [llms.txt proposal](https://llmstxt.org/).
+Keep it aligned with the lobby, rules, and credits when those pages change. It is
+guidance for AI tools, not a replacement for `robots.txt` or `sitemap.xml`, and does
+not promise search-ranking improvements.
+
 ## Develop and verify
 
 Voice preferences live at `/configuracion`. Each match has an explicit audio
