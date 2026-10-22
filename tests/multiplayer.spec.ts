@@ -18,6 +18,7 @@ test('four players surround the central cards and can choose a declaration', asy
         data: {
           username: `${['ana', 'beto', 'carla', 'diego'][index]}_${runID}`,
           password: `local-test-${runID}`,
+          turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX',
         },
       });
       expect(response.ok()).toBe(true);

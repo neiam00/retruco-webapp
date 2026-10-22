@@ -23,6 +23,7 @@
   import { Label } from '#lib/components/ui/label/index.js';
   import * as Dialog from '#lib/components/ui/dialog/index.js';
   import LobbyBackdrop from '#lib/components/LobbyBackdrop.svelte';
+  import RegistrationCheck from '#lib/components/RegistrationCheck.svelte';
   import Card from '#lib/components/Card.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
   import { api, ApiError } from '#lib/api.js';
@@ -98,6 +99,9 @@
   let register = $state(false);
   let username = $state('');
   let password = $state('');
+  let turnstileToken = $state('');
+  let turnstileError = $state('');
+  let turnstileAttempt = $state(0);
   let historyOpen = $state(false);
   let history = $state<HistoryEntry[]>([]);
   let listingRevision = 0;
@@ -173,6 +177,7 @@
     fieldErrors.password = '';
     authError = '';
     credentialsError = '';
+    turnstileError = '';
     formRevision++;
   }
 
@@ -195,6 +200,9 @@
       } else if (context === 'auth' && e instanceof ApiError && e.status === 401) {
         credentialsError = e.message;
         await focusField('username');
+      } else if (context === 'auth' && e instanceof ApiError && e.status === 403) {
+        turnstileError = e.message;
+        await focusField('registration-check');
       } else {
         const message = e instanceof Error ? e.message : 'No se pudo completar la acción.';
         if (context === 'auth') authError = message;
@@ -260,10 +268,29 @@
       })
     )
       return;
+    if (register && !turnstileToken) {
+      turnstileError = 'Completa la verificación para crear tu cuenta.';
+      void focusField('registration-check');
+      return;
+    }
+    const registering = register;
+    const verification = turnstileToken;
     void act(async () => {
-      user = await api<User>(register ? '/register' : '/login', { username, password });
-      password = '';
-      authOpen = false;
+      try {
+        user = await api<User>(registering ? '/register' : '/login', {
+          username,
+          password,
+          ...(registering ? { turnstileToken: verification } : {}),
+        });
+        password = '';
+        authOpen = false;
+      } finally {
+        // Siteverify tokens are single-use, even when creating the account fails.
+        if (registering) {
+          turnstileToken = '';
+          turnstileAttempt++;
+        }
+      }
     }, 'auth');
   }
   function showHistory() {
@@ -752,6 +779,17 @@
           </p>
         {/if}
       </div>
+      {#if register && authOpen}
+        {#key turnstileAttempt}
+          <RegistrationCheck
+            error={turnstileError}
+            onverify={(token) => {
+              turnstileToken = token;
+              if (token) turnstileError = '';
+            }}
+          />
+        {/key}
+      {/if}
       {#if authError}
         {#key authError}
           <p class="error" role="alert" tabindex="-1" {@attach focusAlert}>

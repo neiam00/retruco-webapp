@@ -19,6 +19,7 @@ test('public browsing, spectator switching, account history and private code joi
     await owner.getByRole('button', { name: 'Crea una cuenta', exact: true }).click();
     await owner.getByLabel('Usuario', { exact: true }).fill(username);
     await owner.getByLabel('Contraseña', { exact: true }).fill(password);
+    await expect(owner.getByText('Verificación completada.', { exact: true })).toBeVisible();
     await owner.getByRole('button', { name: 'Crear mi cuenta', exact: true }).click();
     await expect(owner.getByRole('dialog')).not.toBeVisible();
     await owner.getByRole('button', { name: '1 vs 1', exact: true }).click();

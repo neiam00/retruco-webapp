@@ -59,6 +59,7 @@ for (const players of [2, 4]) {
               data: {
                 username: `motion_${crypto.randomUUID().slice(0, 8)}`,
                 password: crypto.randomUUID(),
+                turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX',
               },
             },
           );

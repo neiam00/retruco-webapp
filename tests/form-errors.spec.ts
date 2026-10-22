@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { mockTurnstile } from './fixtures/turnstile.js';
 
 async function mockForms(page: Page) {
   const requests: string[] = [];
@@ -33,6 +34,7 @@ async function mockForms(page: Page) {
       });
     else await route.fulfill({ status: 404, json: { error: 'No encontramos esa mesa.' } });
   });
+  await mockTurnstile(page);
   return requests;
 }
 

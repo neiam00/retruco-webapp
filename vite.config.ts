@@ -19,7 +19,12 @@ export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), '');
   const apiOrigin = environment.API_ORIGIN;
   const assetOrigin = environment.CARD_ASSET_ORIGIN;
-  const connections: CspSource[] = ['self', 'wss://retru.co.ve', 'https://*.google-analytics.com'];
+  const connections: CspSource[] = [
+    'self',
+    'wss://retru.co.ve',
+    'https://*.google-analytics.com',
+    'https://challenges.cloudflare.com',
+  ];
 
   if (apiOrigin) {
     const origin = configuredOrigin(apiOrigin);
@@ -38,7 +43,13 @@ export default defineConfig(({ mode }) => {
           mode: 'auto',
           directives: {
             'default-src': ['self'],
-            'script-src': ['self', 'wasm-unsafe-eval', 'https://www.googletagmanager.com'],
+            'script-src': [
+              'self',
+              'wasm-unsafe-eval',
+              'https://www.googletagmanager.com',
+              'https://challenges.cloudflare.com',
+            ],
+            'frame-src': ['https://challenges.cloudflare.com'],
             'worker-src': ['self'],
             'style-src': ['self', 'unsafe-inline'],
             'img-src': ['self', 'data:', ...(assetOrigin ? [configuredOrigin(assetOrigin)] : [])],

@@ -16,7 +16,11 @@ test('chosen teammates, CPU seats and the winner appear in registered match hist
       (
         await owner.request.post(`${api}/api/register`, {
           headers,
-          data: { username, password: 'seat-selection-test-password' },
+          data: {
+            username,
+            password: 'seat-selection-test-password',
+            turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX',
+          },
         })
       ).ok(),
     ).toBe(true);

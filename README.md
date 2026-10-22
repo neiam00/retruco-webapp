@@ -1,7 +1,7 @@
 # Retruco web app
 
 Spanish-language Venezuelan Truco with Svelte 5, SvelteKit 3, TypeScript 6,
-shadcn-svelte, Tailwind, and SVG cards. The authoritative engine lives in
+shadcn-svelte, Tailwind, and WebP cards generated from editable SVG artwork. The authoritative engine lives in
 [retruco-backend](https://github.com/neiam00/retruco-backend).
 Read [DESIGN.md](DESIGN.md) before changing the interface.
 
@@ -69,6 +69,34 @@ ESLint and Prettier enforce source readability. `bits-ui` currently pulls a
 requested Kit 3. Build and dialog/browser checks pass, but inspect that peer
 compatibility warning when upgrading rather than suppressing it.
 
+## Account verification
+
+Registration loads Cloudflare Turnstile only when its dialog opens. Configure
+`TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` in the backend `.env`; the frontend
+fetches the public key from `/api/registration`. Never put the secret in frontend
+variables. Missing keys disable registration, while login and guest play remain
+available. The backend validates every token through Siteverify before creating
+an account, including its `register` action and hostname against `ALLOWED_ORIGINS`.
+Expired, spent, or failed tokens must be replaced before retrying registration.
+
+`registration-check.spec.ts` mocks the external widget SDK to exercise token
+expiry, retries, dialog cleanup, and missing-token handling; Go API tests verify
+Siteverify responses and that rejected requests never create users or sessions.
+For the full account/multiplayer browser suite, use a disposable backend with
+`APP_ENV=development` and Cloudflare's public dummy pair:
+
+```dotenv
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+```
+
+Set `ALLOWED_ORIGINS` to your test frontend origin. Cloudflare returns synthetic
+metadata for dummy credentials, so only this exact public pair and dummy token
+in development use the verification success flag without action/hostname checks.
+Production and real keys always require the configured hostname and `register`. Direct registration fixtures
+use the public dummy token; real credentials are never committed to tests.
+See [Cloudflare's testing guide](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
+
 ## Deploy to Cloudflare Pages
 
 Build command: `pnpm build`. Output: `.svelte-kit/cloudflare`. The adapter and
@@ -127,8 +155,9 @@ loads run at a time and decode asynchronously, yielding between cards. Decoded
 images remain referenced for the room's lifetime and are released when leaving;
 the HTTP cache persists. Warmup never blocks gameplay, and animations retain
 their decode-before-start safeguard for an immediate deal or a failed preload.
-Card faces retain an opaque ivory CSS backing because the artwork contains
-transparent regions. DiceBear avatars are generated locally and Lucide supplies UI icons.
+The source SVGs include an opaque paper layer beneath the traced artwork. The
+card build checks interior alpha and fails if transparent paper returns; only
+the rounded outer corners retain transparency. CSS backing is a rendering fallback. DiceBear avatars are generated locally and Lucide supplies UI icons.
 
 Online matches use the server-authoritative rules engine. P1 voice uses Opus
 over WebRTC, with room-scoped signaling and optional coturn relay credentials
