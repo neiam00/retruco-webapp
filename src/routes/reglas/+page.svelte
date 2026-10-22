@@ -68,11 +68,11 @@
   p {
     line-height: 1.85;
     margin: 14px 0;
-    color: #52654f;
+    color: var(--muted-foreground);
   }
   .hierarchy-section {
     padding: 28px;
-    background: #fffaf0;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
   }

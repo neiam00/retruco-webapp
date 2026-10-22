@@ -33,7 +33,7 @@
   .hierarchy span {
     display: grid;
     place-items: center;
-    background: #e5e9d8;
+    background: var(--secondary);
     border-radius: 50%;
     width: 24px;
     height: 24px;

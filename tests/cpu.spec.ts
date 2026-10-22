@@ -149,6 +149,7 @@ async function createFromUI(
     .getByRole('button', { name: players === 2 ? '1 vs 1' : '2 vs 2', exact: true })
     .click();
   await page.getByRole('button', { name: '12', exact: true }).click();
+  if (seats.length) await page.getByText('Opciones de mesa', { exact: true }).click();
   for (const seat of seats) {
     const label =
       players === 2

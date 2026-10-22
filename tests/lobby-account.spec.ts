@@ -88,6 +88,7 @@ test('public browsing, spectator switching, account history and private code joi
     await returning.getByRole('button', { name: 'Mi historial', exact: true }).click();
     await expect(returning.getByRole('dialog')).toContainText(publicCode);
 
+    await owner.getByText('Opciones de mesa', { exact: true }).click();
     await owner.getByRole('button', { name: 'Cambiar', exact: true }).click();
     await owner.getByRole('button', { name: 'Crear una mesa', exact: true }).click();
     await expect(owner).toHaveURL(/\/mesa\/[A-Z]{4}-[0-9]{4}$/);

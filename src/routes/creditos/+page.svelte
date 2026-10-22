@@ -38,7 +38,7 @@
   p {
     margin-bottom: 24px;
     line-height: 1.9;
-    color: #52654f;
+    color: var(--muted-foreground);
   }
   a {
     text-decoration: underline;

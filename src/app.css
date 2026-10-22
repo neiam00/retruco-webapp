@@ -10,23 +10,26 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  color: #173d31;
-  background: #f4efe3;
+  color: #edf0ec;
+  background: #101312;
+  color-scheme: dark;
   font-synthesis: none;
-  --background: #f4efe3;
-  --foreground: #173d31;
-  --primary: #a8432c;
-  --primary-foreground: #fff8ec;
-  --secondary: #e6e4d5;
-  --secondary-foreground: #173d31;
-  --muted: #e9e7dc;
-  --muted-foreground: #606c61;
-  --accent: #e6e4d5;
-  --accent-foreground: #173d31;
-  --destructive: #a03027;
-  --border: #d8d9c9;
-  --input: #d8d9c9;
-  --ring: #257c5d;
+  --background: #101312;
+  --surface: #1a1e1c;
+  --foreground: #edf0ec;
+  --primary: #bad9c2;
+  --primary-foreground: #172b1e;
+  --secondary: #29312c;
+  --secondary-foreground: #edf0ec;
+  --muted: #222824;
+  --muted-foreground: #a6b0a9;
+  --accent: #303b34;
+  --accent-foreground: #edf0ec;
+  --destructive: #d96559;
+  --border: #354039;
+  --input: #455149;
+  --ring: #bad9c2;
+  --field-error: #ffb4a9;
   --radius: 0.6rem;
 }
 @theme inline {
@@ -53,7 +56,9 @@ body {
   min-width: 320px;
 }
 button,
-input {
+input,
+select,
+summary {
   font: inherit;
 }
 a {
@@ -66,8 +71,10 @@ input {
 }
 button:focus-visible,
 a:focus-visible,
-input:focus-visible {
-  outline: 3px solid #bc7448;
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
 h1,
@@ -117,10 +124,10 @@ h3 {
 .cn-button-variant-default {
   color: var(--primary-foreground);
   background: var(--primary);
-  box-shadow: 0 2px 0 #752b1b;
+  box-shadow: none;
 }
 .cn-button-variant-default:hover {
-  background: #913b28;
+  background: color-mix(in srgb, var(--primary), white 10%);
 }
 .cn-button-variant-outline {
   border: 1px solid var(--border);
@@ -152,8 +159,8 @@ h3 {
   border: 1px solid var(--input);
   border-radius: 0.55rem;
   padding: 0.7rem 0.9rem;
-  background: #fffcf5;
-  color: #173d31;
+  background: var(--background);
+  color: var(--foreground);
   font-size: 16px;
 }
 .cn-input[aria-invalid='true'] {
@@ -171,8 +178,7 @@ h3 {
   margin-bottom: 0.4rem;
 }
 .cn-dialog-overlay {
-  background: #071c16b8;
-  backdrop-filter: blur(4px);
+  background: #050706bf;
 }
 .cn-dialog-content {
   max-width: min(620px, calc(100vw - 28px));
@@ -234,8 +240,8 @@ h3 {
   place-items: center;
   width: 35px;
   height: 43px;
-  background: #173d31;
-  color: #f6e7bd;
+  background: #293d30;
+  color: var(--primary);
   border-radius: 5px;
   font-size: 1.5rem;
   transform: rotate(-8deg);
@@ -268,9 +274,9 @@ h3 {
   justify-content: space-between;
 }
 .error {
-  border: 1px solid #d9a293;
-  background: #ffebe4;
-  color: #8b2c20;
+  border: 1px solid #80514a;
+  background: #352320;
+  color: #ffb4a9;
   border-radius: 0.5rem;
   padding: 0.8rem 1rem;
   line-height: 1.5;
@@ -282,8 +288,8 @@ h3 {
   padding: 0.35rem 0.6rem;
   border-radius: 99px;
   font-size: 0.72rem;
-  background: #e5e9d8;
-  color: #355c3f;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
 }
 .divider {
   height: 1px;

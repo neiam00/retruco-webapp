@@ -14,12 +14,16 @@
     LogOut,
     History,
     Settings,
+    Pause,
+    Play,
+    ChevronDown,
   } from '@lucide/svelte';
   import { Button } from '#lib/components/ui/button/index.js';
   import { Input } from '#lib/components/ui/input/index.js';
   import { Label } from '#lib/components/ui/label/index.js';
   import * as Dialog from '#lib/components/ui/dialog/index.js';
-  import LandingHero from '#lib/components/LandingHero.svelte';
+  import LobbyBackdrop from '#lib/components/LobbyBackdrop.svelte';
+  import Card from '#lib/components/Card.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
   import { api, ApiError } from '#lib/api.js';
   import {
@@ -34,6 +38,7 @@
   import { teamLabel } from '#lib/team-labels.js';
   import type { User, Listing, HistoryEntry } from '#lib/protocol.js';
 
+  let motionPaused = $state(false);
   let user = $state<User | null>(null);
   let name = $state('');
   let code = $state('');
@@ -270,18 +275,27 @@
 </script>
 
 <svelte:head>
-  <title>Retruco — El truco de aquí, donde estés</title>
+  <title>Retruco — Truco venezolano online</title>
   <meta property="og:title" content="Retruco — Truco venezolano con amigos" />
 </svelte:head>
 
-<div class="page-shell">
+<LobbyBackdrop paused={motionPaused || authOpen || historyOpen} />
+<div class="page-shell lobby-shell">
   <header class="masthead">
     <a href={resolve('/')} class="brand" aria-label="Retruco, inicio">
       <span class="brand-mark">r.</span>
       retruco
-      <span class="brand-dot">•</span>
     </a>
     <nav class="row" aria-label="Navegación principal">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={motionPaused ? 'Reanudar animación' : 'Pausar animación'}
+        aria-pressed={motionPaused}
+        onclick={() => (motionPaused = !motionPaused)}
+      >
+        {#if motionPaused}<Play />{:else}<Pause />{/if}
+      </Button>
       <Button
         href={resolve('/configuracion')}
         variant="ghost"
@@ -330,7 +344,6 @@
     </nav>
   </header>
 
-  <LandingHero />
   {#if error && !authOpen}
     {#key error}
       <div class="error mb-5" role="alert" tabindex="-1" {@attach focusAlert}>
@@ -339,14 +352,16 @@
     {/key}
   {/if}
 
-  <div class="lobby-grid">
+  <main class="lobby-grid">
     <section class="play-panel" aria-labelledby="play-heading">
-      <div class="row spread">
-        <span class="eyebrow">Tu próxima partida</span>
-        <span class="pill">100% venezolano</span>
+      <div class="panel-brand">
+        <span class="brand-mark" aria-hidden="true">r.</span>
+        <div>
+          <h1 id="play-heading">Retruco</h1>
+          <p>Truco venezolano, entre amigos.</p>
+        </div>
       </div>
-      <h2 id="play-heading">Hay puesto para ti.</h2>
-      <p class="muted panel-intro">Entra con tu nombre. Lo demás se juega en la mesa.</p>
+      <p class="muted panel-intro">Crea una mesa o entra con un código. Sin cuenta obligatoria.</p>
       {#if !user}
         <div class="field">
           <Label for="guest-name">Tu nombre en la mesa</Label><Input
@@ -356,7 +371,7 @@
             aria-invalid={!!fieldErrors['guest-name']}
             aria-describedby={fieldErrors['guest-name'] ? 'guest-name-error' : undefined}
             maxlength={24}
-            placeholder="¿Cómo te dicen?"
+            placeholder="Tu nombre"
             autocomplete="nickname"
           />
           {#if fieldErrors['guest-name']}
@@ -410,71 +425,74 @@
           </div>
         </div>
       </div>
-      <fieldset class="cpu-picker">
-        <legend>{players === 2 ? 'Tu rival' : 'Quién se sienta a jugar'}</legend>
-        <p class="muted text-sm">
-          {players === 2
-            ? 'Activa la CPU para jugar sin esperar a otra persona.'
-            : 'Elige los puestos CPU. Los demás quedan libres para tus amigos.'}
-        </p>
-        {#each Array.from({ length: players - 1 }, (_, index) => index + 1) as seat (seat)}
-          <label class="cpu-choice">
-            <span>
-              {players === 2
-                ? 'Jugar contra la CPU'
-                : seat === 2
-                  ? 'Tu compañero: CPU'
-                  : `Oponente ${seat === 1 ? 1 : 2}: CPU`}
-            </span>
-            <input
-              type="checkbox"
-              checked={cpuSeats.includes(seat)}
-              onchange={(event) => {
-                cpuSeats = event.currentTarget.checked
-                  ? [...cpuSeats, seat].sort()
-                  : cpuSeats.filter((selected) => selected !== seat);
-              }}
-            />
-          </label>
-        {/each}
-        {#if cpuSeats.length}
+      <details class="room-options">
+        <summary>Opciones de mesa <ChevronDown size={16} /></summary>
+        <fieldset class="cpu-picker">
+          <legend>{players === 2 ? 'Tu rival' : 'Quién se sienta a jugar'}</legend>
           <p class="muted text-sm">
-            {cpuSeats.length} CPU · {openHumanSeats}
-            {openHumanSeats === 1 ? 'puesto libre' : 'puestos libres'}
+            {players === 2
+              ? 'Activa la CPU para jugar sin esperar a otra persona.'
+              : 'Elige los puestos CPU. Los demás quedan libres para tus amigos.'}
           </p>
-        {/if}
-      </fieldset>
-      <div class="row spread option-row">
-        <span>Flor por derecho</span>
-        <Button
-          variant="outline"
-          aria-pressed={florRequired}
-          onclick={() => (florRequired = !florRequired)}
-        >
-          {florRequired ? 'Sí, se canta' : 'No, siempre vale'}
-        </Button>
-      </div>
-      <div class="row spread option-row">
-        <span>Espectadores pueden hablar</span>
-        <Button
-          variant="outline"
-          aria-pressed={spectatorsCanSpeak}
-          onclick={() => (spectatorsCanSpeak = !spectatorsCanSpeak)}
-        >
-          {spectatorsCanSpeak ? 'Sí' : 'Solo escuchan'}
-        </Button>
-      </div>
-      <div class="row spread option-row">
-        <span class="row">
-          {#if privateMatch}
-            <LockKeyhole size={16} />
-          {:else}
-            <Users size={16} />
+          {#each Array.from({ length: players - 1 }, (_, index) => index + 1) as seat (seat)}
+            <label class="cpu-choice">
+              <span>
+                {players === 2
+                  ? 'Jugar contra la CPU'
+                  : seat === 2
+                    ? 'Tu compañero: CPU'
+                    : `Oponente ${seat === 1 ? 1 : 2}: CPU`}
+              </span>
+              <input
+                type="checkbox"
+                checked={cpuSeats.includes(seat)}
+                onchange={(event) => {
+                  cpuSeats = event.currentTarget.checked
+                    ? [...cpuSeats, seat].sort()
+                    : cpuSeats.filter((selected) => selected !== seat);
+                }}
+              />
+            </label>
+          {/each}
+          {#if cpuSeats.length}
+            <p class="muted text-sm">
+              {cpuSeats.length} CPU · {openHumanSeats}
+              {openHumanSeats === 1 ? 'puesto libre' : 'puestos libres'}
+            </p>
           {/if}
-          Mesa {privateMatch ? 'privada' : 'pública'}
-        </span>
-        <Button variant="ghost" onclick={() => (privateMatch = !privateMatch)}>Cambiar</Button>
-      </div>
+        </fieldset>
+        <div class="row spread option-row">
+          <span>Flor por derecho</span>
+          <Button
+            variant="outline"
+            aria-pressed={florRequired}
+            onclick={() => (florRequired = !florRequired)}
+          >
+            {florRequired ? 'Sí, se canta' : 'No, siempre vale'}
+          </Button>
+        </div>
+        <div class="row spread option-row">
+          <span>Espectadores pueden hablar</span>
+          <Button
+            variant="outline"
+            aria-pressed={spectatorsCanSpeak}
+            onclick={() => (spectatorsCanSpeak = !spectatorsCanSpeak)}
+          >
+            {spectatorsCanSpeak ? 'Sí' : 'Solo escuchan'}
+          </Button>
+        </div>
+        <div class="row spread option-row">
+          <span class="row">
+            {#if privateMatch}
+              <LockKeyhole size={16} />
+            {:else}
+              <Users size={16} />
+            {/if}
+            Mesa {privateMatch ? 'privada' : 'pública'}
+          </span>
+          <Button variant="ghost" onclick={() => (privateMatch = !privateMatch)}>Cambiar</Button>
+        </div>
+      </details>
       <Button class="w-full" size="lg" disabled={busy} onclick={create}>
         <Plus />Crear una mesa<ArrowRight class="ml-auto" />
       </Button>
@@ -529,7 +547,6 @@
     <section class="browser-panel" aria-labelledby="tables-heading">
       <div class="row spread browser-heading">
         <div>
-          <span class="eyebrow">La comunidad está en la mesa</span>
           <h2 id="tables-heading">
             Mesas abiertas <span class="table-count">{visibleTables.length}</span>
           </h2>
@@ -557,11 +574,14 @@
         </div>
         <div>
           <Label for="table-sort">Ordenar mesas</Label>
-          <select id="table-sort" class="cn-input" bind:value={tableSort}>
-            <option value="default">Orden predeterminado</option>
-            <option value="players-asc">Jugadores: menos a más</option>
-            <option value="players-desc">Jugadores: más a menos</option>
-          </select>
+          <div class="select-control">
+            <select id="table-sort" class="cn-input" bind:value={tableSort}>
+              <option value="default">Orden predeterminado</option>
+              <option value="players-asc">Jugadores: menos a más</option>
+              <option value="players-desc">Jugadores: más a menos</option>
+            </select>
+            <ChevronDown size={16} aria-hidden="true" />
+          </div>
         </div>
         <label class="table-filter-toggle">
           <input type="checkbox" bind:checked={hideFullTables} />
@@ -578,7 +598,7 @@
       <div class="table-browser">
         {#if loading}
           <div class="empty-state">
-            <span class="eyebrow">Buscando una buena mano…</span>
+            <p>Cargando mesas…</p>
           </div>
         {:else if listError}
           <div class="empty-state">
@@ -587,14 +607,13 @@
           </div>
         {:else if !tables.length}
           <div class="empty-state">
-            <div class="empty-cards">♧</div>
-            <h3>La primera mesa puede ser tuya.</h3>
-            <p>
-              Prepara el café, crea una partida
-              <br />
-              y pásales el código a tus amigos.
-            </p>
-            <span class="empty-caption">AQUÍ SIEMPRE CABE UNA MÁS</span>
+            <div class="empty-hand" aria-hidden="true">
+              <div><Card card={{ suit: 'coins', number: 7 }} width={80} intro={false} /></div>
+              <div><Card card={{ suit: 'spades', number: 1 }} width={80} intro={false} /></div>
+              <div><Card card={{ suit: 'clubs', number: 11 }} width={80} intro={false} /></div>
+            </div>
+            <h3>Todavía no hay mesas abiertas</h3>
+            <p>Crea una e invita a tus amigos, o juega contra la CPU.</p>
           </div>
         {:else if !visibleTables.length}
           <div class="empty-state">
@@ -645,18 +664,21 @@
       <div class="rule-teaser">
         <BookOpen size={22} />
         <div>
-          <strong>¿Primera vez con la vira?</strong>
-          <p>No pasa nada. Las reglas y la jerarquía están a una mano de distancia.</p>
+          <strong>Cómo jugar</strong>
+          <p>La vira, los cantos y el valor de cada carta.</p>
         </div>
         <Button href="/reglas" variant="ghost" size="icon" aria-label="Leer las reglas">
           <ArrowRight />
         </Button>
       </div>
     </section>
-  </div>
-  <footer class="footer">
+  </main>
+  <footer class="footer lobby-footer">
     <span>
-      De Venezuela, para donde estés. <strong>retru.co.ve</strong>
+      Desarrollado por <a href="https://github.com/neiam00">neiam00</a>
+      @
+      <a href="https://hyaxe.com">Hyaxe</a>
+      | 2026
     </span>
     <a href={resolve('/creditos')}>Créditos y cartas</a>
   </footer>
@@ -666,7 +688,7 @@
   <Dialog.Content>
     <Dialog.Header>
       <Dialog.Title>
-        {register ? 'Tu nombre, tus partidas.' : 'Qué bueno verte de nuevo.'}
+        {register ? 'Crear una cuenta' : 'Iniciar sesión'}
       </Dialog.Title><Dialog.Description>
         {register
           ? 'Crea una cuenta para llevar tu historial a cualquier dispositivo.'
@@ -811,6 +833,370 @@
 </Dialog.Root>
 
 <style>
+  .lobby-shell {
+    position: relative;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    width: min(1320px, calc(100% - 64px));
+  }
+  .masthead {
+    min-height: 76px;
+    border: 0;
+  }
+  .masthead > .brand {
+    font-size: 1.25rem;
+    letter-spacing: -0.04em;
+  }
+  .masthead .brand-mark {
+    width: 26px;
+    height: 33px;
+    font-size: 1.2rem;
+  }
+  .lobby-grid {
+    display: grid;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+    flex: 1;
+    padding: 20px 0;
+  }
+  .play-panel,
+  .browser-panel {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 26px;
+    min-width: 0;
+  }
+  .play-panel {
+    background: var(--surface);
+  }
+  .panel-brand {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .panel-brand .brand-mark {
+    width: 44px;
+    height: 57px;
+    font-size: 2rem;
+    border: 1px solid var(--primary);
+    box-shadow: 5px 3px 0 #35463b;
+  }
+  h1 {
+    font-size: 2.15rem;
+    letter-spacing: -0.045em;
+    line-height: 1.2;
+  }
+  .panel-brand p {
+    margin-top: 4px;
+    color: var(--muted-foreground);
+    font-size: 0.8rem;
+  }
+  .panel-intro {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    padding: 18px 0;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .identity {
+    padding: 8px 0;
+  }
+  .settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0 16px;
+  }
+  .setting-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 650;
+    margin-bottom: 8px;
+  }
+  .segmented {
+    display: flex;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .segmented :global(button) {
+    flex: 1;
+    padding: 0.5rem;
+    min-height: 44px;
+  }
+  .segmented :global(button[aria-pressed='true']) {
+    color: var(--primary);
+    background: #304036;
+  }
+  .room-options {
+    margin: 0 0 18px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .room-options summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    list-style: none;
+  }
+  .room-options summary::-webkit-details-marker {
+    display: none;
+  }
+  .room-options[open] summary :global(svg) {
+    transform: rotate(180deg);
+  }
+  .cpu-picker {
+    border: 0;
+    padding: 0;
+    margin: 12px 0;
+    display: grid;
+    gap: 10px;
+  }
+  .cpu-picker legend {
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+  }
+  .cpu-choice {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .cpu-choice input,
+  .table-filter-toggle input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+    flex-shrink: 0;
+  }
+  .option-row {
+    font-size: 0.8rem;
+    margin: 4px 0;
+  }
+  .option-row:last-of-type {
+    margin-bottom: 12px;
+  }
+  .or-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    margin: 22px 0 14px;
+  }
+  .or-divider::before,
+  .or-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .join-form {
+    align-items: flex-start;
+  }
+  .code-field {
+    flex: 1;
+    min-width: 0;
+  }
+  .account-note {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    margin-top: 12px;
+  }
+  .account-note :global(button) {
+    font-size: inherit;
+    padding: 0;
+    min-height: 44px;
+  }
+  .browser-panel {
+    background: #141817ed;
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+  }
+  .browser-heading h2 {
+    font-size: 1.6rem;
+    letter-spacing: -0.025em;
+  }
+  .table-count {
+    font-size: 0.8rem;
+    font-weight: 650;
+    background: var(--secondary);
+    color: var(--primary);
+    border-radius: 6px;
+    display: inline-grid;
+    place-items: center;
+    vertical-align: middle;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    margin-left: 6px;
+  }
+  .browser-panel > p {
+    font-size: 0.85rem;
+    margin-top: 4px;
+  }
+  .table-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+    margin: 24px 0 4px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .table-filters :global(input[type='search']),
+  .table-filters select {
+    width: 100%;
+    min-width: 0;
+  }
+  .table-filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .select-control {
+    position: relative;
+  }
+  .select-control select {
+    appearance: none;
+    height: 48px;
+    padding-right: 36px;
+  }
+  .select-control :global(svg) {
+    position: absolute;
+    right: 12px;
+    top: 16px;
+    pointer-events: none;
+    color: var(--muted-foreground);
+  }
+  .browser-panel .filter-count {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+  }
+  .table-browser {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    flex: 1;
+  }
+  .empty-state {
+    min-height: 310px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px 12px;
+    gap: 10px;
+  }
+  .empty-state h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .empty-state p {
+    font-size: 0.85rem;
+    color: var(--muted-foreground);
+    line-height: 1.6;
+    max-width: 320px;
+  }
+  .empty-hand {
+    position: relative;
+    width: 180px;
+    height: 145px;
+    margin-bottom: 12px;
+  }
+  .empty-hand > div {
+    position: absolute;
+    left: 50px;
+    top: 12px;
+  }
+  .empty-hand > div:first-child {
+    transform: translate(-38px, 10px) rotate(-22deg);
+  }
+  .empty-hand > div:nth-child(2) {
+    z-index: 1;
+    transform: translateY(-4px) rotate(-3deg);
+  }
+  .empty-hand > div:last-child {
+    transform: translate(38px, 10px) rotate(20deg);
+  }
+  .table-row {
+    padding: 18px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-row > .row:first-child {
+    flex: 1;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .table-row strong {
+    overflow-wrap: anywhere;
+  }
+  .rule-teaser {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted-foreground);
+  }
+  .rule-teaser strong {
+    font-size: 0.85rem;
+    color: var(--foreground);
+  }
+  .rule-teaser p {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    margin-top: 3px;
+  }
+  .rule-teaser > :global(svg),
+  .rule-teaser :global(a) {
+    flex-shrink: 0;
+  }
+  .rule-teaser :global(a) {
+    margin-left: auto;
+  }
+  .lobby-footer {
+    justify-content: center;
+    align-items: center;
+    padding: 24px 0;
+    text-align: center;
+    gap: 8px 24px;
+    line-height: 1.8;
+  }
+  .lobby-footer a {
+    text-underline-offset: 3px;
+  }
+  .lobby-footer span a {
+    text-decoration: underline;
+  }
+  .history-row {
+    padding: 15px 0;
+    border-bottom: 1px solid var(--border);
+  }
   .history-result {
     font-weight: 800;
     margin-top: 8px;
@@ -830,310 +1216,57 @@
     margin: 4px 0;
     overflow-wrap: anywhere;
   }
-  @media (max-width: 480px) {
-    .history-teams {
-      grid-template-columns: 1fr;
-    }
-  }
-  .cpu-picker {
-    border: 0;
-    padding: 0;
-    margin: 20px 0;
-    display: grid;
-    gap: 10px;
-  }
-  .cpu-picker legend {
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-  .cpu-picker p {
-    margin: 0;
-  }
-  .cpu-choice {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid #e8e4ce24;
-    border-radius: 12px;
-    cursor: pointer;
-  }
-  .cpu-choice input {
-    width: 20px;
-    height: 20px;
-    accent-color: #d8cca0;
-  }
-  .brand-dot {
-    font-size: 1rem;
-    color: #ad5533;
-    letter-spacing: 0;
-  }
-  .lobby-grid {
-    display: grid;
-    grid-template-columns: 400px 1fr;
-    gap: 36px;
-    align-items: start;
-  }
-  .play-panel {
-    background: #fffcf5;
-    border: 1px solid #d7d7c6;
-    padding: 28px;
-    border-radius: 14px;
-    box-shadow: 0 5px 0 #e9e5d6;
-  }
-  .play-panel h2 {
-    font-size: 1.9rem;
-    margin-top: 20px;
-    letter-spacing: -0.035em;
-  }
-  .panel-intro {
-    font-size: 0.85rem;
-    line-height: 1.65;
-    margin: 8px 0 24px;
-  }
-  .identity {
-    padding: 8px 0;
-  }
-  .settings-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin: 22px 0 14px;
-  }
-  .setting-label {
-    display: block;
-    font-size: 0.76rem;
-    font-weight: 650;
-    margin-bottom: 9px;
-  }
-  .segmented {
-    display: flex;
-    background: #f2f1e8;
-    border-radius: 7px;
-    padding: 3px;
-  }
-  .segmented :global(button) {
-    flex: 1;
-    padding: 0.5rem;
-    min-height: 40px;
-  }
-  .option-row {
-    font-size: 0.8rem;
-    margin: 4px 0;
-  }
-  .option-row:last-of-type {
-    margin-bottom: 17px;
-  }
-  .or-divider {
-    position: relative;
-    text-align: center;
-    font-size: 0.7rem;
-    color: #78816f;
-    margin: 26px 0 15px;
-  }
-  .or-divider:before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: #e2e2d4;
-  }
-  .or-divider span {
-    position: relative;
-    background: #fffcf5;
-    padding: 0 12px;
-  }
-  .account-note {
-    text-align: center;
-    font-size: 0.7rem;
-    color: #78816f;
-    margin-top: 16px;
-  }
-  .account-note :global(button) {
-    font-size: 0.7rem;
-    padding: 0;
-    min-height: 32px;
-  }
-  .browser-panel {
-    padding-top: 10px;
-  }
-  .join-form {
-    align-items: flex-start;
-  }
-  .code-field {
-    flex: 1;
-    min-width: 0;
-  }
-  .browser-heading h2 {
-    font-size: 1.9rem;
-    margin: 12px 0;
-    letter-spacing: -0.04em;
-  }
-  .table-count {
-    font:
-      600 0.75rem 'Nunito Variable',
-      sans-serif;
-    background: #e4e7d7;
-    border-radius: 50%;
-    display: inline-grid;
-    place-items: center;
-    vertical-align: middle;
-    width: 24px;
-    height: 24px;
-    margin-left: 8px;
-  }
-  .browser-panel > p {
-    font-size: 0.85rem;
-  }
-  .table-browser {
-    margin-top: 24px;
-    border: 1px dashed #cbd0bc;
-    border-radius: 12px;
-    min-height: 360px;
-    background: #eeeede70;
-  }
-  .table-filters {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin: 20px 0 4px;
-    padding: 0;
-    border: 0;
-    min-width: 0;
-  }
-  .table-filters :global(input[type='search']),
-  .table-filters select {
-    width: 100%;
-    min-width: 0;
-  }
-  .table-filter-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 44px;
-    font-size: 0.8rem;
-    cursor: pointer;
-  }
-  .table-filter-toggle input {
-    width: 18px;
-    height: 18px;
-    accent-color: #257c5d;
-  }
-  .filter-count {
-    font-size: 0.75rem;
-    color: #606c61;
-  }
-  @media (max-width: 480px) {
-    .table-filters {
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-  }
-  .empty-state {
-    min-height: 360px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 30px;
-    gap: 16px;
-  }
-  .empty-state h3 {
-    font-size: 1.5rem;
-  }
-  .empty-state p {
-    font-size: 0.85rem;
-    color: #747c68;
-    line-height: 1.7;
-  }
-  .empty-cards {
-    display: grid;
-    place-items: center;
-    border: 1px solid #b5c1a6;
-    color: #698163;
-    border-radius: 6px;
-    transform: rotate(-8deg);
-    width: 52px;
-    height: 70px;
-    font:
-      750 2.5rem 'Nunito Variable',
-      sans-serif;
-    background: #f6f5e9;
-    box-shadow: 5px 4px 0 #e1e5d4;
-  }
-  .empty-caption {
-    font-size: 0.55rem;
-    letter-spacing: 0.16em;
-    color: #89917d;
-    margin-top: 12px;
-  }
-  .table-row {
-    padding: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    border-bottom: 1px solid #d9ddcb;
-  }
-  .rule-teaser {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 24px 0;
-    color: #5a7054;
-  }
-  .rule-teaser strong {
-    font-size: 0.85rem;
-  }
-  .rule-teaser p {
-    font-size: 0.75rem;
-    line-height: 1.6;
-    margin-top: 5px;
-  }
-  .rule-teaser > :global(svg) {
-    flex-shrink: 0;
-  }
-  .rule-teaser :global(a) {
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-  .history-row {
-    padding: 15px 0;
-    border-bottom: 1px solid var(--border);
-  }
   @media (max-width: 1000px) {
+    .lobby-shell {
+      width: calc(100% - 40px);
+    }
     .lobby-grid {
-      grid-template-columns: 360px 1fr;
-      gap: 24px;
+      grid-template-columns: 330px minmax(0, 1fr);
+      gap: 18px;
+    }
+    .play-panel,
+    .browser-panel {
+      padding: 22px;
     }
     .table-row {
       flex-wrap: wrap;
     }
-    .play-panel {
-      padding: 23px;
-    }
   }
   @media (max-width: 760px) {
-    .lobby-grid {
-      grid-template-columns: 1fr;
-      gap: 35px;
+    .lobby-shell {
+      width: calc(100% - 28px);
     }
-    .play-panel {
-      padding: 24px;
+    .lobby-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
+      padding: 8px 0;
+    }
+    .masthead {
+      min-height: 68px;
     }
     .nav-label,
     .username {
       display: none;
     }
-    .browser-panel {
-      padding: 0;
-    }
     .masthead nav {
-      gap: 3px;
+      gap: 2px;
+    }
+    .masthead > .brand {
+      font-size: 0;
+      gap: 0;
+    }
+  }
+  @media (max-width: 480px) {
+    .history-teams,
+    .table-filters {
+      grid-template-columns: 1fr;
+    }
+    .table-filters {
+      gap: 6px;
+    }
+    .play-panel,
+    .browser-panel {
+      padding: 20px;
     }
   }
 </style>

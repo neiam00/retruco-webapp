@@ -117,6 +117,7 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await first.getByLabel('Tu nombre en la mesa').fill('Prueba Ana');
     await first.getByRole('button', { name: '1 vs 1', exact: true }).click();
     await first.getByRole('button', { name: '12', exact: true }).click();
+    await first.getByText('Opciones de mesa', { exact: true }).click();
     await first.getByRole('button', { name: 'Cambiar', exact: true }).click();
     await first.getByRole('button', { name: 'Crear una mesa', exact: true }).click();
     await expect(first).toHaveURL(/\/mesa\/[A-Z]{4}-[0-9]{4}$/);
