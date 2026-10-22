@@ -18,9 +18,7 @@
       colección SVG de gjenkins20
     </a>
     , bajo licencia
-    <a href="https://creativecommons.org/licenses/by-sa/3.0/">
-      Creative Commons Atribución-CompartirIgual 3.0
-    </a>
+    <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>
     .
   </p>
   <Button href="/" variant="outline">Volver a las mesas</Button>
