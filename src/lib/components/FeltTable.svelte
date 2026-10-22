@@ -156,14 +156,18 @@
     class={[
       'table-status',
       {
-        expanded: !game || game.phase !== 'playing',
-        results: game?.phase === 'hand_over' || game?.phase === 'match_over',
+        expanded: !game || (game.phase !== 'playing' && !snapshot.cpuPaused),
+        paused: snapshot.cpuPaused,
+        results:
+          !snapshot.cpuPaused && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
         'waiting-for-cards':
-          cardsMoving && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
+          !snapshot.cpuPaused &&
+          cardsMoving &&
+          (game?.phase === 'hand_over' || game?.phase === 'match_over'),
       },
     ]}
   >
-    {#if game && (game.phase === 'cutting' || game.phase === 'hand_over')}
+    {#if game && !snapshot.cpuPaused && (game.phase === 'cutting' || game.phase === 'hand_over')}
       <span class="phase-countdown" aria-label={seconds + ' segundos restantes'}>{seconds}s</span>
     {/if}
     {#if !game}
@@ -175,9 +179,11 @@
       <p>Invita a tus panas. Aquí los esperamos.</p>
       <Button onclick={oninvite}><Share2 size={16} />Invitar a mis amigos</Button>
     {:else if snapshot.cpuPaused}
-      <span class="status-eyebrow">Partida en pausa</span>
-      <h1>Esperando a los jugadores.</h1>
-      <p>La CPU continúa cuando vuelva un jugador a la mesa.</p>
+      <div class="turn-message" role="status">
+        <span class="turn-dot"></span>
+        <strong>Partida en pausa</strong>
+      </div>
+      <p>Esperando a los jugadores.</p>
     {:else if game.phase === 'match_over'}
       <span class="status-eyebrow">La partida tiene ganador</span>
       <h1>{victoryLabel(game.winner, snapshot.seat)}</h1>
@@ -511,6 +517,13 @@
   }
   .turn-message strong {
     font-size: 12px;
+  }
+  .table-status.paused {
+    max-width: 180px;
+  }
+  .table-status.paused p {
+    font-size: 10px;
+    margin-top: 4px;
   }
   .turn-dot {
     width: 6px;

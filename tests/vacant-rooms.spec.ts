@@ -36,8 +36,8 @@ test('the room browser recovers when the live-list endpoint is temporarily unava
   expect(attempts).toBeGreaterThan(1);
 });
 
-for (const departure of ['leave', 'disconnect'] as const) {
-  test(`vacant waiting rooms disappear live after ${departure} and cannot be rejoined`, async ({
+for (const departure of ['leave', 'disconnect', 'cpu_disconnect'] as const) {
+  test(`vacant rooms disappear live after ${departure} and cannot be rejoined`, async ({
     browser,
     baseURL,
   }) => {
@@ -69,7 +69,15 @@ for (const departure of ['leave', 'disconnect'] as const) {
       await expect.poll(() => listingStreams).toBe(1);
       const created = await owner.request.post(`${api}/api/matches`, {
         headers,
-        data: { private: false, config: { players: 4, target: 12, florRequired: false } },
+        data: {
+          private: false,
+          config: {
+            players: departure === 'cpu_disconnect' ? 2 : 4,
+            target: 12,
+            florRequired: false,
+          },
+          options: { cpuSeats: departure === 'cpu_disconnect' ? [1] : [] },
+        },
       });
       expect(created.ok()).toBe(true);
       const { code } = await created.json();

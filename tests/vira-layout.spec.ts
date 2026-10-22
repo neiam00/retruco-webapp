@@ -1,6 +1,45 @@
 import { expect, test } from '@playwright/test';
-import { tableSnapshot } from './fixtures/table.js';
+import { showTable, tableSnapshot } from './fixtures/table.js';
 import { expectClearTableCards } from './table-layout.js';
+
+for (const width of [320, 393, 1280]) {
+  test(`spectator pause message stays clear of the vira at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 700 });
+    const snapshot = tableSnapshot(4, 0, true);
+    snapshot.cpuPaused = true;
+    const update = await showTable(page, snapshot);
+    for (const phase of ['playing', 'cutting', 'hand_over'] as const) {
+      for (let dealer = 0; dealer < 4; dealer++) {
+        const paused = structuredClone(snapshot);
+        paused.state!.phase = phase;
+        paused.state!.dealer = dealer;
+        paused.state!.revision++;
+        update(paused);
+        await expect(page.getByText('Esperando a los jugadores.', { exact: true })).toBeVisible();
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const notice = document.querySelector('.table-status')!.getBoundingClientRect();
+              const obstacles = document.querySelectorAll('.deck, .played-card img, .player-seat');
+              return [...obstacles].some((element) => {
+                const box = element.getBoundingClientRect();
+                return (
+                  box.width > 0 &&
+                  box.height > 0 &&
+                  Math.min(notice.right, box.right) - Math.max(notice.left, box.left) > 1 &&
+                  Math.min(notice.bottom, box.bottom) - Math.max(notice.top, box.top) > 1
+                );
+              });
+            }),
+          )
+          .toBe(false);
+      }
+    }
+    await page.screenshot({ path: testInfo.outputPath('spectator-paused.png') });
+  });
+}
 
 for (const width of [320, 390, 768, 1280]) {
   for (const players of [2, 4]) {
