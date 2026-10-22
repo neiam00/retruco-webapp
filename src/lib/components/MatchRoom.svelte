@@ -379,6 +379,9 @@
   function actionKey(command: Command) {
     return [command.type, command.kind, command.amount, command.mode].join(':');
   }
+  function cantoDisabled(command: Command) {
+    return !connected || busy || (declaration === 'con_mi_flor' && command.kind === 'ley_envido');
+  }
   function seatName(seat: number) {
     return snapshot?.seats[seat]?.name || 'Esperando…';
   }
@@ -635,7 +638,8 @@
                         <Button
                           variant={declaration === option.value ? 'secondary' : 'ghost'}
                           aria-pressed={declaration === option.value}
-                          disabled={option.value === 'a_ley' && game.round !== 0}
+                          disabled={option.value === 'a_ley' &&
+                            (game.round !== 0 || declaration === 'con_mi_flor')}
                           onclick={() => {
                             declaration = option.value;
                             declarationOpen = false;
@@ -648,76 +652,78 @@
                   </div>
                 </Dialog.Content>
               </Dialog.Root>
-              {#if canStack || canBurn}
-                <div class="row stack-controls">
-                  {#if canStack}
-                    <Button
-                      variant="outline"
-                      disabled={game.mandatoryStack}
-                      onclick={() => {
-                        stackMode = !stackMode;
-                        burnMode = false;
-                        bottom = null;
-                        top = null;
-                      }}
-                    >
-                      {stacking ? 'Jugando pegado' : 'Jugar pegado'}
-                    </Button>
-                  {/if}
-                  {#if canBurn}
-                    <Button
-                      variant="outline"
-                      disabled={busy || !connected}
-                      aria-pressed={burnMode}
-                      onclick={() => {
-                        if (game.mandatoryStack) {
-                          send({ type: 'burn', declaration });
-                        } else {
-                          burnMode = !burnMode;
-                          stackMode = false;
+              <div class="play-controls">
+                {#if canStack || canBurn}
+                  <div class="row stack-controls">
+                    {#if canStack}
+                      <Button
+                        variant="outline"
+                        disabled={game.mandatoryStack}
+                        onclick={() => {
+                          stackMode = !stackMode;
+                          burnMode = false;
                           bottom = null;
                           top = null;
-                        }
-                      }}
-                    >
-                      {game.mandatoryStack
-                        ? 'Quemar las dos'
-                        : burnMode
-                          ? 'Cancelar quemado'
-                          : 'Quemar carta'}
-                    </Button>
-                  {/if}
-                  {#if stacking}
+                        }}
+                      >
+                        {stacking ? 'Jugando pegado' : 'Jugar pegado'}
+                      </Button>
+                    {/if}
+                    {#if canBurn}
+                      <Button
+                        variant="outline"
+                        disabled={busy || !connected}
+                        aria-pressed={burnMode}
+                        onclick={() => {
+                          if (game.mandatoryStack) {
+                            send({ type: 'burn', declaration });
+                          } else {
+                            burnMode = !burnMode;
+                            stackMode = false;
+                            bottom = null;
+                            top = null;
+                          }
+                        }}
+                      >
+                        {game.mandatoryStack
+                          ? 'Quemar las dos'
+                          : burnMode
+                            ? 'Cancelar quemado'
+                            : 'Quemar carta'}
+                      </Button>
+                    {/if}
+                    {#if stacking}
+                      <Button
+                        disabled={bottom === null ||
+                          top === null ||
+                          bottom === top ||
+                          busy ||
+                          !connected}
+                        onclick={() =>
+                          send({ type: 'stack', card: bottom ?? 0, top: top ?? 0, declaration })}
+                      >
+                        Jugar las dos
+                      </Button>
+                    {/if}
+                  </div>
+                {/if}
+
+                <div class="canto-actions">
+                  {#each primaryActions as command (actionKey(command))}
                     <Button
-                      disabled={bottom === null ||
-                        top === null ||
-                        bottom === top ||
-                        busy ||
-                        !connected}
-                      onclick={() =>
-                        send({ type: 'stack', card: bottom ?? 0, top: top ?? 0, declaration })}
+                      variant={command.kind === 'decline' ? 'outline' : 'default'}
+                      disabled={cantoDisabled(command)}
+                      onclick={() => send(command)}
                     >
-                      Jugar las dos
+                      {commandLabel(command, game.pending?.kind)}
+                    </Button>
+                  {/each}
+                  {#if moreActions.length}
+                    <Button variant="outline" onclick={() => (moreActionsOpen = true)}>
+                      <MoreHorizontal size={16} />{game.pending ? 'Subir / otros' : 'Más cantos'}
                     </Button>
                   {/if}
                 </div>
-              {/if}
-
-              <div class="canto-actions">
-                {#each primaryActions as command (actionKey(command))}
-                  <Button
-                    variant={command.kind === 'decline' ? 'outline' : 'default'}
-                    disabled={!connected || busy}
-                    onclick={() => send(command)}
-                  >
-                    {commandLabel(command, game.pending?.kind)}
-                  </Button>
-                {/each}
-                {#if moreActions.length}
-                  <Button variant="outline" onclick={() => (moreActionsOpen = true)}>
-                    <MoreHorizontal size={16} />{game.pending ? 'Subir / otros' : 'Más cantos'}
-                  </Button>
-                {/if}
               </div>
               <Dialog.Root bind:open={moreActionsOpen}>
                 <Dialog.Content>
@@ -743,7 +749,7 @@
                     {#each moreActions as command (actionKey(command))}
                       <Button
                         variant={command.kind === 'decline' ? 'outline' : 'default'}
-                        disabled={!connected || busy}
+                        disabled={cantoDisabled(command)}
                         onclick={() => {
                           moreActionsOpen = false;
                           send(command);
@@ -758,11 +764,11 @@
             {/if}
           </section>
         {/if}
-        <div class="social-controls">
-          <span class="connection-status">
-            {#if connected}<Wifi size={12} />{:else}<WifiOff size={12} />{/if}
-            {connected ? 'En línea' : 'Reconectando…'}
-          </span>
+        <span class="connection-status">
+          {#if connected}<Wifi size={12} />{:else}<WifiOff size={12} />{/if}
+          {connected ? 'En línea' : 'Reconectando…'}
+        </span>
+        <div class="social-controls" role="group" aria-label="Herramientas de la partida">
           <Button
             class="details-toggle"
             variant="outline"
@@ -795,12 +801,13 @@
           {/if}
           <Button
             variant="outline"
+            size="icon"
             aria-label={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
+            title={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
             aria-expanded={chatOpen}
             onclick={() => (chatOpen = !chatOpen)}
           >
             {#if chatOpen}<X size={16} />{:else}<MessageCircle size={16} />{/if}
-            Chat
             {#if snapshot.chat.length}<span class="chat-count">{snapshot.chat.length}</span>{/if}
           </Button>
         </div>
@@ -1512,7 +1519,7 @@
   .active-match .game-surface {
     height: 100%;
     min-height: 0;
-    padding: 0 8px 4px;
+    padding: 0 8px 24px;
   }
   .active-match .table-area {
     display: block;
@@ -1520,8 +1527,10 @@
     min-height: 0;
   }
   .active-match .hand-area {
-    width: 100%;
+    width: calc(100% - 52px);
     max-width: 880px;
+    margin-left: auto;
+    margin-right: 52px;
   }
   .active-match .hand-label {
     margin-bottom: 2px;
@@ -1546,20 +1555,24 @@
     width: auto;
   }
   .active-match .canto-actions {
-    margin-top: 4px;
+    grid-row: 2;
+    margin-top: 0;
     gap: 4px;
+    flex-wrap: nowrap;
   }
   .active-match .canto-actions :global(button) {
     white-space: normal;
     line-height: 1.15;
     flex: 0 1 auto;
     min-width: 0;
-    max-width: 32%;
+    max-width: 100%;
     padding: 4px 8px;
     font-size: 11px;
   }
   .active-match .stack-controls {
-    margin-top: 2px;
+    grid-row: 1;
+    margin-top: 0;
+    flex-wrap: nowrap;
   }
   .active-match .stack-controls :global(button) {
     flex: 0 1 auto;
@@ -1569,15 +1582,43 @@
     line-height: 1.15;
   }
   .active-match .social-controls {
-    position: static;
-    justify-content: flex-end;
+    position: absolute;
+    right: 8px;
+    bottom: 24px;
+    flex-direction: column;
     gap: 4px;
-    flex: 0 0 44px;
-    margin-top: 4px;
+    margin: 0;
   }
   .active-match .social-controls :global(button) {
     min-height: 44px;
     height: 44px;
+    width: 44px;
+    padding: 0;
+    position: relative;
+  }
+  .active-match .connection-status {
+    position: absolute;
+    left: 8px;
+    bottom: 4px;
+  }
+  .active-match .chat-count {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+  .active-match .chat-popover {
+    right: 60px;
+    bottom: 24px;
+    width: min(300px, calc(100% - 68px));
+  }
+  .play-controls {
+    /* Keep the tabletop at the same scale as calls become replies and card
+       controls disappear. Each row retains a full touch target's height. */
+    display: grid;
+    grid-template-rows: 44px 44px;
+    gap: 4px;
+    margin-top: 4px;
+    min-width: 0;
   }
   .active-match .match-details {
     top: 8px;
@@ -1624,22 +1665,17 @@
       margin-right: 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(270px, 40%);
-      grid-template-rows: minmax(0, 1fr) 44px;
+      grid-template-rows: minmax(0, 1fr);
       column-gap: 12px;
     }
     .active-match .table-area {
       grid-column: 1;
-      grid-row: 1 / 3;
+      grid-row: 1;
     }
     .active-match .hand-area {
       grid-column: 2;
       grid-row: 1;
       align-self: end;
-    }
-    .active-match .social-controls {
-      grid-column: 2;
-      grid-row: 2;
-      margin: 0;
     }
     .active-match .hand-cards {
       height: 90px;

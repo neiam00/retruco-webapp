@@ -123,6 +123,10 @@ Primary canto replies stay visible. Secondary raises, chat, voice, and history
 can use expandable panels on small screens. Long menus scroll within their own
 panels, not by pushing the hand or reply buttons outside the viewport. Clear a
 player's canto bubble when their card turn ends; retain the full canto history.
+Reserve stable rows for card actions and canto replies so switching between them
+does not resize the tabletop. Place history, card sound, signals, and chat in a
+vertical toolbar on the right, clear of the hand, with at least 44px touch targets.
+Keep connection status separate below the play area.
 
 Team labels are “Nosotros” and “Ellos” for seated players and “Equipo 1” and
 “Equipo 2” for spectators. Declarations remain explicit choices; presentation

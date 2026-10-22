@@ -13,6 +13,11 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
     {
+      name: 'iphone',
+      use: { ...devices['iPhone 15 Pro'] },
+      testMatch: '**/game-interaction.spec.ts',
+    },
+    {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
       testMatch: [
