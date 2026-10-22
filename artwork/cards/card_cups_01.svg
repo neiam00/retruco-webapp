@@ -24,6 +24,8 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1" />
+  <!-- Opaque paper beneath the traced artwork; rounded corners remain transparent. -->
+  <rect id="card-paper" x="0" y="0" width="66.239998" height="102.08" rx="3.2" fill="#fcfcfc" />
   <g
      inkscape:groupmode="layer"
      inkscape:label="Image"
