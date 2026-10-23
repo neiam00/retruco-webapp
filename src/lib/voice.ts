@@ -24,7 +24,7 @@ interface Signal {
   peers?: VoicePeer[];
   iceServers?: RTCIceServer[];
   description?: RTCSessionDescriptionInit;
-  candidate?: RTCIceCandidateInit;
+  candidate?: unknown;
 }
 
 interface PeerConnection {
@@ -35,6 +35,35 @@ interface PeerConnection {
   ignoreOffer: boolean;
   settingAnswer: boolean;
   candidates: RTCIceCandidateInit[];
+  closed: boolean;
+}
+
+// Bound both the count and size of peer-controlled data retained before SDP.
+// Normalizing also prevents unknown JSON fields from occupying the queue.
+const maxPendingCandidates = 64;
+function normalizeCandidate(value: unknown): RTCIceCandidateInit | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const input = value as Record<string, unknown>;
+  if (input.candidate !== undefined && typeof input.candidate !== 'string') return;
+  const candidate = (input.candidate ?? '') as string;
+  if (candidate.length > 4096) return;
+  const result: RTCIceCandidateInit = { candidate };
+  for (const key of ['sdpMid', 'usernameFragment'] as const) {
+    const field = input[key];
+    if (field === undefined) continue;
+    if (field !== null && (typeof field !== 'string' || field.length > 256)) return;
+    result[key] = field;
+  }
+  const index = input.sdpMLineIndex;
+  if (index !== undefined) {
+    if (
+      index !== null &&
+      (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index > 65535)
+    )
+      return;
+    result.sdpMLineIndex = index;
+  }
+  return result;
 }
 
 // One session belongs to one mounted match. Closing it releases the microphone,
@@ -172,6 +201,7 @@ export class VoiceSession {
     });
     this.stream = undefined;
     for (const peer of this.peers.values()) {
+      if (peer.closed) continue;
       for (const sender of peer.connection.getSenders()) {
         if (sender.track) void sender.replaceTrack(null).catch(() => {});
       }
@@ -180,6 +210,7 @@ export class VoiceSession {
   }
 
   private async attachMicrophone(peer: PeerConnection) {
+    if (peer.closed) return;
     const transceiver = peer.connection
       .getTransceivers()
       .find((item) => item.receiver.track.kind === 'audio');
@@ -210,6 +241,7 @@ export class VoiceSession {
       ignoreOffer: false,
       settingAnswer: false,
       candidates: [],
+      closed: false,
     };
     this.peers.set(peer.id, entry);
     connection.ontrack = ({ track, streams }) => {
@@ -276,13 +308,14 @@ export class VoiceSession {
     } else if (message.type === 'ice') {
       this.servers = message.iceServers ?? [];
       for (const entry of this.peers.values()) {
+        if (entry.closed) continue;
         entry.connection.setConfiguration({ iceServers: this.servers });
         // Allocate with the renewed credentials before the previous ones expire.
         entry.connection.restartIce();
       }
     } else if (message.type === 'signal' && message.from) {
       const entry = this.peers.get(message.from);
-      if (!entry || !this.self) return;
+      if (!entry || entry.closed || !this.self) return;
       const pc = entry.connection;
       if (message.description) {
         const readyForOffer =
@@ -302,14 +335,28 @@ export class VoiceSession {
           await pc.setLocalDescription();
           this.send({ type: 'signal', to: message.from, description: pc.localDescription });
         }
-      } else if (message.candidate && !entry.ignoreOffer) {
-        if (pc.remoteDescription) await pc.addIceCandidate(message.candidate);
-        else entry.candidates.push(message.candidate);
+      } else if (message.candidate !== undefined && !entry.ignoreOffer) {
+        const candidate = normalizeCandidate(message.candidate);
+        if (
+          !candidate ||
+          (!pc.remoteDescription && entry.candidates.length >= maxPendingCandidates)
+        ) {
+          this.closePeer(entry);
+          this.update({
+            error: `Se interrumpió el audio de ${entry.peer.name}. Vuelve a entrar al audio.`,
+          });
+          return;
+        }
+        if (pc.remoteDescription) await pc.addIceCandidate(candidate);
+        else entry.candidates.push(candidate);
       }
     }
   }
 
   private closePeer(entry: PeerConnection) {
+    if (entry.closed) return;
+    entry.closed = true;
+    entry.candidates.length = 0;
     entry.connection.close();
     entry.audio.pause();
     entry.audio.srcObject = null;
