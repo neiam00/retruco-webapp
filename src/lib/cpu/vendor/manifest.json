@@ -1,8 +1,5 @@
 {
-  "sourceCommit": null,
-  "sourceBaseCommit": "1965adfcc12a3eedab6c1dcaab4684bb3623a17d",
-  "sourcePatchSha256": "318dfc4785be647326d5f536a7f67b2a2c7d5d65dafd321b8e11575fc2a727ba",
-  "sourcePatchCommand": "git diff --binary HEAD -- rules cpu cmd/cpu Makefile go.mod go.sum",
+  "sourceCommit": "6db67520b792027ee543a98c7ffcbd97a9b581e9",
   "goVersion": "go1.27.3",
   "hashes": {
     "cpu.wasm": "59f8aa9c04232cda31e580fe91c728d6e57532fbe82fdfd23806b59316db14eb",
