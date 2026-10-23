@@ -761,6 +761,8 @@
                   </div>
                 </Dialog.Content>
               </Dialog.Root>
+            {:else}
+              <div class="play-controls" aria-hidden="true"></div>
             {/if}
           </section>
         {/if}
@@ -1530,10 +1532,10 @@
     min-height: 0;
   }
   .active-match .hand-area {
-    width: calc(100% - 52px);
+    width: calc(100% - 104px);
     max-width: 880px;
     margin-left: auto;
-    margin-right: 52px;
+    margin-right: auto;
   }
   .active-match .hand-label {
     margin-bottom: 2px;
@@ -1637,35 +1639,33 @@
     max-width: none;
     gap: 4px;
   }
-  @media (max-width: 1150px), (max-height: 500px) {
-    .active-match .game-surface {
-      margin-right: 0;
-    }
-    .active-match :global(.details-toggle),
-    .active-match :global(.details-close) {
-      display: inline-flex;
-    }
-    .active-match .match-details {
-      display: none;
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      bottom: 4px;
-      width: min(320px, calc(100% - 8px));
-      margin: 0;
-      padding: 12px;
-      border: 1px solid #a9c1ac30;
-      border-radius: 12px;
-      background: #102c23;
-      z-index: 20;
-    }
-    .active-match.details-open .match-details {
-      display: block;
-    }
-    .active-match .table-meta {
-      position: static;
-      margin-top: 8px;
-    }
+  .active-match .game-surface {
+    margin-right: 0;
+  }
+  .active-match :global(.details-toggle),
+  .active-match :global(.details-close) {
+    display: inline-flex;
+  }
+  .active-match .match-details {
+    display: none;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    bottom: 4px;
+    width: min(320px, calc(100% - 8px));
+    margin: 0;
+    padding: 12px;
+    border: 1px solid #a9c1ac30;
+    border-radius: 12px;
+    background: #102c23;
+    z-index: 20;
+  }
+  .active-match.details-open .match-details {
+    display: block;
+  }
+  .active-match .table-meta {
+    position: static;
+    margin-top: 8px;
   }
   @media (max-height: 500px) and (min-width: 520px) {
     .active-match .game-surface {

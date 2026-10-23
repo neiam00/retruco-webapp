@@ -13,24 +13,20 @@
         <span>{announced.value} de envido</span>
       </div>
     {/each}
-    {#if game.phase === 'playing'}
-      <details>
-        <summary>Envido fijo: 2 piedras · Ver regla</summary>
-        <div class="explanation">
-          <p>Envido fijo: 2 piedras, sin subidas. Se cuenta antes del truco.</p>
-          {#if game.pending?.kind === 'privo'}
+    <details class={{ inactive: game.phase !== 'playing' }} inert={game.phase !== 'playing'}>
+      <summary>Envido fijo: 2 piedras · Ver regla</summary>
+      <div class="explanation">
+        <p>Envido fijo: 2 piedras, sin subidas. Se cuenta antes del truco.</p>
+        {#if game.pending?.kind === 'privo'}
+          <p>«Privo y Truco» acepta jugar; el truco sigue valiendo 1 hasta que alguien lo cante.</p>
+          {#if game.legal.some((command) => command.kind === 'present_flor')}
             <p>
-              «Privo y Truco» acepta jugar; el truco sigue valiendo 1 hasta que alguien lo cante.
+              Puedes presentar tu flor para cerrar la mano con 3 piedras, o jugar y conservarla.
             </p>
-            {#if game.legal.some((command) => command.kind === 'present_flor')}
-              <p>
-                Puedes presentar tu flor para cerrar la mano con 3 piedras, o jugar y conservarla.
-              </p>
-            {/if}
           {/if}
-        </div>
-      </details>
-    {/if}
+        {/if}
+      </div>
+    </details>
   </section>
 {/if}
 
@@ -69,6 +65,9 @@
     cursor: pointer;
     padding: 4px;
     color: #bfcebf;
+  }
+  .inactive {
+    visibility: hidden;
   }
   .explanation {
     position: absolute;

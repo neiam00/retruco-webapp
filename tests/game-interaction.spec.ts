@@ -3,61 +3,111 @@ import { showTable, tableSnapshot } from './fixtures/table.js';
 import type { Command } from '../src/lib/protocol.js';
 import { expectClearTableCards } from './table-layout.js';
 
-test('canto replies and dialogs keep the mobile table scale stable', async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 393, height: 659 });
-  const snapshot = tableSnapshot(4, 0, false);
-  snapshot.state!.holding = { envido: 27, flor: 0, receta: false };
-  snapshot.state!.legal = [
-    { type: 'call', kind: 'truco', amount: 3 },
-    { type: 'stack', card: 1, top: 2 },
-    { type: 'burn', card: 1 },
-  ];
-  const update = await showTable(page, snapshot);
-  await expect(page.getByRole('button', { name: 'Truco', exact: true })).toBeEnabled();
-  const tableCard = page.locator('[data-play-seat="1"] img').first();
-  const initial = (await tableCard.boundingBox())!;
-  const replying = structuredClone(snapshot);
-  replying.state!.revision++;
-  replying.state!.pending = { kind: 'truco', caller: 1, value: 3, previous: 1, terminal: false };
-  replying.state!.legal = [
-    { type: 'respond', kind: 'accept' },
-    { type: 'respond', kind: 'decline' },
-    { type: 'respond', kind: 'raise', amount: 6 },
-  ];
-  update(replying);
-  await expect(page.getByRole('button', { name: 'Quiero', exact: true })).toBeEnabled();
-  await expect
-    .poll(async () => Math.abs((await tableCard.boundingBox())!.width - initial.width))
-    .toBeLessThan(1);
-  await page.getByRole('button', { name: 'Subir / otros', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeInViewport({ ratio: 1 });
-  await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
-  await expect
-    .poll(async () => Math.abs((await tableCard.boundingBox())!.width - initial.width))
-    .toBeLessThan(1);
-  const viewport = await page.evaluate(() => ({
-    width: innerWidth,
-    documentWidth: document.documentElement.scrollWidth,
-    scale: visualViewport?.scale ?? 1,
-  }));
-  expect(viewport.width).toBe(393);
-  expect(viewport.documentWidth).toBeLessThanOrEqual(393);
-  expect(viewport.scale).toBe(1);
-  const tools = page.locator('.social-controls button');
-  const boxes = await tools.evaluateAll((buttons) =>
-    buttons.map((button) => {
-      const box = button.getBoundingClientRect();
-      return { x: box.x, y: box.y, width: box.width, height: box.height };
-    }),
-  );
-  for (const [index, box] of boxes.entries()) {
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
-    expect(Math.abs(box.x - boxes[0].x)).toBeLessThan(1);
-    if (index) expect(box.y).toBeGreaterThanOrEqual(boxes[index - 1].y + boxes[index - 1].height);
-  }
-  await page.screenshot({ path: testInfo.outputPath('mobile-controls.png') });
-});
+for (const viewport of [
+  { width: 393, height: 659 },
+  { width: 1280, height: 800 },
+  { width: 2498, height: 1524 },
+]) {
+  test(`canto replies and dialogs keep the table centered and stable at ${viewport.width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(viewport);
+    const snapshot = tableSnapshot(4, 0, false);
+    snapshot.state!.holding = { envido: 27, flor: 0, receta: false };
+    snapshot.state!.privando = [true, false];
+    snapshot.state!.privoEnvido = [{ team: 0, value: 27 }];
+    snapshot.state!.legal = [
+      { type: 'call', kind: 'truco', amount: 3 },
+      { type: 'stack', card: 1, top: 2 },
+      { type: 'burn', card: 1 },
+    ];
+    const update = await showTable(page, snapshot);
+    await expect(page.getByRole('button', { name: 'Truco', exact: true })).toBeEnabled();
+    const tableCard = page.locator('[data-play-seat="1"] img').first();
+    const initial = (await tableCard.boundingBox())!;
+    const geometry = () =>
+      page.evaluate(() => {
+        const table = document.querySelector('.felt-table')!.getBoundingClientRect();
+        const hand = document.querySelector('.hand-area')!.getBoundingClientRect();
+        const center = (box: DOMRect) => box.left + box.width / 2;
+        return {
+          tableCenter: center(table),
+          handCenter: center(hand),
+          width: table.width,
+          height: table.height,
+          top: table.top,
+        };
+      });
+    const original = await geometry();
+    expect(Math.abs(original.tableCenter - original.handCenter)).toBeLessThan(1);
+    expect(Math.abs(original.tableCenter - viewport.width / 2)).toBeLessThan(1);
+    const replying = structuredClone(snapshot);
+    replying.state!.revision++;
+    replying.state!.pending = { kind: 'truco', caller: 1, value: 3, previous: 1, terminal: false };
+    replying.state!.legal = [
+      { type: 'respond', kind: 'accept' },
+      { type: 'respond', kind: 'decline' },
+      { type: 'respond', kind: 'raise', amount: 6 },
+    ];
+    update(replying);
+    await expect(page.getByRole('button', { name: 'Quiero', exact: true })).toBeEnabled();
+    await expect
+      .poll(async () => Math.abs((await tableCard.boundingBox())!.width - initial.width))
+      .toBeLessThan(1);
+    await page.getByRole('button', { name: 'Subir / otros', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeInViewport({ ratio: 1 });
+    await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
+    await expect
+      .poll(async () => Math.abs((await tableCard.boundingBox())!.width - initial.width))
+      .toBeLessThan(1);
+    const viewportMetrics = await page.evaluate(() => ({
+      width: innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      scale: visualViewport?.scale ?? 1,
+    }));
+    expect(viewportMetrics.width).toBe(viewport.width);
+    expect(viewportMetrics.documentWidth).toBeLessThanOrEqual(viewport.width);
+    expect(viewportMetrics.scale).toBe(1);
+    const tools = page.locator('.social-controls button');
+    const boxes = await tools.evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return { x: box.x, y: box.y, width: box.width, height: box.height };
+      }),
+    );
+    for (const [index, box] of boxes.entries()) {
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(Math.abs(box.x - boxes[0].x)).toBeLessThan(1);
+      if (index) expect(box.y).toBeGreaterThanOrEqual(boxes[index - 1].y + boxes[index - 1].height);
+    }
+    await page.screenshot({ path: testInfo.outputPath('mobile-controls.png') });
+    for (let dealer = 0; dealer < 4; dealer++) {
+      const next = structuredClone(replying);
+      next.state!.dealer = dealer;
+      next.state!.revision += dealer + 1;
+      next.events = [
+        {
+          id: 10 + dealer,
+          hand: 1,
+          event: { type: 'respond', seat: dealer, kind: 'raise', amount: 6, text: 'con_mi_flor' },
+        },
+      ];
+      update(next);
+      await expect(page.locator(`[data-seat="${dealer}"] .speech-bubble`)).toContainText(
+        'Con mi flor',
+      );
+      await expect.poll(geometry).toEqual(original);
+    }
+    const finished = structuredClone(replying);
+    finished.state!.phase = 'match_over';
+    finished.state!.winner = 0;
+    finished.state!.revision += 10;
+    update(finished);
+    await expect(page.locator('.table-status.results')).toBeVisible();
+    await expect.poll(geometry).toEqual(original);
+  });
+}
 
 test('Con mi flor disables ley calls only until the declaration changes', async ({ page }) => {
   const snapshot = tableSnapshot(4, 0, false);
