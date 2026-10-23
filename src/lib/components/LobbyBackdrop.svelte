@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { cardURL } from '#lib/cards.js';
   import type { Card } from '#lib/protocol.js';
 
@@ -8,6 +9,16 @@
   let cards = $state.raw<
     { card: Card; left: number; width: number; duration: number; delay: number; angle: number }[]
   >([]);
+  const narrow = new MediaQuery('(max-width: 760px)');
+  const reducedMotion = new MediaQuery('(prefers-reduced-motion: reduce)');
+  // CSS hiding still downloads images. Only mount the artwork we will display.
+  const visibleCards = $derived(
+    reducedMotion.current
+      ? []
+      : narrow.current
+        ? cards.filter((_, index) => index % 2 === 0)
+        : cards,
+  );
 
   onMount(() => {
     hidden = document.hidden;
@@ -37,13 +48,14 @@
 <svelte:document onvisibilitychange={() => (hidden = document.hidden)} />
 
 <div class={['lobby-backdrop', { paused: paused || hidden }]} aria-hidden="true">
-  {#each cards as item (item.left)}
+  {#each visibleCards as item (item.left)}
     <img
       src={cardURL(item.card)}
       alt=""
       width="80"
       height="123"
       decoding="async"
+      fetchpriority="low"
       draggable="false"
       style:left={`${item.left}%`}
       style:width={`${item.width}px`}
@@ -79,11 +91,6 @@
     }
     to {
       transform: translate3d(20px, calc(100svh + 360px), 0) rotate(calc(var(--angle) + 40deg));
-    }
-  }
-  @media (max-width: 760px) {
-    img:nth-child(even) {
-      display: none;
     }
   }
   @media (prefers-reduced-motion: reduce) {

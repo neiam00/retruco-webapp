@@ -3,11 +3,10 @@ import { expect, test } from '@playwright/test';
 test('the room browser recovers when the live-list endpoint is temporarily unavailable', async ({
   page,
 }) => {
-  const api = process.env.TEST_API_ORIGIN ?? 'http://127.0.0.1:8080';
-  await page.route(`${api}/api/session`, (route) => route.fulfill({ json: null }));
-  await page.route(`${api}/api/matches`, (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/session', (route) => route.fulfill({ json: null }));
+  await page.route('**/api/matches', (route) => route.fulfill({ json: [] }));
   let attempts = 0;
-  await page.route(`${api}/api/matches/events`, async (route) => {
+  await page.route('**/api/matches/events', async (route) => {
     if (++attempts === 1) {
       await route.fulfill({ status: 404, json: { error: 'Deployment in progress' } });
       return;
@@ -62,7 +61,7 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect'] as const) {
         if (new URL(request.url()).pathname === '/api/matches/events') listingStreams++;
       });
       // Disable polling responses: list changes must arrive through the live stream.
-      await roomBrowser.route(`${api}/api/matches`, async (route) => {
+      await roomBrowser.route('**/api/matches', async (route) => {
         await route.fulfill({ json: [] });
       });
       await roomBrowser.goto('/');

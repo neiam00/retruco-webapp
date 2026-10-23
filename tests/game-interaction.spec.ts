@@ -216,7 +216,11 @@ test('both ley acceptance options remain primary replies', async ({ page }) => {
 for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 664 },
+  { width: 568, height: 320 },
   { width: 844, height: 390 },
+  { width: 768, height: 1024 },
+  { width: 1024, height: 768 },
+  { width: 1194, height: 400 },
   { width: 1280, height: 650 },
   { width: 1440, height: 900 },
 ]) {
@@ -258,6 +262,9 @@ for (const viewport of [
       ratio: 1,
     });
     await expectClearTableCards(page);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+      viewport.height,
+    );
     await page.screenshot({ path: testInfo.outputPath('viewport.png') });
     const playing = structuredClone(snapshot);
     playing.state!.pending = undefined;
@@ -278,3 +285,46 @@ for (const viewport of [
     await expectClearTableCards(page);
   });
 }
+
+for (const viewport of [
+  { width: 568, height: 320 },
+  { width: 844, height: 390 },
+  { width: 1194, height: 400 },
+]) {
+  test(`chat and details stay reachable at ${viewport.width}×${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await showTable(page, tableSnapshot(4, 0, false));
+    await page.getByRole('button', { name: 'Abrir chat', exact: true }).click();
+    await expect(page.locator('.chat-panel')).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('button', { name: 'Enviar mensaje', exact: true })).toBeInViewport({
+      ratio: 1,
+    });
+    await page.getByRole('button', { name: 'Detalles de la partida', exact: true }).click();
+    await expect(page.locator('.match-details')).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+      viewport.height,
+    );
+  });
+}
+
+test('landscape cutting and spectator controls fit without page scrolling', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 568, height: 320 });
+  const snapshot = tableSnapshot(4, 0, false);
+  snapshot.state!.phase = 'cutting';
+  snapshot.state!.legal = [{ type: 'cut', cut: 20 }];
+  const update = await showTable(page, snapshot);
+  await expect(page.getByRole('button', { name: 'Partir el mazo', exact: true })).toBeInViewport({
+    ratio: 1,
+  });
+  const spectator = tableSnapshot(4, 0, true);
+  spectator.state!.revision++;
+  update(spectator);
+  await expect(page.locator('.spectator-bar')).toBeInViewport({ ratio: 1 });
+  await expect(page.locator('.table-viewport')).toBeInViewport({ ratio: 1 });
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(320);
+  await page.screenshot({ path: testInfo.outputPath('spectator-landscape.png') });
+});

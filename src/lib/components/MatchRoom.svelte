@@ -1507,6 +1507,9 @@
     display: flex;
     flex-direction: column;
     padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
   .active-match .match-header {
     flex: 0 0 48px;
@@ -1610,6 +1613,7 @@
     right: 60px;
     bottom: 24px;
     width: min(300px, calc(100% - 68px));
+    --chat-max-height: calc(100dvh - 80px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
   .play-controls {
     /* Keep the tabletop at the same scale as calls become replies and card
@@ -1633,7 +1637,10 @@
     max-width: none;
     gap: 4px;
   }
-  @media (max-width: 1150px) {
+  @media (max-width: 1150px), (max-height: 500px) {
+    .active-match .game-surface {
+      margin-right: 0;
+    }
     .active-match :global(.details-toggle),
     .active-match :global(.details-close) {
       display: inline-flex;
@@ -1660,13 +1667,13 @@
       margin-top: 8px;
     }
   }
-  @media (max-height: 500px) and (min-width: 600px) {
+  @media (max-height: 500px) and (min-width: 520px) {
     .active-match .game-surface {
       margin-right: 0;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(270px, 40%);
+      grid-template-columns: minmax(0, 1fr) minmax(230px, 44%);
       grid-template-rows: minmax(0, 1fr);
-      column-gap: 12px;
+      column-gap: 4px;
     }
     .active-match .table-area {
       grid-column: 1;

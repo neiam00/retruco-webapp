@@ -63,6 +63,10 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    server: { proxy: { '/api': { target: 'http://127.0.0.1:8080', ws: true } } },
+    server: {
+      proxy: { '/api': { target: 'http://127.0.0.1:8080', ws: true } },
+      // Browser screenshots and reports must not invalidate live game sessions.
+      watch: { ignored: ['**/output/**', '**/playwright-report/**'] },
+    },
   };
 });

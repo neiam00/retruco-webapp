@@ -157,39 +157,48 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       'Equipo 1',
       'Equipo 2',
     ]);
-    const leyCall = { name: 'A ley, envido', exact: true };
+    const moreCalls = { name: 'Más cantos', exact: true };
     await expect
       .poll(
         async () =>
-          (await first.getByRole('button', leyCall).isVisible()) ||
-          (await second.getByRole('button', leyCall).isVisible()),
+          (await first.getByRole('button', moreCalls).isVisible()) ||
+          (await second.getByRole('button', moreCalls).isVisible()),
       )
       .toBe(true);
-    const caller = (await first.getByRole('button', leyCall).isVisible()) ? first : second;
+    const caller = (await first.getByRole('button', moreCalls).isVisible()) ? first : second;
     const responder = caller === first ? second : first;
-    await caller.getByRole('button', leyCall).click();
+    await caller.getByRole('button', moreCalls).click();
+    await caller
+      .getByRole('dialog')
+      .getByRole('button', { name: 'A ley, envido', exact: true })
+      .click();
     await responder.getByRole('button', { name: 'Sin ley, quiero', exact: true }).click();
     await expect(first.getByLabel('Valores de envido')).not.toBeVisible();
     await caller.getByRole('button', { name: 'Truco', exact: true }).click();
-    const history = first.getByRole('region', { name: 'Historial de cantos', exact: true });
+    const history = first.getByRole('region', {
+      name: 'Historial de cantos',
+      exact: true,
+      includeHidden: true,
+    });
     const firstHandHistory = history.getByRole('region', {
       name: 'Cantos de la mano 1',
       exact: true,
+      includeHidden: true,
     });
     const callingTeam = caller === first ? 1 : 2;
-    await expect(firstHandHistory.getByRole('listitem').nth(0)).toHaveText(
+    await expect(firstHandHistory.getByRole('listitem', { includeHidden: true }).nth(0)).toHaveText(
       `${callingTeam === 1 ? 'Nosotros' : 'Ellos'} A ley, envido`,
     );
-    await expect(firstHandHistory.getByRole('listitem').nth(1)).toHaveText(
+    await expect(firstHandHistory.getByRole('listitem', { includeHidden: true }).nth(1)).toHaveText(
       `${callingTeam === 1 ? 'Ellos' : 'Nosotros'} Sin ley, quiero`,
     );
-    await expect(firstHandHistory.getByRole('listitem').nth(2)).toHaveText(
+    await expect(firstHandHistory.getByRole('listitem', { includeHidden: true }).nth(2)).toHaveText(
       `${callingTeam === 1 ? 'Nosotros' : 'Ellos'} Truco`,
     );
     await expect(
       spectator
-        .getByRole('region', { name: 'Cantos de la mano 1', exact: true })
-        .getByRole('listitem')
+        .getByRole('region', { name: 'Cantos de la mano 1', exact: true, includeHidden: true })
+        .getByRole('listitem', { includeHidden: true })
         .nth(2),
     ).toHaveText(`Equipo ${callingTeam} Truco`);
     await expect(responder.locator('.table-status')).toContainText('Responde: Nosotros');
@@ -200,10 +209,15 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
     await expect(responder.locator('.canto-actions button')).toHaveText([
       'Quiero',
       'No quiero',
-      'Quiero y retruco',
-      'Quiero y vale 9',
-      'Quiero y vale partida',
+      'Subir / otros',
     ]);
+    await responder.getByRole('button', { name: 'Subir / otros', exact: true }).click();
+    for (const name of ['Quiero y retruco', 'Quiero y vale 9', 'Quiero y vale partida']) {
+      await expect(
+        responder.getByRole('dialog').getByRole('button', { name, exact: true }),
+      ).toBeVisible();
+    }
+    await responder.keyboard.press('Escape');
     await responder.screenshot({
       path: `output/playwright/truco-replies-${testInfo.project.name}.png`,
       fullPage: true,
@@ -265,7 +279,10 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
             .click();
           await available.first().press('Enter');
           const other = active === first ? second : first;
-          await expect(other.locator('.speech-bubble').filter({ hasText: /^Flor$/ })).toBeVisible();
+          await expect(other.locator('.canto-history')).toContainText('Flor');
+          await expect(other.locator('.speech-bubble').filter({ hasText: /^Flor$/ })).toHaveCount(
+            0,
+          );
         } else {
           await available.first().click();
         }
@@ -330,15 +347,19 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       : second;
     await secondCaller.getByRole('button', { name: 'Truco', exact: true }).click();
     await expect(
-      history.getByRole('region', { name: 'Cantos de la mano 2', exact: true }),
+      history.getByRole('region', {
+        name: 'Cantos de la mano 2',
+        exact: true,
+        includeHidden: true,
+      }),
     ).toContainText('Truco');
     await expect(firstHandHistory).toContainText('Sin ley, quiero');
     await second.reload();
     await expect(
-      second.getByRole('region', { name: 'Cantos de la mano 1', exact: true }),
+      second.getByRole('region', { name: 'Cantos de la mano 1', exact: true, includeHidden: true }),
     ).toContainText('Sin ley, quiero');
     await expect(
-      second.getByRole('region', { name: 'Cantos de la mano 2', exact: true }),
+      second.getByRole('region', { name: 'Cantos de la mano 2', exact: true, includeHidden: true }),
     ).toContainText('Truco');
     expect(await first.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
@@ -370,7 +391,7 @@ test('lobby and rule book fit the viewport and the account dialog is accessible'
   page,
 }, testInfo) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'El truco de aquí. Donde estés.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Retruco', exact: true, level: 1 })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

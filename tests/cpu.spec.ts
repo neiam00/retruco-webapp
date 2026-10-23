@@ -335,9 +335,8 @@ test('mixed CPU room keeps human seats open and transfers one worker between pla
     await expect.poll(() => partner.workers().length).toBe(1);
     const beforePause = await partner.evaluate(() => window.cpuGame!.data.state!.revision);
     await partner.close();
-    await expect(
-      watcher.getByRole('heading', { name: 'Esperando a los jugadores.' }),
-    ).toBeVisible();
+    await expect(watcher.getByRole('status').filter({ hasText: 'Partida en pausa' })).toBeVisible();
+    await expect(watcher.getByText('Esperando a los jugadores.', { exact: true })).toBeVisible();
     expect(await watcher.evaluate(() => window.cpuGame!.data.state!.revision)).toBe(beforePause);
     const returned = await contexts[1].newPage();
     await returned.goto(`${baseURL}/mesa/${code}`);

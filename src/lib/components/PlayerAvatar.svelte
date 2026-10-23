@@ -1,8 +1,15 @@
+<script module lang="ts">
+  import { Style } from '@dicebear/core';
+  import definition from '@dicebear/styles/bottts.json' with { type: 'json' };
+
+  // Validate the shared, immutable style once rather than for every player.
+  const bottts = new Style(definition);
+</script>
+
 <script lang="ts">
-  import { createAvatar } from '@dicebear/core';
-  import * as bottts from '@dicebear/bottts';
+  import { Avatar } from '@dicebear/core';
   let { name, size = 40 }: { name: string; size?: number } = $props();
-  let src = $derived(createAvatar(bottts, { seed: name, size: 80 }).toDataUri());
+  let src = $derived(new Avatar(bottts, { seed: name, size: 80 }).toDataUri());
 </script>
 
 <img {src} alt="" width={size} height={size} class="avatar" />

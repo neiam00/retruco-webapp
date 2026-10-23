@@ -1,6 +1,37 @@
 import { expect, test } from '@playwright/test';
 import type { Listing } from '../src/lib/protocol.js';
 
+test('ambient cards only load artwork visible at the current screen and motion preference', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 664 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/matches') await route.fulfill({ json: [] });
+    else if (path === '/api/matches/events') {
+      await route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' });
+    } else await route.fulfill({ json: null });
+  });
+  const requested = new Set<string>();
+  page.on('request', (request) => {
+    if (request.url().includes('/cards/')) requested.add(request.url());
+  });
+  await page.goto('/');
+  await expect(page.getByText('Todavía no hay mesas abiertas')).toBeVisible();
+  await expect(page.locator('.lobby-backdrop img')).toHaveCount(0);
+  const stationaryCards = await page
+    .locator('img:not(.lobby-backdrop img)')
+    .evaluateAll((images) => images.map((image) => (image as HTMLImageElement).src));
+  expect([...requested].every((url) => stationaryCards.includes(url))).toBe(true);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(page.locator('.lobby-backdrop img')).toHaveCount(4);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.locator('.lobby-backdrop img')).toHaveCount(8);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('.lobby-backdrop img')).toHaveCount(0);
+});
+
 test('table filters combine with sorting and remain applied after refresh', async ({
   page,
 }, testInfo) => {
@@ -74,6 +105,12 @@ test('table filters combine with sorting and remain applied after refresh', asyn
     'Mesa de Elena',
     'Mesa de Dora',
   ]);
+  if (testInfo.project.name === 'mobile') {
+    const row = page.locator('.table-row').first();
+    const identity = (await row.locator(':scope > .row').first().boundingBox())!;
+    const actions = (await row.locator(':scope > .row').last().boundingBox())!;
+    expect(actions.y).toBeGreaterThanOrEqual(identity.y + identity.height);
+  }
 
   await sort.selectOption('players-asc');
   await expect(names).toHaveText([

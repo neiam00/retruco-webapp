@@ -21,7 +21,9 @@ for (const file of files) {
   // the cards stay crisp on high-density screens without live SVG rasterization.
   const image = await sharp(input, { density: 720 })
     .resize({ width: 576 })
-    .webp({ lossless: true, effort: 6 })
+    // Near-lossless keeps fine lines and full 576px detail while quantizing
+    // imperceptible pixel differences (about 30% smaller than lossless).
+    .webp({ nearLossless: true, quality: 70, effort: 6 })
     .toBuffer();
   // Traced SVG paths can leave holes in the paper. Reject transparent interiors
   // instead of masking broken source artwork with a CSS background or flatten().

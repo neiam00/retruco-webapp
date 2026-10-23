@@ -149,8 +149,8 @@
     cursor: pointer;
   }
   .choice.selected {
-    background: #dbcfa01a;
-    border-color: #dbcfa0;
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    border-color: var(--primary);
   }
   .choice > span {
     display: grid;
@@ -160,6 +160,6 @@
     flex-shrink: 0;
   }
   input {
-    accent-color: #dbcfa0;
+    accent-color: var(--primary);
   }
 </style>

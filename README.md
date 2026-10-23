@@ -146,8 +146,11 @@ The Spanish SVG deck comes from
 See `static/cards/ATTRIBUTION.md` and `/creditos` for attribution. Edit card designs
 in `artwork/cards/*.svg`, then run `pnpm cards:build` and commit the generated
 `static/cards/*.webp` files and `src/lib/card-assets.json`. Production builds also
-run this conversion. Gameplay loads only the lossless, 576px-wide WebP copies:
+run this conversion. Gameplay loads only the near-lossless, 576px-wide WebP copies:
 the intricate SVG paths otherwise cause long rendering stalls in Safari.
+The encoder uses near-lossless quality 70, preserving fine detail while reducing
+the complete deck by 31% versus the previous lossless encoding. Opaque pixels
+differ by at most 2/255 per RGB channel from the previous deck.
 Content hashes in filenames prevent stale images after design changes. If using
 `CARD_ASSET_ORIGIN`, upload the generated WebP deck before deploying the client.
 The Cloudflare `_headers` rule serves card WebPs with

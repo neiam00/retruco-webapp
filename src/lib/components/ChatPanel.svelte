@@ -89,9 +89,11 @@
     display: flex;
     flex-direction: column;
     height: 390px;
+    max-height: var(--chat-max-height, calc(100dvh - 80px));
     overflow: hidden;
   }
   .chat-heading {
+    flex-shrink: 0;
     padding: 18px 20px;
     border-bottom: 1px solid var(--border);
   }
@@ -101,6 +103,7 @@
   }
   .chat-messages {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 20px;
     display: flex;
@@ -125,6 +128,7 @@
     color: #bbcbb8;
   }
   .chat-form {
+    flex-shrink: 0;
     display: flex;
     gap: 8px;
     padding: 12px;
@@ -132,9 +136,10 @@
   }
   .chat-form :global(input) {
     min-width: 0;
-    font-size: 0.8rem;
+    font-size: 16px;
   }
   .signal-log {
+    flex-shrink: 0;
     padding: 12px;
     font-size: 0.7rem;
     color: #bbcbb8;

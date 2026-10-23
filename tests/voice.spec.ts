@@ -137,6 +137,9 @@ for (const players of [2, 4]) {
       await expect(first.getByRole('radio', { name: /Micrófono abierto/ })).toBeChecked();
       for (const page of pages) {
         await page.goto(`${baseURL}/mesa/${code}`);
+        await expect(page.getByText('En línea', { exact: true })).toBeVisible();
+        const details = page.getByRole('button', { name: 'Detalles de la partida', exact: true });
+        if (await details.isVisible()) await details.click();
         await page.getByRole('button', { name: 'Entrar al audio', exact: true }).click();
         await expect(page.getByRole('button', { name: 'Salir del audio' })).toBeVisible();
       }
@@ -175,12 +178,19 @@ for (const players of [2, 4]) {
       expect(negotiatedCodecs.length).toBeGreaterThan(0);
       expect(negotiatedCodecs.every((codec) => codec.toLowerCase() === 'audio/opus')).toBe(true);
 
+      const closeDetails = second
+        .locator('.match-details')
+        .getByRole('button', { name: 'Cerrar detalles', exact: true });
+      const compactDetails = await closeDetails.isVisible();
+      if (compactDetails) await closeDetails.click();
       await second.getByRole('button', { name: 'Abrir chat', exact: true }).click();
       await second.getByPlaceholder('Di algo…').click();
       await second.keyboard.down('v');
       expect((await audioStats(second)).transmitting).toBe(false);
       await second.keyboard.up('v');
       await second.getByRole('button', { name: 'Cerrar chat' }).click();
+      if (compactDetails)
+        await second.getByRole('button', { name: 'Detalles de la partida', exact: true }).click();
 
       // The shortcut only transmits while held outside text inputs.
       await second.locator('.voice-status').click();

@@ -88,6 +88,7 @@
     tableSort = 'default';
   }
   let loading = $state(true);
+  let ready = $state(false);
   let busy = $state(false);
   let error = $state('');
   let fieldErrors = $state<Record<string, string>>({});
@@ -141,6 +142,7 @@
     return updates;
   }
   onMount(() => {
+    ready = true;
     void api<User | null>('/session')
       .then((value) => (user = value))
       .catch(() => {});
@@ -391,6 +393,7 @@
         <div class="field">
           <Label for="guest-name">Tu nombre en la mesa</Label><Input
             id="guest-name"
+            disabled={!ready}
             bind:value={name}
             oninput={() => clearFieldError('guest-name')}
             aria-invalid={!!fieldErrors['guest-name']}
@@ -518,7 +521,7 @@
           <Button variant="ghost" onclick={() => (privateMatch = !privateMatch)}>Cambiar</Button>
         </div>
       </details>
-      <Button class="w-full" size="lg" disabled={busy} onclick={create}>
+      <Button class="w-full" size="lg" disabled={!ready || busy} onclick={create}>
         <Plus />Crear una mesa<ArrowRight class="ml-auto" />
       </Button>
       <div class="or-divider"><span>O entra con un código</span></div>
@@ -533,6 +536,7 @@
         <div class="code-field">
           <Label for="room-code" class="sr-only">Código de la mesa</Label><Input
             id="room-code"
+            disabled={!ready}
             value={code}
             oninput={(event) => {
               code = formatRoomCodeInput(event.currentTarget);
@@ -551,7 +555,9 @@
             </p>
           {/if}
         </div>
-        <Button type="submit" variant="outline" disabled={busy}>Entrar <ArrowRight /></Button>
+        <Button type="submit" variant="outline" disabled={!ready || busy}>
+          Entrar <ArrowRight />
+        </Button>
       </form>
       {#if !user?.registered}
         <p class="account-note">
@@ -1185,9 +1191,16 @@
     border-bottom: 1px solid var(--border);
   }
   .table-row > .row:first-child {
-    flex: 1;
+    flex: 1 1 220px;
     flex-wrap: nowrap;
     min-width: 0;
+  }
+  .table-row > .row:first-child > div {
+    min-width: 0;
+  }
+  .table-row > .row:last-child {
+    flex-shrink: 0;
+    margin-left: auto;
   }
   .table-row strong {
     overflow-wrap: anywhere;
