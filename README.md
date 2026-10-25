@@ -13,6 +13,16 @@ Keep it aligned with the lobby, rules, and credits when those pages change. It i
 guidance for AI tools, not a replacement for `robots.txt` or `sitemap.xml`, and does
 not promise search-ranking improvements.
 
+The root layout supplies Open Graph, Twitter large-image cards, and Apple web-app
+metadata. Social URLs use `https://retru.co.ve` and the current pathname, without
+query strings or fragments. The shared preview is `static/og-image.png` (1200 × 630).
+Edit `artwork/social-preview.html`, then run `pnpm social:build` to regenerate it
+using the installed Nunito Variable font and the current card manifest. This
+requires Playwright Chromium (`pnpm exec playwright install chromium`); normal
+deployment builds serve the committed PNG and do not launch a browser.
+Commit the updated PNG along with its source. The composite retains the cards'
+CC BY-SA 3.0 license; see `static/og-image.LICENSE.md`.
+
 ## Develop and verify
 
 Voice preferences live at `/configuracion`. Each match has an explicit audio

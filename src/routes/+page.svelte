@@ -303,7 +303,6 @@
 
 <svelte:head>
   <title>Retruco | Truco venezolano online</title>
-  <meta property="og:title" content="Retruco | Truco venezolano con amigos" />
 </svelte:head>
 
 <LobbyBackdrop paused={motionPaused || authOpen || historyOpen} />

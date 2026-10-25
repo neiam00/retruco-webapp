@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Retruco — imagen para compartir</title>
+    <!-- Assets are embedded by scripts/build-social-image.mjs for an offline render. -->
+    <style>
+      @font-face {
+        font-family: 'Nunito Variable';
+        src: url('{{font}}') format('woff2');
+        font-weight: 200 1000;
+        font-style: normal;
+        font-display: block;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1200px;
+        height: 630px;
+        margin: 0;
+        overflow: hidden;
+      }
+      body {
+        position: relative;
+        background: #101312;
+        color: #edf0ec;
+        font-family: 'Nunito Variable', sans-serif;
+        font-synthesis: none;
+        -webkit-font-smoothing: antialiased;
+      }
+      .table {
+        position: absolute;
+        width: 800px;
+        height: 800px;
+        left: 528px;
+        top: -86px;
+        border: 1px solid #354039;
+        border-radius: 50%;
+        background: #19271f;
+        box-shadow:
+          0 0 0 46px #151d18,
+          0 0 0 94px #121714;
+      }
+      .table::after {
+        content: '';
+        position: absolute;
+        inset: 24px;
+        border: 1px solid #2b3a30;
+        border-radius: inherit;
+      }
+      main {
+        position: absolute;
+        inset: 65px auto auto 72px;
+        z-index: 2;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 17px;
+        font-size: 48px;
+        font-weight: 800;
+        letter-spacing: -0.07em;
+      }
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 54px;
+        height: 66px;
+        background: #293d30;
+        color: #bad9c2;
+        border-radius: 8px;
+        font-size: 38px;
+        transform: rotate(-8deg);
+        letter-spacing: 0;
+      }
+      .eyebrow {
+        margin: 67px 0 16px;
+        color: #bad9c2;
+        font-size: 21px;
+        font-weight: 700;
+      }
+      h1 {
+        margin: 0;
+        font-size: 86px;
+        line-height: 0.99;
+        font-weight: 850;
+        letter-spacing: -0.045em;
+      }
+      h1 span {
+        color: #bad9c2;
+      }
+      .invitation {
+        margin: 27px 0 0;
+        color: #a6b0a9;
+        font-size: 23px;
+        font-weight: 600;
+        line-height: 1.5;
+      }
+      .card {
+        position: absolute;
+        width: 225px;
+        height: auto;
+        border-radius: 12px;
+        filter: drop-shadow(0 16px 16px #00000055);
+      }
+      .coins {
+        left: 597px;
+        top: 195px;
+        transform: rotate(-19deg);
+      }
+      .clubs {
+        left: 896px;
+        top: 183px;
+        transform: rotate(18deg);
+      }
+      .swords {
+        left: 745px;
+        top: 128px;
+        transform: rotate(-3deg);
+      }
+      footer {
+        position: absolute;
+        bottom: 40px;
+        left: 72px;
+        right: 72px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        color: #a6b0a9;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .attribution {
+        font-size: 12px;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="table" aria-hidden="true"></div>
+    <main>
+      <div class="brand">
+        <span class="brand-mark">r.</span>
+        retruco
+      </div>
+      <p class="eyebrow">Truco venezolano, entre amigos.</p>
+      <h1>
+        ¿Sale un
+        <br />
+        <span>truco?</span>
+      </h1>
+      <p class="invitation">
+        Crea una mesa.
+        <br />
+        Comparte el enlace.
+      </p>
+    </main>
+    <img class="card coins" src="{{coins}}" alt="Siete de oros" />
+    <img class="card clubs" src="{{clubs}}" alt="As de bastos" />
+    <img class="card swords" src="{{swords}}" alt="As de espadas" />
+    <footer>
+      <span>retru.co.ve</span>
+      <span class="attribution">Cartas: Basquetteur · CC BY-SA 3.0</span>
+    </footer>
+  </body>
+</html>

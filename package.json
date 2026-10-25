@@ -11,6 +11,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "pnpm cards:build && vite build",
     "cards:build": "node scripts/build-cards.mjs",
+    "social:build": "node scripts/build-social-image.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "prepare": "svelte-kit sync",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
