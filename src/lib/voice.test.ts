@@ -152,3 +152,43 @@ test('normalizes candidate fields instead of retaining extra peer data', async (
   });
   expect(connection.addIceCandidate).toHaveBeenCalledExactlyOnceWith(candidate);
 });
+
+test('keeps listeners in the roster without allocating silent peer pairs', async () => {
+  session.close();
+  TestConnection.instances = [];
+  const changed = vi.fn();
+  session = new VoiceSession(changed);
+  session.connect('ABC');
+  const listener = { id: 'listener', name: 'Listener', canSpeak: false };
+  await TestSocket.instance.receive({
+    type: 'welcome',
+    self: { id: 'self', name: 'Self', canSpeak: false },
+    peers: [listener, peer],
+  });
+  expect(TestConnection.instances).toHaveLength(1);
+  expect(changed.mock.lastCall?.[0].peers).toEqual([listener, peer]);
+
+  // A server-authorized speaker must become audible, even with the same ID.
+  await TestSocket.instance.receive({
+    type: 'peers',
+    peers: [{ ...listener, canSpeak: true }, peer],
+  });
+  expect(TestConnection.instances).toHaveLength(2);
+  const formerListener = TestConnection.instances[1];
+  await TestSocket.instance.receive({ type: 'peers', peers: [listener, peer] });
+  expect(formerListener.close).toHaveBeenCalledOnce();
+  expect(TestConnection.instances[0].close).not.toHaveBeenCalled();
+});
+
+test('speakers still connect to listeners so spectators can hear them', async () => {
+  session.close();
+  TestConnection.instances = [];
+  session = new VoiceSession(vi.fn());
+  session.connect('ABC');
+  await TestSocket.instance.receive({
+    type: 'welcome',
+    self: { id: 'self', name: 'Self', canSpeak: true },
+    peers: [{ id: 'listener', name: 'Listener', canSpeak: false }, peer],
+  });
+  expect(TestConnection.instances).toHaveLength(2);
+});

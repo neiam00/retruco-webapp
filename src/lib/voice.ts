@@ -284,14 +284,24 @@ export class VoiceSession {
   }
 
   private syncPeers(peers: VoicePeer[]) {
+    // Two listeners cannot send audio to each other. Keep them in the roster,
+    // but avoid allocating a WebRTC connection (and potentially a TURN relay).
+    const audible = new Map(
+      peers
+        .filter((peer) => peer.id !== this.self?.id && (this.self?.canSpeak || peer.canSpeak))
+        .map((peer) => [peer.id, peer]),
+    );
     for (const [id, entry] of this.peers) {
-      if (!peers.some((peer) => peer.id === id)) {
+      const current = audible.get(id);
+      if (!current || current.canSpeak !== entry.peer.canSpeak) {
         this.closePeer(entry);
         this.peers.delete(id);
+      } else {
+        entry.peer = current;
       }
     }
-    for (const peer of peers) {
-      if (peer.id !== this.self?.id && !this.peers.has(peer.id)) this.createPeer(peer);
+    for (const peer of audible.values()) {
+      if (!this.peers.has(peer.id)) this.createPeer(peer);
     }
     this.update({ peers: peers.filter((peer) => peer.id !== this.self?.id) });
   }

@@ -31,6 +31,26 @@ on-screen button to talk; typing in inputs never activates the microphone.
 Leaving audio or navigating away releases microphone tracks and connections.
 Room creators choose whether spectators may speak; everyone may listen.
 Voice requires microphone permission and HTTPS outside localhost.
+Participants who both lack speaking permission remain visible in the roster but
+do not create an audio connection to one another. Speakers still connect to
+listeners so spectator listening behavior stays unchanged.
+
+Game connections request transport version 2 with `?transport=2`. A complete
+authorized snapshot starts each connection; later `game_update` messages replace
+the current game view and append or reset retained chat/event histories. Stream
+epoch and sequence gaps disable actions until a full snapshot resynchronizes the
+client. Transport versions are independent of rules and CPU-engine versions.
+Legacy full snapshots remain supported during backend rollout or rollback.
+Healthy connections do not fetch a redundant HTTP snapshot. Rejected legacy
+handshakes use one HTTP diagnostic to distinguish missing rooms and expired
+sessions from transient failures. Reconnects use jittered exponential backoff,
+keep retries within two seconds during the existing ten-second room grace,
+honor server retry delays, and pause while offline. Returning online reconnects
+immediately and cancels any queued retry.
+
+`tests/match-stream.spec.ts` covers this protocol and reconnect lifecycle with
+mocked sockets, without requiring an API or database. The unit reducer tests
+cover history reconstruction and legacy snapshots.
 
 `tests/voice.spec.ts` exercises native WebRTC with synthetic microphone audio.
 Set `TEST_API_ORIGIN` when testing against a separate backend; it defaults to

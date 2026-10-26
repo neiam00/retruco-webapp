@@ -54,7 +54,7 @@ for (const players of [2, 4]) {
           window.renderSocket = this;
           this.addEventListener('message', ({ data }) => {
             const message = JSON.parse(data);
-            if (message.type !== 'snapshot') return;
+            if (message.type !== 'snapshot' && message.type !== 'game_update') return;
             const previous = window.renderGame?.state;
             window.renderGame = message.data;
             const next = window.renderGame?.state;

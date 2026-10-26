@@ -10,10 +10,11 @@ test('four players surround the central cards and can choose a declaration', asy
     ),
   );
   try {
+    const api = process.env.TEST_API_ORIGIN ?? 'http://127.0.0.1:8080';
     const headers = { Origin: 'http://127.0.0.1:5173' };
     const runID = Date.now().toString(36);
     for (const [index, context] of contexts.entries()) {
-      const response = await context.request.post('http://127.0.0.1:8080/api/register', {
+      const response = await context.request.post(`${api}/api/register`, {
         headers,
         data: {
           username: `${['ana', 'beto', 'carla', 'diego'][index]}_${runID}`,
@@ -23,14 +24,14 @@ test('four players surround the central cards and can choose a declaration', asy
       });
       expect(response.ok()).toBe(true);
     }
-    const created = await contexts[0].request.post('http://127.0.0.1:8080/api/matches', {
+    const created = await contexts[0].request.post(`${api}/api/matches`, {
       headers,
       data: { private: true, config: { players: 4, target: 24, florRequired: true } },
     });
     expect(created.ok()).toBe(true);
     const { code } = await created.json();
     for (const context of contexts.slice(1)) {
-      const joined = await context.request.post(`http://127.0.0.1:8080/api/matches/${code}/join`, {
+      const joined = await context.request.post(`${api}/api/matches/${code}/join`, {
         headers,
         data: {},
       });

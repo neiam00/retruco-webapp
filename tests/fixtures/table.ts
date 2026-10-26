@@ -87,7 +87,7 @@ export async function showTable(
       await route.fulfill({ status: 503, json: { error: 'Unavailable in UI test' } });
     }
   });
-  await page.routeWebSocket(`**/api/matches/${snapshot.code}/ws`, (socket) => {
+  await page.routeWebSocket(`**/api/matches/${snapshot.code}/ws?*`, (socket) => {
     closeSocket = () => socket.close({ code: 1012, reason: 'Service restart' });
     sendSnapshot = (value) => socket.send(JSON.stringify({ type: 'snapshot', data: value }));
     sendSnapshot(snapshot);

@@ -34,6 +34,7 @@ export default defineConfig({
         '**/table-browser.spec.ts',
         '**/form-errors.spec.ts',
         '**/registration-check.spec.ts',
+        '**/match-stream.spec.ts',
       ],
     },
   ],

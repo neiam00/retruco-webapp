@@ -376,11 +376,12 @@ test('deployment notice survives downtime and clears after automatic reconnectio
   await page.screenshot({ path: testInfo.outputPath('deployment-notice.png') });
   let unavailable = true;
   let attempts = 0;
-  await page.route(`**/api/matches/${initial.code}`, async (route) => {
+  await page.routeWebSocket(`**/api/matches/${initial.code}/ws?transport=2`, async (socket) => {
     attempts++;
-    await route.fulfill(
-      unavailable ? { status: 503, json: { error: 'Deployment maintenance' } } : { json: paused },
-    );
+    if (unavailable) {
+      socket.send(JSON.stringify({ type: 'error', status: 503, error: 'Deployment maintenance' }));
+      await socket.close();
+    } else socket.send(JSON.stringify({ type: 'snapshot', data: paused }));
   });
   await update.disconnect();
   await page.clock.fastForward(2500);

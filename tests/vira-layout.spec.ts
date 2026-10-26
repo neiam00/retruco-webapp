@@ -59,7 +59,7 @@ for (const width of [320, 390, 768, 1280]) {
             await route.fulfill({ status: 503, json: { error: 'Unavailable in layout test' } });
           }
         });
-        await page.routeWebSocket('**/api/matches/VIRA-1234/ws', (socket) => {
+        await page.routeWebSocket('**/api/matches/VIRA-1234/ws?*', (socket) => {
           socket.send(JSON.stringify({ type: 'snapshot', data: snapshot }));
         });
 

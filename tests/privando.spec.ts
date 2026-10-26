@@ -86,7 +86,7 @@ async function showPrivo(
       await route.fulfill({ status: 503, json: { error: 'Voice unavailable in this UI test' } });
     }
   });
-  await page.routeWebSocket('**/api/matches/PRIV-1234/ws', (socket) => {
+  await page.routeWebSocket('**/api/matches/PRIV-1234/ws?*', (socket) => {
     socket.send(JSON.stringify({ type: 'snapshot', data: snapshot, cpu }));
     socket.onMessage((message) => {
       const input = JSON.parse(message.toString()).input;

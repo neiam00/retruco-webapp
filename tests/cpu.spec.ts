@@ -44,7 +44,8 @@ async function observeGame(context: BrowserContext) {
           window.gameSocket = this;
           this.addEventListener('message', (event) => {
             const message = JSON.parse(event.data);
-            if (message.type === 'snapshot') window.cpuGame = message;
+            if (message.type === 'snapshot' || message.type === 'game_update')
+              window.cpuGame = message;
           });
         }
       }

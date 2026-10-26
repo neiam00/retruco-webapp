@@ -50,6 +50,8 @@
   import { cardName } from '#lib/cards.js';
   import { declarations, commandLabel } from '#lib/command-labels.js';
   import { CPUController, type CPUStatus } from '#lib/cpu/controller.js';
+  import { MatchStream, type GameUpdateMessage, type SnapshotMessage } from '#lib/match-stream.js';
+  import { ReconnectBackoff } from '#lib/reconnect.js';
   import type { User, Snapshot, Command, CPUWork } from '#lib/protocol.js';
 
   let { code }: { code: string } = $props();
@@ -87,7 +89,8 @@
   let now = $state(Date.now());
   let offset = $state(0);
   let socket: WebSocket | undefined;
-  let retry: ReturnType<typeof setTimeout> | undefined;
+  const retry = new ReconnectBackoff();
+  let connectionGeneration = 0;
   let disposed = false;
   let stopPreloading: (() => void) | undefined;
   let gameSurface = $state<HTMLElement>();
@@ -222,39 +225,79 @@
     availableActions.filter((command) => !primaryActions.includes(command)),
   );
 
-  async function connect() {
-    if (disposed || updateRequired || !user) return;
-
-    // Check HTTP status before opening the socket so missing tables and expired
-    // sessions are actionable errors rather than an endless reconnect screen.
-    try {
-      await api<Snapshot>(`/matches/${code}`);
-    } catch (cause) {
-      if (disposed) return;
-      if (!updating)
-        error = cause instanceof Error ? cause.message : 'No pudimos conectar con la mesa.';
-      if (cause instanceof ApiError && cause.status === 401) {
-        updating = false;
-        error = cause.message;
-        user = null;
-      } else if (cause instanceof ApiError && cause.status === 404) {
-        updating = false;
-        error = cause.message;
-        roomUnavailable = true;
-        snapshot = null;
-      } else {
-        retry = setTimeout(() => void connect(), 2000);
-      }
-      return;
+  function connectionError(status: number | undefined, message: string) {
+    if (status !== 401 && status !== 404) return false;
+    updating = false;
+    error = message;
+    if (status === 401) user = null;
+    else {
+      roomUnavailable = true;
+      snapshot = null;
     }
-    if (disposed) return;
-    socket = new WebSocket(socketURL(code));
-    socket.onmessage = (event) => {
-      if (disposed) return;
+    return true;
+  }
+
+  function scheduleReconnect(minimumDelay = 0) {
+    if (disposed || roomClosed || roomUnavailable || updateRequired || !user || !navigator.onLine)
+      return;
+    retry.schedule(connect, minimumDelay);
+  }
+
+  function offline() {
+    retry.cancel();
+    connected = false;
+    socket?.close();
+  }
+
+  function online() {
+    retry.cancel();
+    connect();
+  }
+
+  function connect() {
+    if (
+      disposed ||
+      updateRequired ||
+      roomUnavailable ||
+      !user ||
+      !navigator.onLine ||
+      socket?.readyState === WebSocket.OPEN ||
+      socket?.readyState === WebSocket.CONNECTING
+    )
+      return;
+    retry.cancel();
+    const generation = ++connectionGeneration;
+    const url = new URL(socketURL(code));
+    url.searchParams.set('transport', '2');
+    const current = new WebSocket(url);
+    socket = current;
+    const stream = new MatchStream();
+    let receivedMessage = false;
+    let resyncPending = false;
+    let retryAfter = 0;
+    const active = () => !disposed && generation === connectionGeneration;
+    const resync = () => {
+      connected = false;
+      busy = false;
+      cpu.stop();
+      if (!resyncPending && current.readyState === WebSocket.OPEN) {
+        resyncPending = true;
+        current.send(JSON.stringify({ resync: true }));
+      }
+    };
+    current.onmessage = (event) => {
+      if (!active()) return;
+      receivedMessage = true;
       try {
         const payload = JSON.parse(event.data);
-        if (payload.type === 'snapshot') {
-          const incoming = payload.data as Snapshot;
+        if (payload.type === 'snapshot' || payload.type === 'game_update') {
+          const incoming = stream.receive(payload as SnapshotMessage | GameUpdateMessage);
+          if (!incoming) {
+            resync();
+            return;
+          }
+          if (resyncPending && payload.type !== 'snapshot') return;
+          resyncPending = false;
           if (incoming.state && !['1', '2'].includes(incoming.state.version)) {
             updating = false;
             updateRequired = true;
@@ -262,6 +305,7 @@
             socket?.close();
             return;
           }
+          if (!connected) error = '';
           updating = incoming.updating === true;
           if (updating) error = '';
           if (incoming.state?.phase !== 'match_over') stopPreloading ??= preloadDeck();
@@ -297,6 +341,7 @@
           now = receivedAt;
           offset = Date.parse(incoming.serverTime) - receivedAt;
           connected = true;
+          retry.connected();
           busy = false;
           cpu.update(updating ? undefined : (payload.cpu as CPUWork | undefined));
           if (leaving && (incoming.seat < 0 || incoming.state?.phase === 'match_over')) {
@@ -306,24 +351,44 @@
           roomClosed = true;
           void goto(resolve('/'));
         } else if (payload.type === 'error') {
-          error = payload.error;
+          // Keep the existing deployment notice through temporary admission
+          // failures while the server restarts, just like failed HTTP retries.
+          if (!updating || !(payload.status === 429 || payload.status >= 500))
+            error = payload.error;
           busy = false;
           leaving = false;
+          if (Number.isFinite(payload.retryAfterMs)) retryAfter = Math.max(0, payload.retryAfterMs);
+          if (connectionError(payload.status, payload.error)) current.close();
         }
       } catch {
         error = 'No pudimos leer el estado de la mesa.';
+        resync();
       }
     };
-    socket.onclose = () => {
+    current.onclose = () => {
+      if (!active()) return;
       cardMotion.cancel();
       cardSounds.stop();
       cpu.stop();
       connected = false;
       busy = false;
-      if (!disposed && !roomClosed && !updateRequired) retry = setTimeout(connect, 2000);
+      if (!receivedMessage && navigator.onLine && !roomClosed && !updateRequired) {
+        // Older servers reject a failed handshake before sending typed errors.
+        // Diagnose only that failure; healthy connections need no snapshot GET.
+        void api<Snapshot>(`/matches/${code}`)
+          .catch((cause) => {
+            if (!active()) return;
+            if (cause instanceof ApiError && connectionError(cause.status, cause.message)) return;
+            if (!updating)
+              error = cause instanceof Error ? cause.message : 'No pudimos conectar con la mesa.';
+          })
+          .finally(() => {
+            if (active()) scheduleReconnect(retryAfter);
+          });
+      } else scheduleReconnect(retryAfter);
     };
-    socket.onerror = () => {
-      connected = false;
+    current.onerror = () => {
+      if (active()) connected = false;
     };
   }
   onMount(() => {
@@ -352,7 +417,7 @@
       motionPreference.removeEventListener('change', stopMotion);
       cpu.stop();
       clearInterval(timer);
-      clearTimeout(retry);
+      retry.cancel();
       socket?.close();
     };
   });
@@ -471,6 +536,8 @@
 </script>
 
 <svelte:window
+  ononline={online}
+  onoffline={offline}
   onresize={() => {
     cardMotion.cancel();
     clearCardLabel();
