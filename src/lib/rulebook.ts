@@ -86,7 +86,8 @@ export const rulebook = [
     title: 'A ley, con ley y sin ley',
     paragraphs: [
       '«A ley» no confirma que tengas flor ni impide por sí solo que otro jugador cante envido. Por eso «A ley, envido» no puede combinarse con «Con mi flor» ni otra declaración que confirme flor. Si todavía nadie declaró flor, permite apostar sin renunciar a ella y evita el bloqueo de «A las flores no». El equipo que responde elige con ley o sin ley; esa elección se aplica por igual a ambos equipos.',
-      'Con ley, una flor válida compara el valor de sus tres cartas más 20. Sin ley, se usa el envido ordinario de la mejor pareja. Decir «Sin ley» al cantar o responder un envido quema la flor ordinaria de quien lo dice, incluso si añade «Con mi flor». También puedes rechazar con «Sin ley, no quiero». La receta sigue protegida.',
+      '«Con ley, envido», «Sin ley, envido» y «Sin ley, no quiero» requieren que alguien haya dicho «A ley» antes en esa mano o que se haya cantado «A ley, envido». La condición también se aplica a los CPU. «Sin ley, no quiero» solo permite rechazar un envido, no un truco ni una flor envidada.',
+      'Con ley, una flor válida compara el valor de sus tres cartas más 20. Sin ley, se usa el envido ordinario de la mejor pareja. Decir «Sin ley» al cantar o responder un envido quema la flor ordinaria de quien lo dice, incluso si añade «Con mi flor». La receta sigue protegida.',
       'La apuesta de ley tiene una prioridad especial: se paga primero el envido, después la flor y después el truco. Si ese envido alcanza el objetivo, termina la partida antes de sumar flores.',
     ],
   },

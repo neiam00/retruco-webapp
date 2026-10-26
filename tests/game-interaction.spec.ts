@@ -624,6 +624,58 @@ for (const viewport of [
   });
 }
 
+for (const viewport of [
+  { width: 1132, height: 786 },
+  { width: 390, height: 664 },
+  { width: 568, height: 320 },
+]) {
+  for (const players of [2, 4]) {
+    test(`cutting controls stay inside their panel at ${viewport.width}px with ${players} seats`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(viewport);
+      const snapshot = tableSnapshot(players, 0, false);
+      snapshot.state!.phase = 'cutting';
+      snapshot.state!.hand = [];
+      snapshot.state!.vira = undefined;
+      snapshot.state!.seats.forEach((seat) => (seat.plays = []));
+      snapshot.state!.legal = Array.from({ length: 39 }, (_, index) => ({
+        type: 'cut',
+        cut: index + 1,
+      }));
+      const sent: Command[] = [];
+      await showTable(page, snapshot, (command) => sent.push(command));
+      const panel = page.locator('.table-status');
+      const input = page.getByRole('spinbutton', { name: 'Punto de corte (1–39)' });
+      const submit = page.getByRole('button', { name: 'Partir el mazo', exact: true });
+      await expect(submit).toBeEnabled();
+      await page.evaluate(() => document.fonts.ready);
+      await page.screenshot({ path: testInfo.outputPath('cutting-panel.png') });
+      await expect(panel).toBeInViewport({ ratio: 1 });
+      const bounds = (await panel.boundingBox())!;
+      for (const control of [input, submit]) {
+        // WebKit rounds native number-input intersections by a fraction of a pixel.
+        await expect(control).toBeInViewport({ ratio: 0.999 });
+        const box = (await control.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+        expect(box.y).toBeGreaterThanOrEqual(bounds.y);
+        expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+        expect(box.y + box.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+      }
+      const description = (await panel
+        .getByText('Elige dónde cortar las 40 cartas.')
+        .boundingBox())!;
+      expect((await input.boundingBox())!.y).toBeGreaterThan(description.y + description.height);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+        viewport.height,
+      );
+      await input.fill('13');
+      await submit.click();
+      await expect.poll(() => sent).toEqual([{ type: 'cut', cut: 13 }]);
+    });
+  }
+}
+
 test('landscape cutting and spectator controls fit without page scrolling', async ({
   page,
 }, testInfo) => {

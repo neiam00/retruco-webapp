@@ -644,23 +644,38 @@
           {:else}
             <FeltTable {snapshot} {seconds} {myTurn} {cardsMoving} oninvite={copy} />
           {/if}
-          {#if game?.phase === 'cutting' && game.turn === snapshot.seat}
-            <div class="cut-controls">
-              <Label for="cut-point">Punto de corte (1–39)</Label><Input
-                id="cut-point"
-                type="number"
-                min={1}
-                max={39}
-                bind:value={cutPoint}
-              /><Button
-                disabled={!connected || busy || cutPoint < 1 || cutPoint > 39}
-                onclick={() => send({ type: 'cut', cut: cutPoint })}
-              >
-                Partir el mazo
-              </Button>
-            </div>
-          {/if}
         </div>
+
+        {#if game?.phase === 'cutting' && !snapshot.cpuPaused && !snapshot.updating}
+          <section class="table-status cutting-panel" aria-label="Corte del mazo">
+            <span class="cut-countdown" aria-label={seconds + ' segundos restantes'}>
+              {seconds}s
+            </span>
+            <span class="eyebrow">Antes de repartir</span>
+            <h2>
+              {game.turn === snapshot.seat
+                ? 'Te toca partir.'
+                : seatName(game.turn) + ' parte el mazo.'}
+            </h2>
+            <p>Elige dónde cortar las 40 cartas.</p>
+            {#if game.turn === snapshot.seat}
+              <div class="cut-controls">
+                <Label for="cut-point">Punto de corte (1–39)</Label><Input
+                  id="cut-point"
+                  type="number"
+                  min={1}
+                  max={39}
+                  bind:value={cutPoint}
+                /><Button
+                  disabled={!connected || busy || cutPoint < 1 || cutPoint > 39}
+                  onclick={() => send({ type: 'cut', cut: cutPoint })}
+                >
+                  Partir el mazo
+                </Button>
+              </div>
+            {/if}
+          </section>
+        {/if}
 
         {#if game}
           <section
@@ -1430,24 +1445,55 @@
     max-width: none;
     font-size: 12px;
   }
-  .cut-controls {
+  .cutting-panel {
     position: absolute;
-    top: 65%;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
+    transform: translate(-50%, -50%);
+    width: min(440px, calc(100% - 24px));
+    max-height: calc(100% - 16px);
+    overflow: auto;
+    padding: clamp(12px, 3dvh, 24px);
+    display: grid;
     gap: 12px;
+    text-align: center;
+    background: #142e26f2;
+    border: 1px solid #a5b5a62b;
+    border-radius: 20px;
+    box-shadow: 0 15px 70px #071a1640;
     z-index: 6;
   }
+  .cut-countdown {
+    color: #d8cb93;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cutting-panel h2 {
+    font-size: clamp(22px, 3.5dvh, 28px);
+    line-height: 1.2;
+  }
+  .cutting-panel p {
+    color: #a7bfaa;
+    font-size: 12px;
+  }
+  .cut-controls {
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
   .cut-controls :global(label) {
+    grid-column: 1 / -1;
+    text-align: left;
     font-size: 11px;
   }
   .cut-controls :global(input) {
-    width: 80px;
+    min-width: 0;
+    min-height: 44px;
   }
   .cut-controls :global(button) {
     white-space: nowrap;
+    min-height: 44px;
   }
   .entry-panel {
     position: relative;
@@ -1657,15 +1703,6 @@
       left: 12px;
       font-size: 8px;
       max-width: 100px;
-    }
-    .cut-controls {
-      top: 65%;
-      width: 280px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .cut-controls :global(button) {
-      width: 100%;
     }
   }
 

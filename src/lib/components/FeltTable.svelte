@@ -153,101 +153,101 @@
     </div>
   {/if}
 
-  <div
-    class={[
-      'table-status',
-      {
-        expanded: !game || (game.phase !== 'playing' && !paused),
-        paused: paused,
-        results: !paused && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
-        'waiting-for-cards':
-          !paused && cardsMoving && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
-      },
-    ]}
-  >
-    {#if game && !paused && (game.phase === 'cutting' || game.phase === 'hand_over')}
-      <span class="phase-countdown" aria-label={seconds + ' segundos restantes'}>{seconds}s</span>
-    {/if}
-    {#if !game}
-      <span class="status-eyebrow">La mesa está puesta</span>
-      <h1>
-        {missingPlayers === 1 ? 'Falta' : 'Faltan'}
-        {missingPlayers} para repartir.
-      </h1>
-      <p>Invita a tus panas. Aquí los esperamos.</p>
-      <Button onclick={oninvite}><Share2 size={16} />Invitar a mis amigos</Button>
-    {:else if paused}
-      <div class="turn-message" role="status">
-        <span class="turn-dot"></span>
-        <strong>Partida en pausa</strong>
-      </div>
-      <p>{snapshot.updating ? 'Actualización en curso.' : 'Esperando a los jugadores.'}</p>
-    {:else if game.phase === 'match_over'}
-      <span class="status-eyebrow">La partida tiene ganador</span>
-      <h1>{victoryLabel(game.winner, snapshot.seat)}</h1>
-      <p>{game.scores[0]} — {game.scores[1]}</p>
-      {#if game.envidoResults?.length}
-        <div class="envido-results" aria-label="Valores de envido">
-          {#each game.envidoResults as result (result.seat)}
-            <span>{seatName(result.seat)}: {result.eligible ? result.value : 'Flor inválida'}</span>
-          {/each}
-        </div>
+  {#if game?.phase !== 'cutting' || paused}
+    <div
+      class={[
+        'table-status',
+        {
+          expanded: !game || (game.phase !== 'playing' && !paused),
+          paused: paused,
+          results: !paused && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
+          'waiting-for-cards':
+            !paused && cardsMoving && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
+        },
+      ]}
+    >
+      {#if game && !paused && game.phase === 'hand_over'}
+        <span class="phase-countdown" aria-label={seconds + ' segundos restantes'}>{seconds}s</span>
       {/if}
-      <Button href={resolve('/')}>Volver a las mesas</Button>
-    {:else if game.phase === 'hand_over'}
-      <span class="status-eyebrow">Se cierra la mano</span>
-      <h2>La próxima ya viene.</h2>
-      {#if game.envidoResults?.length}
-        <div class="envido-results" aria-label="Valores de envido">
-          {#each game.envidoResults as result (result.seat)}
-            <span>{seatName(result.seat)}: {result.eligible ? result.value : 'Flor inválida'}</span>
-          {/each}
+      {#if !game}
+        <span class="status-eyebrow">La mesa está puesta</span>
+        <h1>
+          {missingPlayers === 1 ? 'Falta' : 'Faltan'}
+          {missingPlayers} para repartir.
+        </h1>
+        <p>Invita a tus panas. Aquí los esperamos.</p>
+        <Button onclick={oninvite}><Share2 size={16} />Invitar a mis amigos</Button>
+      {:else if paused}
+        <div class="turn-message" role="status">
+          <span class="turn-dot"></span>
+          <strong>Partida en pausa</strong>
         </div>
-      {/if}
-      {#each game.payouts as payout, i (i)}
-        <p>{teamLabel(payout.team, snapshot.seat)}: +{payout.points} de {payout.kind}</p>
-      {/each}
-    {:else if game.phase === 'cutting'}
-      <span class="status-eyebrow">Antes de repartir</span>
-      <h2>
-        {game.turn === snapshot.seat ? 'Te toca partir.' : seatName(game.turn) + ' parte el mazo.'}
-      </h2>
-      <p>Elige dónde cortar las 40 cartas.</p>
-    {:else}
-      <div class="turn-message">
-        <span class="turn-dot"></span>
-        {#if game.pending}
-          <strong title={cantoName(game.pending.kind)}>{cantoName(game.pending.kind)}</strong>
-          <span class="wager-value">
-            {game.pending.value === 100 ? 'Vale partida' : game.pending.value + ' piedras'}
-          </span>
-        {:else}
-          <strong title={myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}>
-            {myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}
-          </strong>
+        <p>{snapshot.updating ? 'Actualización en curso.' : 'Esperando a los jugadores.'}</p>
+      {:else if game.phase === 'match_over'}
+        <span class="status-eyebrow">La partida tiene ganador</span>
+        <h1>{victoryLabel(game.winner, snapshot.seat)}</h1>
+        <p>{game.scores[0]} — {game.scores[1]}</p>
+        {#if game.envidoResults?.length}
+          <div class="envido-results" aria-label="Valores de envido">
+            {#each game.envidoResults as result (result.seat)}
+              <span>
+                {seatName(result.seat)}: {result.eligible ? result.value : 'Flor inválida'}
+              </span>
+            {/each}
+          </div>
         {/if}
-        <span
-          class={['timer', { urgent: seconds <= 10 }]}
-          aria-label={seconds + ' segundos restantes'}
-        >
-          {seconds}s
-        </span>
-      </div>
-      {#if game.pending}
-        <p>
-          Responde: {teamLabel(1 - game.pending.caller, snapshot.seat)}{game.suspended
-            ? ' · Truco en espera'
-            : ''}
-        </p>
+        <Button href={resolve('/')}>Volver a las mesas</Button>
+      {:else if game.phase === 'hand_over'}
+        <span class="status-eyebrow">Se cierra la mano</span>
+        <h2>La próxima ya viene.</h2>
+        {#if game.envidoResults?.length}
+          <div class="envido-results" aria-label="Valores de envido">
+            {#each game.envidoResults as result (result.seat)}
+              <span>
+                {seatName(result.seat)}: {result.eligible ? result.value : 'Flor inválida'}
+              </span>
+            {/each}
+          </div>
+        {/if}
+        {#each game.payouts as payout, i (i)}
+          <p>{teamLabel(payout.team, snapshot.seat)}: +{payout.points} de {payout.kind}</p>
+        {/each}
       {:else}
-        <p>
-          {game.round + 1}.ª vuelta{game.mandatoryStack
-            ? ' · Todos juegan pegado'
-            : ' · Antihorario'}
-        </p>
+        <div class="turn-message">
+          <span class="turn-dot"></span>
+          {#if game.pending}
+            <strong title={cantoName(game.pending.kind)}>{cantoName(game.pending.kind)}</strong>
+            <span class="wager-value">
+              {game.pending.value === 100 ? 'Vale partida' : game.pending.value + ' piedras'}
+            </span>
+          {:else}
+            <strong title={myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}>
+              {myTurn ? 'Tu turno' : 'Juega ' + seatName(game.turn)}
+            </strong>
+          {/if}
+          <span
+            class={['timer', { urgent: seconds <= 10 }]}
+            aria-label={seconds + ' segundos restantes'}
+          >
+            {seconds}s
+          </span>
+        </div>
+        {#if game.pending}
+          <p>
+            Responde: {teamLabel(1 - game.pending.caller, snapshot.seat)}{game.suspended
+              ? ' · Truco en espera'
+              : ''}
+          </p>
+        {:else}
+          <p>
+            {game.round + 1}.ª vuelta{game.mandatoryStack
+              ? ' · Todos juegan pegado'
+              : ' · Antihorario'}
+          </p>
+        {/if}
       {/if}
-    {/if}
-  </div>
+    </div>
+  {/if}
 </section>
 
 <style>
