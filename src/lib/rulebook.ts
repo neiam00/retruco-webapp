@@ -65,18 +65,19 @@ export const rulebook = [
     title: 'Flor por derecho y declaraciones',
     paragraphs: [
       'Hay flor con tres cartas del mismo palo, o dos del mismo palo y perico o perica. Cada flor válida aporta 3 piedras al final de la mano. Dos flores válidas del mismo equipo aportan 6. Si ambos equipos llegan al objetivo con flores no disputadas, tiene prioridad el equipo de mano.',
-      'Con flor por derecho, debes elegir manualmente «Flor» al mostrar una carta, «Con mi flor…» al cantar o responder y «Presento flor» al mostrar la última carta. Para jugar las dos pegadas se dice «Flor flor». Omitir la declaración quema la flor ordinaria, aunque la hayas declarado correctamente antes. La interfaz permite esa omisión.',
+      'Con flor por derecho, elige manualmente una declaración de flor al jugar, cantar o responder. «Flor», «Presento flor», «Flor flor» y «Con mi flor…» conservan la flor en cualquier vuelta, incluso con la última carta o jugando pegado. Omitir la declaración quema la flor ordinaria, aunque la hayas declarado antes. La interfaz permite esa omisión.',
       'Si ambos compañeros tienen flor y se juega por derecho, el primero debe decir «A ley» con su primera carta; reemplaza «Flor» para esa carta. El segundo dice «Flor» al mostrar la suya. Sin ese «A ley», conserva la flor quien primero la declara; la otra se quema.',
-      'Sin flor por derecho, las flores permanecen válidas sin esas declaraciones. Las pérdidas por un concurso de flor y la renuncia al cantar envido ordinario sí se aplican.',
+      'Sin flor por derecho, las flores permanecen válidas sin esas declaraciones. Las pérdidas por un concurso de flor y la renuncia al cantar envido ordinario sin mencionar la flor o al decir «Sin ley» sí se aplican.',
     ],
   },
   {
     title: 'Flor frente a envido',
     paragraphs: [
-      'Cantar envido ordinario cancela la flor ordinaria de quien lo canta, no la de su compañero. Una flor ordinaria rival que siga válida bloquea ese envido con «A las flores no». Una flor quemada ya no lo bloquea. La receta tampoco lo bloquea.',
+      'Una vez que cualquier jugador declara flor, nadie puede iniciar envido ordinario ni envido a ley, con ley o sin ley, aunque la flor sea de su compañero o se queme después. Si también tienes flor ordinaria válida, puedes apostar con «Flor tengo y la mía envida» dentro de su plazo y condiciones.',
+      'Si todavía nadie declaró flor, cantar envido ordinario sin mencionarla cancela la flor ordinaria de quien lo canta, no la de su compañero. «Con mi flor, envido» la conserva. Una flor ordinaria rival que siga válida puede bloquear ese envido con «A las flores no». Una flor quemada o una receta no permiten esa respuesta.',
       '«A las flores no» cierra el envido ordinario por toda la mano, aunque después se queme la flor que lo bloqueó. Todavía puede iniciarse una flor envidada si se cumplen sus condiciones. En cambio, un envido ya aceptado impide iniciar otra apuesta de flor.',
-      'Con flores rivales y alguna ya declarada, antes de tu primera carta puedes cantar «Flor tengo y la mía envida». Se apuesta con las mismas subidas y límites del envido. Para conservar tu flor se responde «Con flor, quiero…». Retirarse con «Con mi flor me achico» invalida las flores ordinarias de todo el equipo.',
-      'Decir «Con mi flor, truco» o «Con mi flor, quiero» también cuenta como haber declarado esa flor para permitir una flor envidada posterior.',
+      'Con flores rivales y alguna ya declarada, antes de tu primera carta puedes cantar «Flor tengo y la mía envida». Se apuesta con las mismas subidas y límites del envido. Para conservar tu flor se responde «Con flor, quiero…». «Con mi flor me achico» rechaza el envido y quema solo la flor de quien lo dice; la de su compañero se conserva.',
+      'Todo canto que mencione flor la conserva y cuenta como declaración, incluso al aceptar, subir o rechazar un canto. Las excepciones son «Sin ley» en envido y «Con mi flor me achico» al rechazar una flor envidada.',
       'Cada equipo compara su mejor flor válida: 20 más los valores de las tres cartas. Gana el envido apostado y conserva sus flores; las flores ordinarias del equipo perdedor quedan inválidas. Una receta nunca pierde sus 3 piedras de flor. Empates se resuelven por el orden desde mano.',
       'Si se rechaza el concurso inicial, el equipo que lo cantó cobra 1 de envido, además de 3 por cada flor válida. Si una flor apostada se quema más tarde, se usa la mejor flor válida que quede en su equipo. Si solo queda flor en un equipo, ese equipo gana; si al finalizar no queda ninguna válida, no se paga el envido del concurso.',
     ],
@@ -84,8 +85,8 @@ export const rulebook = [
   {
     title: 'A ley, con ley y sin ley',
     paragraphs: [
-      '«A ley» no confirma que tengas flor. «A ley, envido» permite apostar sin renunciar a la flor y evita el bloqueo de «A las flores no». El equipo que responde elige con ley o sin ley; esa elección se aplica por igual a ambos equipos.',
-      'Con ley, una flor válida compara el valor de sus tres cartas más 20. Sin ley, se usa el envido ordinario de la mejor pareja. Ante un «A ley», el rival también puede cantar «Con ley, envido» o «Sin ley, envido».',
+      '«A ley» no confirma que tengas flor ni impide por sí solo que otro jugador cante envido. Por eso «A ley, envido» no puede combinarse con «Con mi flor» ni otra declaración que confirme flor. Si todavía nadie declaró flor, permite apostar sin renunciar a ella y evita el bloqueo de «A las flores no». El equipo que responde elige con ley o sin ley; esa elección se aplica por igual a ambos equipos.',
+      'Con ley, una flor válida compara el valor de sus tres cartas más 20. Sin ley, se usa el envido ordinario de la mejor pareja. Decir «Sin ley» al cantar o responder un envido quema la flor ordinaria de quien lo dice, incluso si añade «Con mi flor». También puedes rechazar con «Sin ley, no quiero». La receta sigue protegida.',
       'La apuesta de ley tiene una prioridad especial: se paga primero el envido, después la flor y después el truco. Si ese envido alcanza el objetivo, termina la partida antes de sumar flores.',
     ],
   },
@@ -108,7 +109,7 @@ export const rulebook = [
       'En pegado voluntario, tu propia carta de abajo debe ganar la segunda para que la de arriba siga válida. Si pierde, se quema la de arriba aunque tu compañero haya ganado. La excepción es que ambas cartas de tu equipo emparden arriba de las dos rivales: entonces tu tercera sigue válida, aunque la segunda sea emparde.',
       'Si solo una persona juega pegado y la segunda está pendiente, abre la tercera quien está a su derecha. Si lo hacen varias, abre la primera persona que aún tenga carta en el orden desde mano. Se omite a quienes ya jugaron las dos. El castigo de quemar la de arriba no se aplica al pegado obligatorio.',
       'En la segunda o tercera vuelta puedes elegir «Quemar carta» y seleccionar una carta para pasar tu turno. Se juega boca abajo, queda inválida y ya no puedes volver a usarla. En pegado obligatorio, «Quemar las dos» descarta ambas cartas restantes. Nunca se puede quemar voluntariamente en la primera vuelta.',
-      'Quemar voluntariamente exige las mismas declaraciones de flor que jugar: «Flor», «Presento flor» para la última carta o «Flor flor» al quemar las dos en pegado obligatorio. La receta sigue protegida y el valor original de envido no cambia.',
+      'Quemar voluntariamente exige las mismas declaraciones de flor que jugar: «Flor», «Presento flor», «Flor flor» o «Con mi flor…» conservan la flor, también al quemar las dos en pegado obligatorio. La receta sigue protegida y el valor original de envido no cambia.',
     ],
   },
   {

@@ -24,6 +24,7 @@
   } = $props();
 
   let game = $derived(snapshot.state);
+  let paused = $derived(snapshot.cpuPaused || snapshot.updating);
   let missingPlayers = $derived(
     snapshot.config.players - snapshot.seats.filter((seat) => seat.id).length,
   );
@@ -156,18 +157,15 @@
     class={[
       'table-status',
       {
-        expanded: !game || (game.phase !== 'playing' && !snapshot.cpuPaused),
-        paused: snapshot.cpuPaused,
-        results:
-          !snapshot.cpuPaused && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
+        expanded: !game || (game.phase !== 'playing' && !paused),
+        paused: paused,
+        results: !paused && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
         'waiting-for-cards':
-          !snapshot.cpuPaused &&
-          cardsMoving &&
-          (game?.phase === 'hand_over' || game?.phase === 'match_over'),
+          !paused && cardsMoving && (game?.phase === 'hand_over' || game?.phase === 'match_over'),
       },
     ]}
   >
-    {#if game && !snapshot.cpuPaused && (game.phase === 'cutting' || game.phase === 'hand_over')}
+    {#if game && !paused && (game.phase === 'cutting' || game.phase === 'hand_over')}
       <span class="phase-countdown" aria-label={seconds + ' segundos restantes'}>{seconds}s</span>
     {/if}
     {#if !game}
@@ -178,12 +176,12 @@
       </h1>
       <p>Invita a tus panas. Aquí los esperamos.</p>
       <Button onclick={oninvite}><Share2 size={16} />Invitar a mis amigos</Button>
-    {:else if snapshot.cpuPaused}
+    {:else if paused}
       <div class="turn-message" role="status">
         <span class="turn-dot"></span>
         <strong>Partida en pausa</strong>
       </div>
-      <p>Esperando a los jugadores.</p>
+      <p>{snapshot.updating ? 'Actualización en curso.' : 'Esperando a los jugadores.'}</p>
     {:else if game.phase === 'match_over'}
       <span class="status-eyebrow">La partida tiene ganador</span>
       <h1>{victoryLabel(game.winner, snapshot.seat)}</h1>
@@ -712,7 +710,7 @@
      stable. TableViewport fits this stage into the space above the controls. */
   .felt-table.active {
     display: block;
-    height: 520px;
+    height: clamp(420px, 100cqh, 520px);
     padding: 0;
   }
   .active .seat {
@@ -725,7 +723,7 @@
   }
   .active .seat-left,
   .active .seat-right {
-    top: 245px;
+    top: 47%;
   }
   .active .seat-left {
     left: 20px;
@@ -746,11 +744,11 @@
   }
   .active .play-zone {
     position: absolute;
-    top: 200px;
+    top: max(190px, 38%);
     left: 50%;
     transform: translateX(-50%);
     width: 460px;
-    height: 270px;
+    height: 52%;
   }
   .active .played-card :global(img) {
     width: 56px;
@@ -794,6 +792,17 @@
     left: 50%;
     transform: translate(-50%, -50%);
     margin: 0;
+  }
+  @container (min-width: 901px) and (max-height: 519px) {
+    .active .seat-bottom {
+      display: none;
+    }
+    .active .dealer-bottom {
+      right: calc(50% - 390px);
+    }
+    .active .dealer-left {
+      left: calc(50% - 390px);
+    }
   }
   @container (max-width: 900px) {
     .felt-table.active {

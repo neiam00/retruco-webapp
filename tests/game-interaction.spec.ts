@@ -3,6 +3,171 @@ import { showTable, tableSnapshot } from './fixtures/table.js';
 import type { Command } from '../src/lib/protocol.js';
 import { expectClearTableCards } from './table-layout.js';
 
+test('card hover labels show suit and value without exposing backs or blocking plays', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const snapshot = tableSnapshot(4, 0, false);
+  snapshot.state!.legal = [{ type: 'play', card: 1 }];
+  const sent: Command[] = [];
+  const update = await showTable(page, snapshot, (command) => sent.push(command));
+  const label = page.getByRole('tooltip');
+  const usedCard = page.locator('[data-hand-card="0"] img');
+  await usedCard.hover();
+  await expect(label).toHaveText('1 de espadas');
+  const cardBounds = (await usedCard.boundingBox())!;
+  const labelBounds = (await label.boundingBox())!;
+  expect(labelBounds.y).toBeGreaterThanOrEqual(cardBounds.y);
+  expect(labelBounds.y).toBeLessThan(cardBounds.y + cardBounds.height);
+  expect(labelBounds.x + labelBounds.width).toBeGreaterThan(cardBounds.x);
+  expect(labelBounds.x).toBeLessThan(cardBounds.x + cardBounds.width);
+  await page.mouse.click(cardBounds.x + cardBounds.width / 2, cardBounds.y + cardBounds.height / 2);
+  expect(sent).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('card-hover-label.png') });
+  await page.locator('.vira img').hover();
+  await expect(label).toHaveText('12 de copas');
+  await page.locator('[data-deck] img').hover();
+  await expect(label).toHaveCount(0);
+  await page.locator('[data-hand-card="1"] img').hover();
+  await expect(label).toHaveText('2 de espadas');
+  await page.locator('[data-hand-card="1"]').click();
+  await expect.poll(() => sent).toEqual([{ type: 'play', card: 1, declaration: '' }]);
+  const otherTurn = structuredClone(snapshot);
+  otherTurn.state!.revision++;
+  otherTurn.state!.turn = 1;
+  otherTurn.state!.legal = [];
+  update(otherTurn);
+  const unavailable = page.locator('[data-hand-card="2"]');
+  await expect(unavailable).toBeDisabled();
+  await unavailable.locator('img').hover();
+  await expect(label).toHaveText('3 de espadas');
+  const unavailableBounds = (await unavailable.boundingBox())!;
+  await page.mouse.click(
+    unavailableBounds.x + unavailableBounds.width / 2,
+    unavailableBounds.y + unavailableBounds.height / 2,
+  );
+  expect(sent).toHaveLength(1);
+});
+
+test('card hover labels can be disabled and the preference survives reload', async ({ page }) => {
+  await showTable(page, tableSnapshot(4, 0, false));
+  const setting = page.getByRole('checkbox', {
+    name: 'Mostrar valor y palo al pasar el cursor',
+    exact: true,
+  });
+  await page.getByRole('button', { name: 'Detalles de la partida', exact: true }).click();
+  await expect(setting).toBeChecked();
+  await setting.uncheck();
+  await page
+    .getByRole('complementary', { name: 'Detalles de la partida' })
+    .getByRole('button', { name: 'Cerrar detalles', exact: true })
+    .click();
+  await page.locator('.vira img').hover();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('button', { name: 'Detalles de la partida', exact: true }).click();
+  await expect(setting).not.toBeChecked();
+  await setting.check();
+  await page
+    .getByRole('complementary', { name: 'Detalles de la partida' })
+    .getByRole('button', { name: 'Cerrar detalles', exact: true })
+    .click();
+  await page.locator('.vira img').hover();
+  await expect(page.getByRole('tooltip')).toHaveText('12 de copas');
+});
+
+for (const viewport of [
+  { width: 2048, height: 1048 },
+  { width: 1280, height: 650 },
+  { width: 390, height: 664 },
+  { width: 844, height: 390 },
+]) {
+  for (const players of [2, 4]) {
+    for (const spectator of [false, true]) {
+      test(`phase changes keep the table size at ${viewport.width}px with ${players} seats as ${spectator ? 'spectator' : 'player'}`, async ({
+        page,
+      }, testInfo) => {
+        await page.setViewportSize(viewport);
+        const playing = tableSnapshot(players, 0, spectator);
+        playing.state!.round = 0;
+        playing.state!.hand = tableSnapshot(players, 0, false).state!.hand;
+        playing.state!.holding = { envido: 6, flor: 0, receta: false };
+        playing.state!.legal = spectator ? [] : [{ type: 'play', card: 1 }];
+        const cutting = structuredClone(playing);
+        cutting.state!.phase = 'cutting';
+        cutting.state!.hand = [];
+        cutting.state!.holding = undefined;
+        cutting.state!.vira = undefined;
+        cutting.state!.legal = spectator ? [] : [{ type: 'cut', cut: 20 }];
+        const update = await showTable(page, cutting);
+        await expect(page.locator('.table-status')).toContainText('Antes de repartir');
+        await page.evaluate(() => document.fonts.ready);
+        const measure = () =>
+          page.evaluate(() => {
+            const table = document.querySelector('.felt-table')!.getBoundingClientRect();
+            const avatar = document.querySelector('.seat-top .avatar')!.getBoundingClientRect();
+            return {
+              width: table.width,
+              height: table.height,
+              top: table.top,
+              avatar: avatar.width,
+            };
+          });
+        const original = await measure();
+        const results = structuredClone(playing);
+        results.state!.phase = 'hand_over';
+        const nextCut = structuredClone(cutting);
+        nextCut.state!.handNumber++;
+        for (const [index, phase] of [playing, results, nextCut].entries()) {
+          phase.state!.revision = cutting.state!.revision + index + 1;
+          update(phase);
+          await expect(page.locator('.table-status')).toContainText(
+            phase.state!.phase === 'playing'
+              ? '1.ª vuelta'
+              : phase.state!.phase === 'hand_over'
+                ? 'La próxima ya viene.'
+                : 'Antes de repartir',
+          );
+          await expect
+            .poll(async () => {
+              const current = await measure();
+              return Math.max(
+                ...Object.keys(original).map((key) =>
+                  Math.abs(
+                    current[key as keyof typeof current] - original[key as keyof typeof original],
+                  ),
+                ),
+              );
+            })
+            .toBeLessThan(1);
+          if (phase.state!.phase === 'playing') {
+            await expect(page.locator('[data-hand-card="2"] img')).toBeVisible();
+            const availableWidth = await page
+              .locator('.table-viewport')
+              .evaluate((element) => element.clientWidth);
+            expect((await measure()).width).toBeGreaterThan(availableWidth * 0.95);
+            await expectClearTableCards(page);
+            if (viewport.width === 1280 && players === 2 && !spectator) {
+              await page.setViewportSize({ width: 1280, height: 900 });
+              await expect
+                .poll(async () => (await measure()).avatar)
+                .toBeGreaterThan(original.avatar + 0.5);
+              await page.setViewportSize(viewport);
+              await expect
+                .poll(async () => Math.abs((await measure()).avatar - original.avatar))
+                .toBeLessThan(0.5);
+            }
+            await page.screenshot({ path: testInfo.outputPath('playing-size.png') });
+          }
+          expect(
+            await page.evaluate(() => document.documentElement.scrollHeight),
+          ).toBeLessThanOrEqual(viewport.height);
+        }
+      });
+    }
+  }
+}
+
 for (const viewport of [
   { width: 393, height: 659 },
   { width: 1280, height: 800 },
@@ -109,7 +274,7 @@ for (const viewport of [
   });
 }
 
-test('Con mi flor disables ley calls only until the declaration changes', async ({ page }) => {
+test('Con mi flor blocks A ley until the declaration changes', async ({ page }) => {
   const snapshot = tableSnapshot(4, 0, false);
   snapshot.state!.round = 0;
   snapshot.state!.legal = ['', 'con_mi_flor'].flatMap((declaration) => [
@@ -117,19 +282,118 @@ test('Con mi flor disables ley calls only until the declaration changes', async 
     { type: 'call', kind: 'envido', declaration },
     { type: 'call', kind: 'ley_envido', declaration },
   ]);
-  await showTable(page, snapshot);
+  const sent: Command[] = [];
+  await showTable(page, snapshot, (command) => sent.push(command));
   await page.getByRole('button', { name: 'Decir…', exact: true }).click();
   await page.getByRole('button', { name: 'Con mi flor…', exact: true }).click();
   await page.getByRole('button', { name: 'Más cantos', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Con mi flor, a ley, envido', exact: true }),
   ).toBeDisabled();
+  expect(sent).toEqual([]);
   await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
   await page.getByRole('button', { name: 'Con mi flor…', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'A ley', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Sin declaración', exact: true }).click();
   await page.getByRole('button', { name: 'Más cantos', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'A ley, envido', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'A ley, envido', exact: true }).click();
+  await expect.poll(() => sent).toEqual([{ type: 'call', kind: 'ley_envido', declaration: '' }]);
+});
+
+for (const variant of [
+  { name: 'older server', declarations: ['', 'con_mi_flor'] },
+  {
+    name: 'current server',
+    declarations: ['', 'flor', 'presento_flor', 'flor_flor', 'con_mi_flor'],
+  },
+]) {
+  test(`Flor keeps one A las flores no reply available from the ${variant.name}`, async ({
+    page,
+  }) => {
+    const snapshot = tableSnapshot(4, 0, false);
+    snapshot.state!.round = 0;
+    snapshot.state!.florValid = true;
+    snapshot.state!.holding = { envido: 33, flor: 38, receta: false };
+    snapshot.state!.pending = { kind: 'envido', caller: 1, value: 2, previous: 1, terminal: false };
+    snapshot.state!.legal = variant.declarations.map((declaration) => ({
+      type: 'respond',
+      kind: 'flowers_no',
+      declaration,
+    }));
+    const sent: Command[] = [];
+    await showTable(page, snapshot, (command) => sent.push(command));
+    await page.getByRole('button', { name: 'Decir…', exact: true }).click();
+    await page.getByRole('button', { name: 'Flor', exact: true }).click();
+    const reply = page.getByRole('button', { name: 'A las flores no', exact: true });
+    await expect(reply).toHaveCount(1);
+    await expect(reply).toBeEnabled();
+    await reply.click();
+    await expect
+      .poll(() => sent)
+      .toEqual([{ type: 'respond', kind: 'flowers_no', declaration: '' }]);
+  });
+}
+
+test('an incompatible update stops reconnecting and offers a working reload', async ({ page }) => {
+  await page.clock.install();
+  const snapshot = tableSnapshot(4, 0, false);
+  snapshot.state!.version = 'future-version';
+  let connections = 0;
+  page.on('websocket', () => connections++);
+  await showTable(page, snapshot);
+  await expect(page.getByRole('alert')).toContainText('Actualiza la página');
+  const reload = page.getByRole('button', { name: 'Actualizar juego', exact: true });
+  await expect(reload).toBeVisible();
+  await page.clock.fastForward(6500);
+  expect(connections).toBe(1);
+  snapshot.state!.version = '1';
+  await reload.click();
+  await expect(page.locator('.felt-table')).toBeVisible();
+  await expect(reload).toHaveCount(0);
+});
+
+test('deployment notice survives downtime and clears after automatic reconnection', async ({
+  page,
+}, testInfo) => {
+  await page.clock.install();
+  const initial = tableSnapshot(4, 0, false);
+  initial.state!.legal = [
+    { type: 'play', card: 1 },
+    { type: 'call', kind: 'truco', amount: 3 },
+  ];
+  const update = await showTable(page, initial);
+  const card = page.locator('[data-hand-card="1"]');
+  await expect(card).toBeEnabled();
+  const paused = structuredClone(initial);
+  paused.updating = true;
+  paused.state!.legal = [];
+  update(paused);
+  const notice = page.getByRole('status').filter({ hasText: 'Estamos actualizando el juego.' });
+  await expect(notice).toContainText('Te reconectaremos automáticamente');
+  await expect(notice).toBeInViewport({ ratio: 1 });
+  await expect(card).toBeDisabled();
+  await expect(page.getByRole('status').filter({ hasText: 'Partida en pausa' })).toBeVisible();
+  await expect(page.getByLabel(/segundos restantes/)).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('deployment-notice.png') });
+  let unavailable = true;
+  let attempts = 0;
+  await page.route(`**/api/matches/${initial.code}`, async (route) => {
+    attempts++;
+    await route.fulfill(
+      unavailable ? { status: 503, json: { error: 'Deployment maintenance' } } : { json: paused },
+    );
+  });
+  await update.disconnect();
+  await page.clock.fastForward(2500);
+  await expect.poll(() => attempts).toBeGreaterThan(0);
+  await expect(notice).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  unavailable = false;
+  paused.updating = false;
+  paused.state!.legal = initial.state!.legal;
+  await page.clock.fastForward(2500);
+  await expect(notice).toHaveCount(0);
+  await expect(card).toBeEnabled();
+  await expect(page.locator('.felt-table')).toBeVisible();
 });
 
 test('card hover keeps its hit area still, even after repeated pointer sweeps', async ({
@@ -242,7 +506,7 @@ test('secondary raises remain reachable and send the selected command', async ({
   await expect(page.getByRole('region', { name: 'Historial de cantos' })).toHaveCount(0);
 });
 
-test('both ley acceptance options remain primary replies', async ({ page }) => {
+test('ley acceptance and Sin ley refusal options remain primary replies', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   const snapshot = tableSnapshot(4, 0, false);
   snapshot.state!.pending = {
@@ -256,9 +520,10 @@ test('both ley acceptance options remain primary replies', async ({ page }) => {
     { type: 'respond', kind: 'accept', mode: 'con_ley' },
     { type: 'respond', kind: 'accept', mode: 'sin_ley' },
     { type: 'respond', kind: 'decline' },
+    { type: 'respond', kind: 'decline', mode: 'sin_ley' },
   ];
   await showTable(page, snapshot);
-  for (const name of ['Con ley, quiero', 'Sin ley, quiero', 'No quiero']) {
+  for (const name of ['Con ley, quiero', 'Sin ley, quiero', 'No quiero', 'Sin ley, no quiero']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
   }
 });

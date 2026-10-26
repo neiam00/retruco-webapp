@@ -76,6 +76,7 @@ export async function showTable(
 ) {
   let snapshot = initial;
   let sendSnapshot: ((value: Snapshot) => void) | undefined;
+  let closeSocket: (() => Promise<void>) | undefined;
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/session') {
@@ -87,6 +88,7 @@ export async function showTable(
     }
   });
   await page.routeWebSocket(`**/api/matches/${snapshot.code}/ws`, (socket) => {
+    closeSocket = () => socket.close({ code: 1012, reason: 'Service restart' });
     sendSnapshot = (value) => socket.send(JSON.stringify({ type: 'snapshot', data: value }));
     sendSnapshot(snapshot);
     socket.onMessage((message) => {
@@ -95,8 +97,15 @@ export async function showTable(
     });
   });
   await page.goto(`/mesa/${snapshot.code}`);
-  return (next: Snapshot) => {
-    snapshot = next;
-    sendSnapshot?.(snapshot);
-  };
+  return Object.assign(
+    (next: Snapshot) => {
+      snapshot = next;
+      sendSnapshot?.(snapshot);
+    },
+    {
+      disconnect: async () => {
+        await closeSocket?.();
+      },
+    },
+  );
 }

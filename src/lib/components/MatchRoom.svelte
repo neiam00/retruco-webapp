@@ -4,6 +4,11 @@
   import { preloadDeck } from '#lib/card-preload.js';
   import { CardSounds } from '#lib/card-sounds.js';
   import {
+    CARD_LABEL_STORAGE_KEY,
+    loadCardLabels,
+    saveCardLabels,
+  } from '#lib/card-label-settings.js';
+  import {
     CARD_SOUND_STORAGE_KEY,
     loadCardSoundsMuted,
     saveCardSoundsMuted,
@@ -70,6 +75,8 @@
   let leaving = $state(false);
   let roomClosed = false;
   let roomUnavailable = $state(false);
+  let updateRequired = $state(false);
+  let updating = $state(false);
   let declaration = $state('');
   let bottom = $state<number | null>(null);
   let top = $state<number | null>(null);
@@ -90,6 +97,41 @@
   });
   const cardSounds = new CardSounds();
   let cardsMuted = $state(false);
+  let cardLabelsEnabled = $state(true);
+  let hoveredCard = $state.raw<{
+    element: HTMLImageElement;
+    name: string;
+    left: number;
+    top: number;
+  } | null>(null);
+
+  function clearCardLabel() {
+    hoveredCard = null;
+  }
+
+  function showCardLabel(event: PointerEvent) {
+    const element =
+      event.target instanceof Element
+        ? event.target.closest<HTMLImageElement>('img[data-card-name]')
+        : null;
+    if (!cardLabelsEnabled || event.pointerType !== 'mouse' || !element) {
+      clearCardLabel();
+      return;
+    }
+    const bounds = element.getBoundingClientRect();
+    hoveredCard = {
+      element,
+      name: element.dataset.cardName!,
+      left: Math.max(72, Math.min(window.innerWidth - 72, bounds.left + bounds.width / 2)),
+      top: Math.max(8, bounds.top + 8),
+    };
+  }
+
+  function toggleCardLabels(enabled: boolean) {
+    cardLabelsEnabled = enabled;
+    saveCardLabels(enabled);
+    clearCardLabel();
+  }
 
   function toggleCardSounds() {
     cardsMuted = !cardsMuted;
@@ -98,10 +140,15 @@
     if (!cardsMuted) cardSounds.unlock();
   }
 
-  function syncCardSounds(event: StorageEvent) {
-    if (event.key !== CARD_SOUND_STORAGE_KEY && event.key !== null) return;
-    cardsMuted = loadCardSoundsMuted();
-    cardSounds.setMuted(cardsMuted);
+  function syncCardSettings(event: StorageEvent) {
+    if (event.key === CARD_SOUND_STORAGE_KEY || event.key === null) {
+      cardsMuted = loadCardSoundsMuted();
+      cardSounds.setMuted(cardsMuted);
+    }
+    if (event.key === CARD_LABEL_STORAGE_KEY || event.key === null) {
+      cardLabelsEnabled = loadCardLabels();
+      clearCardLabel();
+    }
   }
   const cpu = new CPUController(
     (seat, revision, command) => {
@@ -123,6 +170,7 @@
   let spectator = $derived((snapshot?.seat ?? -1) < 0);
   let myTurn = $derived(
     connected &&
+      !updating &&
       !spectator &&
       game?.turn === snapshot?.seat &&
       game?.phase === 'playing' &&
@@ -141,11 +189,18 @@
       (command) => command.type === 'call' && (command.declaration ?? '') === declaration,
     ) ?? [],
   );
+  // This reply declares flor itself. Use one legal variant regardless of the
+  // selector, including when older servers only offer an undecorated reply.
+  let florBlockAction = $derived(
+    game?.legal.find((command) => command.type === 'respond' && command.kind === 'flowers_no'),
+  );
   let responseActions = $derived(
     game?.legal.filter(
       (command) =>
         command.type === 'respond' &&
-        (game.pending?.kind === 'privo' || (command.declaration ?? '') === declaration) &&
+        (command.kind === 'flowers_no'
+          ? command === florBlockAction
+          : game.pending?.kind === 'privo' || (command.declaration ?? '') === declaration) &&
         (command.kind !== 'raise' || command.amount === raise || game?.pending?.kind === 'truco'),
     ) ?? [],
   );
@@ -168,7 +223,7 @@
   );
 
   async function connect() {
-    if (disposed || !user) return;
+    if (disposed || updateRequired || !user) return;
 
     // Check HTTP status before opening the socket so missing tables and expired
     // sessions are actionable errors rather than an endless reconnect screen.
@@ -176,10 +231,15 @@
       await api<Snapshot>(`/matches/${code}`);
     } catch (cause) {
       if (disposed) return;
-      error = cause instanceof Error ? cause.message : 'No pudimos conectar con la mesa.';
+      if (!updating)
+        error = cause instanceof Error ? cause.message : 'No pudimos conectar con la mesa.';
       if (cause instanceof ApiError && cause.status === 401) {
+        updating = false;
+        error = cause.message;
         user = null;
       } else if (cause instanceof ApiError && cause.status === 404) {
+        updating = false;
+        error = cause.message;
         roomUnavailable = true;
         snapshot = null;
       } else {
@@ -196,12 +256,17 @@
         if (payload.type === 'snapshot') {
           const incoming = payload.data as Snapshot;
           if (incoming.state && !['1', '2'].includes(incoming.state.version)) {
+            updating = false;
+            updateRequired = true;
             error = 'Actualiza la página para usar la nueva versión del juego.';
             socket?.close();
             return;
           }
+          updating = incoming.updating === true;
+          if (updating) error = '';
           if (incoming.state?.phase !== 'match_over') stopPreloading ??= preloadDeck();
           if (incoming.state?.revision !== snapshot?.state?.revision) {
+            clearCardLabel();
             bottom = null;
             top = null;
             stackMode = false;
@@ -233,7 +298,7 @@
           offset = Date.parse(incoming.serverTime) - receivedAt;
           connected = true;
           busy = false;
-          cpu.update(payload.cpu as CPUWork | undefined);
+          cpu.update(updating ? undefined : (payload.cpu as CPUWork | undefined));
           if (leaving && (incoming.seat < 0 || incoming.state?.phase === 'match_over')) {
             void goto(resolve('/'));
           }
@@ -255,13 +320,14 @@
       cpu.stop();
       connected = false;
       busy = false;
-      if (!disposed && !roomClosed) retry = setTimeout(connect, 2000);
+      if (!disposed && !roomClosed && !updateRequired) retry = setTimeout(connect, 2000);
     };
     socket.onerror = () => {
       connected = false;
     };
   }
   onMount(() => {
+    cardLabelsEnabled = loadCardLabels();
     cardsMuted = loadCardSoundsMuted();
     cardSounds.setMuted(cardsMuted);
     const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
@@ -325,7 +391,7 @@
     }
   }
   function send(command: Command) {
-    if (!connected || busy || !socket) return;
+    if (!connected || busy || !socket || (updating && command.type !== 'leave')) return;
     error = '';
     busy = true;
     socket.send(
@@ -380,7 +446,15 @@
     return [command.type, command.kind, command.amount, command.mode].join(':');
   }
   function cantoDisabled(command: Command) {
-    return !connected || busy || (declaration === 'con_mi_flor' && command.kind === 'ley_envido');
+    return (
+      !connected ||
+      updating ||
+      busy ||
+      (declaration !== '' &&
+        declaration !== 'a_ley' &&
+        command.kind === 'ley_envido' &&
+        !command.mode)
+    );
   }
   function seatName(seat: number) {
     return snapshot?.seats[seat]?.name || 'Esperando…';
@@ -397,16 +471,29 @@
 </script>
 
 <svelte:window
-  onresize={() => cardMotion.cancel()}
+  onresize={() => {
+    cardMotion.cancel();
+    clearCardLabel();
+  }}
+  onpointermove={showCardLabel}
+  onpointerout={(event) => {
+    if (event.target === hoveredCard?.element) clearCardLabel();
+  }}
+  onblur={clearCardLabel}
+  onscroll={clearCardLabel}
   onpointerup={() => cardSounds.unlock()}
   onkeydown={(event) => {
     cardSounds.unlock();
-    if (event.key === 'Escape') detailsOpen = false;
+    if (event.key === 'Escape') {
+      detailsOpen = false;
+      clearCardLabel();
+    }
   }}
-  onstorage={syncCardSounds}
+  onstorage={syncCardSettings}
 />
 <svelte:document
   onvisibilitychange={() => {
+    clearCardLabel();
     cardMotion.cancel();
     if (document.hidden) cardSounds.stop();
   }}
@@ -451,8 +538,20 @@
     {#key error}
       <div class="error match-error" role="alert" tabindex="-1" {@attach focusAlert}>
         {error}
+        {#if updateRequired}
+          <Button onclick={() => window.location.reload()}>Actualizar juego</Button>
+        {/if}
       </div>
     {/key}
+  {/if}
+
+  {#if updating}
+    <div class="update-notice" role="status" aria-live="polite">
+      <strong>Estamos actualizando el juego.</strong>
+      <p>
+        Tu partida está guardada. Te reconectaremos automáticamente cuando termine la actualización.
+      </p>
+    </div>
   {/if}
 
   {#if !ready}
@@ -563,8 +662,13 @@
           {/if}
         </div>
 
-        {#if game && game.phase !== 'cutting'}
-          <section class="hand-area" aria-label="Tu mano">
+        {#if game}
+          <section
+            class={['hand-area', { undealt: game.phase === 'cutting', spectator }]}
+            inert={game.phase === 'cutting'}
+            aria-hidden={game.phase === 'cutting'}
+            aria-label="Tu mano"
+          >
             <PrivoSummary {game} viewerSeat={snapshot.seat} />
             <div class="row spread hand-label">
               <div>
@@ -638,8 +742,7 @@
                         <Button
                           variant={declaration === option.value ? 'secondary' : 'ghost'}
                           aria-pressed={declaration === option.value}
-                          disabled={option.value === 'a_ley' &&
-                            (game.round !== 0 || declaration === 'con_mi_flor')}
+                          disabled={option.value === 'a_ley' && game.round !== 0}
                           onclick={() => {
                             declaration = option.value;
                             declarationOpen = false;
@@ -842,6 +945,14 @@
           {/if}
         </div>
         <VoiceControls {code} />
+        <label class="card-label-option">
+          <input
+            type="checkbox"
+            checked={cardLabelsEnabled}
+            onchange={(event) => toggleCardLabels(event.currentTarget.checked)}
+          />
+          <span>Mostrar valor y palo al pasar el cursor</span>
+        </label>
         {#if cpuStatus !== 'idle'}
           <section class="cpu-status" aria-label="Estado de la CPU">
             <span role="status">
@@ -892,6 +1003,16 @@
     </div>
   {/if}
 </div>
+{#if hoveredCard && cardLabelsEnabled}
+  <span
+    class="card-hover-label"
+    role="tooltip"
+    style:left={hoveredCard.left + 'px'}
+    style:top={hoveredCard.top + 'px'}
+  >
+    {hoveredCard.name}
+  </span>
+{/if}
 <Dialog.Root bind:open={hierarchyOpen}>
   <Dialog.Content>
     <Dialog.Header>
@@ -922,6 +1043,34 @@
 </Dialog.Root>
 
 <style>
+  .card-hover-label {
+    position: fixed;
+    z-index: 80;
+    transform: translateX(-50%);
+    padding: 5px 9px;
+    border: 1px solid #dace9e70;
+    border-radius: 7px;
+    background: #102c23f5;
+    color: #f1f2e8;
+    box-shadow: 0 3px 12px #0005;
+    font-size: 12px;
+    font-weight: 750;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .card-label-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-block: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+  }
+  .card-label-option input {
+    margin-top: 3px;
+    accent-color: #dace9e;
+  }
   .match-page {
     position: relative;
     min-height: 100dvh;
@@ -1315,6 +1464,25 @@
     font-size: 13px;
     line-height: 1.7;
   }
+  .update-notice {
+    position: fixed;
+    top: 76px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    width: min(480px, calc(100vw - 32px));
+    padding: 16px 20px;
+    border: 1px solid #d6c88b;
+    border-radius: 14px;
+    background: #1a3027;
+    color: #f1f2e8;
+    box-shadow: 0 12px 40px #0005;
+  }
+  .update-notice p {
+    margin-top: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
   .toast,
   .match-error {
     position: fixed;
@@ -1538,7 +1706,15 @@
     margin-right: auto;
   }
   .active-match .hand-label {
+    min-height: 32px;
     margin-bottom: 2px;
+  }
+  .active-match .hand-area.undealt {
+    /* Keep the hand/control space while cutting so the table does not zoom. */
+    visibility: hidden;
+  }
+  .active-match .hand-area.spectator .play-controls {
+    display: none;
   }
   .active-match .hand-label p {
     margin-top: 0;

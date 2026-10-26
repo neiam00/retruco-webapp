@@ -28,6 +28,7 @@
     class="card-image"
     src={cardURL(hidden ? undefined : card)}
     alt={!hidden && card ? cardName(card) : 'Carta boca abajo'}
+    data-card-name={!hidden && card ? cardName(card) : undefined}
     {width}
     height={Math.round((width * 319) / 207)}
     draggable="false"
@@ -35,3 +36,10 @@
     in:flip
   />
 {/key}
+
+<style>
+  .card-image[data-card-name] {
+    /* Read-only and already-used cards can still be inspected on hover. */
+    pointer-events: auto;
+  }
+</style>

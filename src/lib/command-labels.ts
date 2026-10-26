@@ -23,14 +23,22 @@ export function cantoName(kind: string) {
 }
 export function commandLabel(command: Command, pendingKind?: string) {
   const label = actionLabel(command, pendingKind);
-  const hasFlorPrefix = command.declaration === 'con_mi_flor';
+  const florPrefix =
+    command.declaration === 'con_flor'
+      ? 'Con flor'
+      : declarations.find((option) => option.value === command.declaration)?.label.replace('…', '');
   const hasExplicitFlorWording =
     command.kind === 'flor' ||
     command.kind === 'flowers_no' ||
     (command.kind === 'decline' && pendingKind === 'flor');
 
-  if (hasFlorPrefix && !hasExplicitFlorWording) {
-    return `Con mi flor, ${label.toLowerCase()}`;
+  if (
+    command.declaration &&
+    florPrefix &&
+    command.declaration !== 'a_ley' &&
+    !hasExplicitFlorWording
+  ) {
+    return `${florPrefix}, ${label.toLowerCase()}`;
   }
   return label;
 }
@@ -46,14 +54,18 @@ function actionLabel(command: Command, pendingKind?: string) {
       return (
         { 3: 'Truco', 6: 'Retruco', 9: 'Vale 9', 100: 'Vale partida' } as Record<number, string>
       )[command.amount ?? 3];
-    if (command.kind === 'ley_envido' && command.mode) {
+    if (['envido', 'ley_envido'].includes(command.kind ?? '') && command.mode) {
       return command.mode === 'con_ley' ? 'Con ley, envido' : 'Sin ley, envido';
     }
     return cantoName(command.kind ?? '');
   }
   if (command.kind === 'flowers_no') return 'A las flores no';
   if (command.kind === 'decline')
-    return pendingKind === 'flor' ? 'Con mi flor me achico' : 'No quiero';
+    return pendingKind === 'flor'
+      ? 'Con mi flor me achico'
+      : command.mode === 'sin_ley'
+        ? 'Sin ley, no quiero'
+        : 'No quiero';
   const acceptance =
     command.mode === 'con_ley'
       ? 'Con ley, quiero'

@@ -80,6 +80,7 @@ export interface GameEvent {
   };
 }
 export interface Snapshot {
+  updating?: boolean;
   options?: { spectatorsCanSpeak: boolean; cpuSeats?: number[] };
   cpuController?: number;
   cpuPaused?: boolean;
