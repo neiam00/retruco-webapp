@@ -73,3 +73,17 @@ CPU decisions run in a browser Worker using the Go engine and its matching WASM
 runtime. The server validates every move. To update both files from a backend
 checkout, run `pnpm update:cpu /path/to/retruco-backend`, then run the checks
 above. Human-only matches do not load the CPU module.
+
+## License
+
+The project code is available under the [MIT License](LICENSE). Separately
+licensed third-party material retains its own terms and notices:
+
+- The card artwork in `artwork/cards/` and its generated WebP copies are
+  licensed under CC BY-SA 3.0; see [card attribution](static/cards/ATTRIBUTION.md).
+- The social preview image is licensed under CC BY-SA 3.0; see its
+  [license and attribution](static/og-image.LICENSE.md).
+- The vendored UI components have their own [MIT license](src/lib/components/ui/LICENSE.md).
+- The bundled Go runtime is covered by the [Go license](src/lib/cpu/vendor/LICENSE.GO).
+- Nunito Variable is distributed under the SIL Open Font License. Other
+  dependencies are subject to their respective licenses.
