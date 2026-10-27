@@ -51,9 +51,14 @@ origin at the frontend itself.
 
 `CARD_ASSET_ORIGIN` optionally points to a CDN containing `/cards/`;
 `GOOGLE_ANALYTICS_ID` enables analytics. See `.env.example` for all variables.
-When hosting under another domain, also review the site metadata, sitemap,
-robots file, social preview, and content security policy for deployment-specific
-URLs. Voice requires HTTPS outside localhost and a TURN relay for networks that
+`SITE_ORIGIN` optionally sets the public origin at build time, for example
+`https://cards.example.com`. When set, public pages, `robots.txt`, and
+`sitemap.xml` are prerendered with that origin. Leave it empty to render them
+per request using the current hostname; this also works on custom domains and
+preview deployments without new configuration. The WebSocket security policy
+allows the corresponding origin. Rebuild after changing `SITE_ORIGIN`.
+
+Voice requires HTTPS outside localhost and a TURN relay for networks that
 cannot establish direct connections; see the backend's
 [voice guide](https://github.com/neiam00/retruco-backend/blob/master/deploy/VOICE.md).
 

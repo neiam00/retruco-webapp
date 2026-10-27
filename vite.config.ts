@@ -19,12 +19,16 @@ export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), '');
   const apiOrigin = environment.API_ORIGIN;
   const assetOrigin = environment.CARD_ASSET_ORIGIN;
+  const siteOrigin = environment.SITE_ORIGIN;
   const connections: CspSource[] = [
     'self',
-    'wss://retru.co.ve',
     'https://*.google-analytics.com',
     'https://challenges.cloudflare.com',
   ];
+
+  if (siteOrigin) {
+    connections.push(configuredOrigin(siteOrigin).replace(/^http/, 'ws') as CspSource);
+  }
 
   if (apiOrigin) {
     const origin = configuredOrigin(apiOrigin);

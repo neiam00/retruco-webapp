@@ -5,7 +5,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 it('queues standard gtag commands without private match codes or automatic pageviews', () => {
   const append = vi.fn();
-  vi.stubGlobal('window', { location: { origin: 'https://retru.co.ve' } });
+  vi.stubGlobal('window', { location: { origin: 'https://cards.example.test' } });
   vi.stubGlobal('document', {
     title: 'Mesa ABCD-1234 — Retruco',
     createElement: () => ({ async: false, src: '' }),
@@ -26,9 +26,13 @@ it('queues standard gtag commands without private match codes or automatic pagev
     send_page_view: false,
   });
   expect(commands.filter((entry) => entry[0] === 'event').map((entry) => entry[2])).toEqual([
-    { page_location: 'https://retru.co.ve/mesa', page_referrer: '', page_title: 'Mesa — Retruco' },
     {
-      page_location: 'https://retru.co.ve/reglas',
+      page_location: 'https://cards.example.test/mesa',
+      page_referrer: '',
+      page_title: 'Mesa — Retruco',
+    },
+    {
+      page_location: 'https://cards.example.test/reglas',
       page_referrer: '',
       page_title: 'Reglas — Retruco',
     },

@@ -5,18 +5,19 @@
   import '../app.css';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
+  import { SITE_ORIGIN } from '$app/env/public';
   import { trackPage } from '#lib/analytics.js';
   import type { Snippet } from 'svelte';
   let { children }: { children: Snippet } = $props();
 
-  const siteOrigin = 'https://retru.co.ve';
+  const siteOrigin = $derived(SITE_ORIGIN || page.url.origin);
   const socialTitle = 'Retruco | Truco venezolano con amigos';
   const description =
     'Juega truco venezolano con tus amigos. Mesas de 2 o 4 jugadores, señas, envido y flor. Entra gratis, sin descargar nada.';
-  const socialImage = `${siteOrigin}/og-image.png`;
+  const socialImage = $derived(`${siteOrigin}/og-image.png`);
   const socialImageAlt =
     'Retruco: ¿Sale un truco? Crea una mesa. Comparte el enlace. Tres cartas de la baraja española sobre un fondo verde oscuro.';
-  // Use the public origin even when prerendering or visiting a preview deployment.
+  // Never include temporary room query strings in public metadata.
   const socialURL = $derived(`${siteOrigin}${page.url.pathname}`);
 
   afterNavigate(({ to }) => {
