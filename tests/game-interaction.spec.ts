@@ -76,6 +76,117 @@ test('card hover labels can be disabled and the preference survives reload', asy
   await expect(page.getByRole('tooltip')).toHaveText('12 de copas');
 });
 
+for (const scenario of [
+  { width: 1512, height: 775, players: 4, teams: 1, spectator: false },
+  { width: 1512, height: 775, players: 4, teams: 2, spectator: false },
+  { width: 1280, height: 650, players: 2, teams: 1, spectator: false },
+  { width: 390, height: 664, players: 4, teams: 1, spectator: false },
+  { width: 390, height: 664, players: 4, teams: 2, spectator: false },
+  { width: 844, height: 390, players: 4, teams: 1, spectator: false },
+  { width: 390, height: 664, players: 4, teams: 1, spectator: true },
+  { width: 1512, height: 775, players: 2, teams: 2, spectator: true },
+]) {
+  test(`privo keeps table scale at ${scenario.width}px with ${scenario.players} seats and ${scenario.teams} teams as ${scenario.spectator ? 'spectator' : 'player'}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(scenario);
+    const playing = tableSnapshot(scenario.players, 0, scenario.spectator);
+    playing.events = [];
+    const game = playing.state!;
+    game.round = 0;
+    game.scores = scenario.teams === 2 ? [23, 23] : [13, 23];
+    game.privando = scenario.teams === 2 ? [true, true] : [false, true];
+    game.privoEnvido =
+      scenario.teams === 2
+        ? [
+            { team: 0, value: 30 },
+            { team: 1, value: 27 },
+          ]
+        : [{ team: 1, value: 27 }];
+    game.hand = tableSnapshot(scenario.players, 0, false).state!.hand.map((held) => ({
+      ...held,
+      used: false,
+    }));
+    game.seats.forEach((seat) => {
+      seat.plays = [];
+      seat.remaining = 3;
+    });
+    game.holding = { envido: 6, flor: 0, receta: false };
+    if (scenario.teams === 1) {
+      game.pending = { kind: 'privo', caller: 1, value: 2, previous: 1, terminal: true };
+      game.legal = scenario.spectator
+        ? []
+        : [
+            { type: 'respond', kind: 'accept' },
+            { type: 'respond', kind: 'decline' },
+          ];
+    }
+    const cutting = structuredClone(playing);
+    cutting.state!.phase = 'cutting';
+    cutting.state!.pending = undefined;
+    cutting.state!.privando = [false, false];
+    cutting.state!.privoEnvido = [];
+    cutting.state!.hand = [];
+    cutting.state!.holding = undefined;
+    cutting.state!.vira = undefined;
+    cutting.state!.legal = scenario.spectator ? [] : [{ type: 'cut', cut: 20 }];
+    const sent: Command[] = [];
+    const update = await showTable(page, cutting, (command) => sent.push(command));
+    await expect(page.locator('.table-status')).toContainText('Antes de repartir');
+    await expect(page.getByRole('region', { name: 'Equipos privando', exact: true })).toHaveCount(
+      0,
+    );
+    await page.evaluate(() => document.fonts.ready);
+    const measure = () =>
+      page.evaluate(() => {
+        const table = document.querySelector('.felt-table')!.getBoundingClientRect();
+        const avatar = document.querySelector('.seat-top .avatar')!.getBoundingClientRect();
+        return [table.width, table.height, table.top, avatar.width];
+      });
+    const original = await measure();
+    const accepted = structuredClone(playing);
+    accepted.state!.pending = undefined;
+    accepted.state!.legal = scenario.spectator ? [] : [{ type: 'play', card: 1 }];
+    const results = structuredClone(accepted);
+    results.state!.phase = 'hand_over';
+    results.state!.legal = [];
+    for (const [index, phase] of [playing, accepted, results, cutting].entries()) {
+      phase.state!.revision = game.revision + index + 1;
+      update(phase);
+      if (phase.state!.phase === 'playing') {
+        await expect(
+          page.getByRole('region', { name: 'Equipos privando', exact: true }),
+        ).toBeVisible();
+      } else {
+        await expect(page.locator('.table-status')).toContainText(
+          phase.state!.phase === 'cutting' ? 'Antes de repartir' : 'La próxima ya viene.',
+        );
+      }
+      await expect
+        .poll(async () => {
+          const current = await measure();
+          return Math.max(...current.map((value, item) => Math.abs(value - original[item])));
+        })
+        .toBeLessThan(1);
+      if (phase.state!.phase === 'playing') {
+        const summary = page.getByRole('region', { name: 'Equipos privando', exact: true });
+        await expect(summary).toBeVisible();
+        await expect(summary).toContainText('27 de envido');
+        await expect(page.locator('[data-hand-card="2"] img')).toBeInViewport({ ratio: 0.999 });
+        await expect(page.locator('[data-card-flight]')).toHaveCount(0);
+        if (index === 0 && scenario.teams === 1 && !scenario.spectator) {
+          await page.getByRole('button', { name: 'Privo y Truco', exact: true }).click();
+          await expect.poll(() => sent).toEqual([{ type: 'respond', kind: 'accept' }]);
+        }
+        await page.screenshot({ path: testInfo.outputPath(`privo-${index}.png`) });
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+        scenario.height,
+      );
+    }
+  });
+}
+
 for (const viewport of [
   { width: 2048, height: 1048 },
   { width: 1280, height: 650 },

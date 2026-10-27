@@ -3,14 +3,28 @@
   import type { GameView } from '#lib/protocol.js';
 
   let { game, viewerSeat }: { game: GameView; viewerSeat: number } = $props();
+
+  // Scores identify who will be privando before the deal. Reserve those rows
+  // while cutting without announcing any envido values before cards are dealt.
+  let announcedTeams: { team: number; value?: number }[] = $derived(
+    game.phase === 'cutting'
+      ? game.scores.flatMap((score, team) => (score === game.config.target - 1 ? [{ team }] : []))
+      : (game.privoEnvido ?? []),
+  );
 </script>
 
-{#if game.privoEnvido?.length}
-  <section class="privo-summary" aria-label="Equipos privando" aria-live="polite">
-    {#each game.privoEnvido as announced (announced.team)}
+{#if announcedTeams.length}
+  <section
+    class={['privo-summary', { reserved: game.phase === 'cutting' }]}
+    aria-label="Equipos privando"
+    aria-live="polite"
+    aria-hidden={game.phase === 'cutting'}
+    inert={game.phase === 'cutting'}
+  >
+    {#each announcedTeams as announced (announced.team)}
       <div class="privo-team">
         <strong>{teamLabel(announced.team, viewerSeat)} · Privando</strong>
-        <span>{announced.value} de envido</span>
+        <span>{announced.value ?? '—'} de envido</span>
       </div>
     {/each}
     <details class={{ inactive: game.phase !== 'playing' }} inert={game.phase !== 'playing'}>
@@ -66,7 +80,8 @@
     padding: 4px;
     color: #bfcebf;
   }
-  .inactive {
+  .inactive,
+  .reserved {
     visibility: hidden;
   }
   .explanation {
