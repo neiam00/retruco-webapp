@@ -1,4 +1,4 @@
-# Retruco frontend
+# Retruco frontend | [retru.co.ve](https://retru.co.ve)
 
 A Spanish-language web client for Venezuelan Truco. Play one-on-one or in teams,
 with guests, accounts, public or private tables, spectators, chat, voice, and CPU
