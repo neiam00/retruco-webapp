@@ -85,6 +85,12 @@ export class LocalPolicy {
   }
 
   decide(features: number[], actions: number[][], signal: boolean, entropy: number): number {
+    return sampleLogits(this.logits(features, actions, signal), entropy);
+  }
+
+  // The returned view is valid until the next inference. Offline parity checks
+  // use this same path as the worker; callers that retain it must copy it.
+  logits(features: number[], actions: number[][], signal: boolean): Float32Array {
     if (
       features.length !== 768 ||
       features.some((x) => !Number.isFinite(x)) ||
@@ -102,6 +108,6 @@ export class LocalPolicy {
     if (count !== (signal ? 6 : actions.length) || this.wasm.memory.buffer !== memory) {
       throw new Error('CPU inference failed');
     }
-    return sampleLogits(new Float32Array(memory, this.wasm.output_ptr(), count), entropy);
+    return new Float32Array(memory, this.wasm.output_ptr(), count);
   }
 }
