@@ -15,16 +15,27 @@
     myTurn,
     cardsMoving = false,
     oninvite,
+    onrematch,
+    rematchDisabled = false,
   }: {
     snapshot: Snapshot;
     seconds: number;
     myTurn: boolean;
     cardsMoving?: boolean;
     oninvite: () => void;
+    onrematch?: () => void;
+    rematchDisabled?: boolean;
   } = $props();
 
   let game = $derived(snapshot.state);
-  let paused = $derived(snapshot.cpuPaused || snapshot.updating);
+  let paused = $derived(snapshot.cpuPaused || snapshot.updating || snapshot.paused);
+  let readyPlayers = $derived(
+    snapshot.seats.filter(
+      (seat, index) => seat.id && !seat.cpu && snapshot.rematchVotes?.includes(index),
+    ).length,
+  );
+  let humanPlayers = $derived(snapshot.seats.filter((seat) => seat.id && !seat.cpu).length);
+  let voted = $derived(snapshot.rematchVotes?.includes(snapshot.seat) ?? false);
   let missingPlayers = $derived(
     snapshot.config.players - snapshot.seats.filter((seat) => seat.id).length,
   );
@@ -196,7 +207,15 @@
             {/each}
           </div>
         {/if}
-        <Button href={resolve('/')}>Volver a las mesas</Button>
+        {#if snapshot.seat >= 0 && onrematch}
+          <Button disabled={rematchDisabled || voted} onclick={onrematch}>
+            {voted ? 'Ya estás listo' : 'Revancha'}
+          </Button>
+          <p class="text-sm" role="status">
+            {readyPlayers} de {humanPlayers} jugadores listos · Mismos equipos y reglas
+          </p>
+        {/if}
+        <Button href={resolve('/')} variant="outline">Volver a las mesas</Button>
       {:else if game.phase === 'hand_over'}
         <span class="status-eyebrow">Se cierra la mano</span>
         <h2>La próxima ya viene.</h2>

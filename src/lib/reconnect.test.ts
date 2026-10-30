@@ -14,7 +14,7 @@ test('keeps retries within room grace before applying longer backoff capped at t
   vi.spyOn(Math, 'random').mockReturnValue(0.999999);
   const reconnect = new ReconnectBackoff();
   const connect = vi.fn();
-  for (const delay of [1000, 2000, 2000, 2000, 2000, 2000, 30000, 30000]) {
+  for (const delay of [1000, 2000, 2000, 2000, 2000, 2000, 5000, 5000]) {
     reconnect.schedule(connect);
     vi.advanceTimersByTime(delay - 1);
     expect(connect).not.toHaveBeenCalled();
@@ -22,6 +22,12 @@ test('keeps retries within room grace before applying longer backoff capped at t
     expect(connect).toHaveBeenCalledOnce();
     connect.mockClear();
   }
+  vi.advanceTimersByTime(120_000);
+  reconnect.schedule(connect);
+  vi.advanceTimersByTime(29_999);
+  expect(connect).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+  expect(connect).toHaveBeenCalledOnce();
 });
 
 test('jitters early retries instead of synchronizing every client', () => {

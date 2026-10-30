@@ -26,6 +26,7 @@
   import AuthCheck from '#lib/components/AuthCheck.svelte';
   import Card from '#lib/components/Card.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
+  import MatchHistory from '#lib/components/MatchHistory.svelte';
   import { api, ApiError } from '#lib/api.js';
   import {
     displayNameError,
@@ -36,8 +37,7 @@
     focusAlert,
   } from '#lib/form-validation.js';
   import { formatRoomCode, formatRoomCodeInput } from '#lib/room-code.js';
-  import { teamLabel } from '#lib/team-labels.js';
-  import type { User, Listing, HistoryEntry } from '#lib/protocol.js';
+  import type { User, Listing, HistoryEntry, Statistics, ResumableMatch } from '#lib/protocol.js';
 
   let motionPaused = $state(false);
   let user = $state<User | null>(null);
@@ -105,6 +105,17 @@
   let turnstileAttempt = $state(0);
   let historyOpen = $state(false);
   let history = $state<HistoryEntry[]>([]);
+  let statistics = $state.raw<Statistics | null>(null);
+  let statisticsError = $state('');
+  let resumable = $state.raw<ResumableMatch[]>([]);
+  let resumeError = $state('');
+  let resumeNow = $state(Date.now());
+  let availableResume = $derived(
+    resumable.filter((match) => {
+      const deadline = Date.parse(match.reconnectDeadline);
+      return !Number.isFinite(deadline) || deadline <= 0 || deadline > resumeNow;
+    }),
+  );
   let listingFeed: LobbyFeed | undefined;
 
   async function refresh(focusOnError = false) {
@@ -114,7 +125,10 @@
   onMount(() => {
     ready = true;
     void api<User | null>('/session')
-      .then((value) => (user = value))
+      .then((value) => {
+        user = value;
+        if (value) void loadResumable();
+      })
       .catch(() => {});
     listingFeed = new LobbyFeed(
       (latest) => {
@@ -129,7 +143,9 @@
     );
     listingFeed.start();
     void refresh(true);
+    const resumeTimer = setInterval(() => (resumeNow = Date.now()), 1000);
     return () => {
+      clearInterval(resumeTimer);
       listingFeed?.stop();
       listingFeed = undefined;
     };
@@ -199,14 +215,20 @@
       throw cause;
     }
   }
-  function create() {
+  function create(mode: 'table' | 'practice' = 'table') {
     if (!validateFields({ 'guest-name': user ? '' : displayNameError(name) })) return;
     void act(async () => {
       await identify();
       const match = await api<{ code: string }>('/matches', {
-        private: privateMatch,
+        private: mode === 'practice' || privateMatch,
         config: { players, target, florRequired },
-        options: { spectatorsCanSpeak, cpuSeats: cpuSeats.length ? cpuSeats : undefined },
+        options:
+          mode === 'practice'
+            ? {
+                spectatorsCanSpeak: false,
+                cpuSeats: Array.from({ length: players - 1 }, (_, index) => index + 1),
+              }
+            : { spectatorsCanSpeak, cpuSeats: cpuSeats.length ? cpuSeats : undefined },
       });
       await goto(resolve('/mesa/[code]', { code: match.code }));
     });
@@ -261,6 +283,7 @@
         });
         password = '';
         authOpen = false;
+        void loadResumable();
       } finally {
         // Siteverify tokens are single-use, including rejected credentials or usernames.
         turnstileToken = '';
@@ -270,9 +293,36 @@
   }
   function showHistory() {
     void act(async () => {
-      history = await api<HistoryEntry[]>('/history');
+      const [entries] = await Promise.all([api<HistoryEntry[]>('/history'), loadStatistics()]);
+      history = entries;
       historyOpen = true;
     });
+  }
+
+  async function loadStatistics() {
+    statisticsError = '';
+    const identity = user?.id;
+    try {
+      const latest = await api<Statistics>('/statistics');
+      if (identity === user?.id) statistics = latest;
+    } catch {
+      if (identity === user?.id) statisticsError = 'No pudimos cargar tus estadísticas.';
+    }
+  }
+
+  async function loadResumable() {
+    const identity = user?.id;
+    if (!identity) return;
+    resumeError = '';
+    try {
+      const matches = await api<ResumableMatch[]>('/matches/resume');
+      if (identity === user?.id) {
+        resumable = matches;
+        resumeNow = Date.now();
+      }
+    } catch {
+      if (identity === user?.id) resumeError = 'No pudimos buscar tu partida anterior.';
+    }
   }
 </script>
 
@@ -326,6 +376,10 @@
             act(async () => {
               await api('/logout', {});
               user = null;
+              resumable = [];
+              resumeError = '';
+              statistics = null;
+              history = [];
             })}
         >
           <LogOut />
@@ -351,6 +405,34 @@
         {error}
       </div>
     {/key}
+  {/if}
+
+  {#if user && (availableResume.length || resumeError)}
+    <section class="resume-panel" aria-label="Tus mesas abiertas">
+      {#each availableResume as match (match.code)}
+        <div class="resume-row">
+          <div>
+            <strong>Tu mesa sigue abierta · {match.code}</strong>
+            <p class="muted text-sm">
+              {match.names.length ? match.names.join(', ') : 'Esperando a tus amigos'} · {match
+                .config.target} piedras
+            </p>
+            {#if Date.parse(match.reconnectDeadline) > resumeNow}
+              <p class="muted text-sm">
+                Puedes volver durante {Math.ceil(
+                  (Date.parse(match.reconnectDeadline) - resumeNow) / 1000,
+                )} s.
+              </p>
+            {/if}
+          </div>
+          <Button href={resolve('/mesa/[code]', { code: match.code })}>
+            Volver a mi partida<ArrowRight />
+          </Button>
+        </div>
+      {/each}
+      {#if resumeError}<p class="error" role="alert">{resumeError}</p>
+        <Button variant="outline" onclick={() => void loadResumable()}>Buscar de nuevo</Button>{/if}
+    </section>
   {/if}
 
   <main class="lobby-grid">
@@ -495,9 +577,21 @@
           <Button variant="ghost" onclick={() => (privateMatch = !privateMatch)}>Cambiar</Button>
         </div>
       </details>
-      <Button class="w-full" size="lg" disabled={!ready || busy} onclick={create}>
+      <Button class="w-full" size="lg" disabled={!ready || busy} onclick={() => create()}>
         <Plus />Crear una mesa<ArrowRight class="ml-auto" />
       </Button>
+      <Button
+        class="w-full mt-2"
+        size="lg"
+        variant="outline"
+        disabled={!ready || busy}
+        onclick={() => create('practice')}
+      >
+        <Play />Jugar contra la CPU
+      </Button>
+      <p class="muted text-sm practice-note">
+        Sin espera · {players === 2 ? '1 vs 1' : '2 vs 2'} · {target} piedras
+      </p>
       <div class="or-divider"><span>O entra con un código</span></div>
       <form
         class="row join-form"
@@ -619,6 +713,9 @@
             </div>
             <h3>Todavía no hay mesas abiertas</h3>
             <p>Crea una e invita a tus amigos, o juega contra la CPU.</p>
+            <Button disabled={!ready || busy} onclick={() => create('practice')}>
+              <Play />Jugar ahora contra la CPU
+            </Button>
           </div>
         {:else if !visibleTables.length}
           <div class="empty-state">
@@ -795,57 +892,10 @@
   <Dialog.Content>
     <Dialog.Header>
       <Dialog.Title>Tus partidas</Dialog.Title><Dialog.Description>
-        Las últimas 50 mesas en las que has jugado.
+        Tus resultados, compañeros y últimas 50 partidas.
       </Dialog.Description>
     </Dialog.Header>
-    {#if !history.length}
-      <p>Todavía no hay partidas. La primera te espera.</p>
-    {/if}
-
-    {#each history as entry (entry.code)}
-      <article class="history-row">
-        <div>
-          <strong>{entry.code}</strong>
-          <p class="muted">
-            {#if entry.expired}
-              Sin jugar · Mesa expirada
-            {:else}
-              {entry.scores[0]} — {entry.scores[1]} · {entry.finished ? 'Terminada' : 'En curso'}
-            {/if}
-          </p>
-        </div>
-        {#if entry.team >= 0}
-          <p>Jugaste en el equipo {entry.team + 1} · Nosotros</p>
-        {/if}
-        {#if entry.finished && entry.winner >= 0}
-          <p class="history-result">
-            Ganador: {teamLabel(entry.winner, entry.team ?? -1)} · Equipo {entry.winner + 1}
-          </p>
-        {/if}
-        <div class="history-teams">
-          {#each [0, 1] as team (team)}
-            <div>
-              <strong>{teamLabel(team, entry.team ?? -1)} · Equipo {team + 1}</strong>
-              <ul>
-                {#each (entry.players ?? []).filter((player) => player.team === team) as player (player.seat)}
-                  <li>
-                    {player.name}
-                    <span class="muted">
-                      · Puesto {player.seat + 1}{player.cpu ? ' · CPU' : ''}
-                    </span>
-                  </li>
-                {:else}
-                  <li class="muted">Sin jugadores registrados</li>
-                {/each}
-              </ul>
-            </div>
-          {/each}
-        </div>
-        {#if !entry.finished}
-          <Button href={`/mesa/${entry.code}`} variant="outline">Volver</Button>
-        {/if}
-      </article>
-    {/each}
+    <MatchHistory {history} {statistics} {statisticsError} onretry={() => void loadStatistics()} />
   </Dialog.Content>
 </Dialog.Root>
 
@@ -1217,28 +1267,29 @@
   .lobby-footer span a {
     text-decoration: underline;
   }
-  .history-row {
-    padding: 15px 0;
-    border-bottom: 1px solid var(--border);
+  .resume-panel {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 24px;
+    margin-bottom: 20px;
+    background: var(--panel);
   }
-  .history-result {
-    font-weight: 800;
-    margin-top: 8px;
+  .resume-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
-  .history-teams {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    margin: 16px 0;
+  .resume-row + .resume-row {
+    margin-top: 16px;
   }
-  .history-teams ul {
-    list-style: none;
-    padding: 0;
+  .resume-row p {
+    margin: 3px 0 0;
+  }
+  .practice-note {
+    text-align: center;
     margin: 8px 0 0;
-  }
-  .history-teams li {
-    margin: 4px 0;
-    overflow-wrap: anywhere;
   }
   @media (max-width: 1000px) {
     .lobby-shell {
@@ -1281,7 +1332,6 @@
     }
   }
   @media (max-width: 480px) {
-    .history-teams,
     .table-filters {
       grid-template-columns: 1fr;
     }

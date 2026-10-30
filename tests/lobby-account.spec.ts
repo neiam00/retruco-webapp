@@ -70,6 +70,7 @@ test('public browsing, spectator switching, account history and private code joi
     await expect(owner.getByRole('dialog')).toContainText('Terminada');
     await expect(owner.getByRole('dialog')).toContainText('Jugaste en el equipo 1 · Nosotros');
     await expect(owner.getByRole('dialog')).toContainText('Ganador: Ellos · Equipo 2');
+    await owner.getByRole('dialog').getByText('Detalles de la partida', { exact: true }).click();
     await expect(owner.getByRole('dialog')).toContainText('Beto público');
     await owner.keyboard.press('Escape');
 

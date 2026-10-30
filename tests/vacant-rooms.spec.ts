@@ -40,7 +40,7 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect', 'cpu_navigate'
     browser,
     baseURL,
   }, testInfo) => {
-    test.setTimeout(60_000);
+    test.setTimeout(180_000);
     const contexts = await Promise.all(
       [0, 1, 2].map(() => browser.newContext({ baseURL, viewport: testInfo.project.use.viewport })),
     );
@@ -145,9 +145,9 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect', 'cpu_navigate'
         );
 
         await expect(listedRoom).toHaveCount(0, {
-          timeout: Math.max(1000, 15_000 - (Date.now() - departedAt)),
+          timeout: Math.max(1000, 125_000 - (Date.now() - departedAt)),
         });
-        expect(Date.now() - departedAt).toBeGreaterThanOrEqual(9000);
+        expect(Date.now() - departedAt).toBeGreaterThanOrEqual(119_000);
         expect(listingStreams, 'navigation does not reconnect the independent room browser').toBe(
           1,
         );
@@ -165,7 +165,7 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect', 'cpu_navigate'
         await otherTab.goto(`/mesa/${code}`);
         await expect(otherTab.getByText('En línea', { exact: true })).toBeVisible();
         await ownerPage.close();
-        // Outlast the grace period: another tab belonging to the player keeps it alive.
+        // Closing one tab must leave the player's other connection usable.
         await otherTab.waitForTimeout(11_000);
         expect((await owner.request.get(`${api}/api/matches/${code}`)).status()).toBe(200);
         await expect(listedRoom).toBeVisible();
@@ -174,8 +174,8 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect', 'cpu_navigate'
         const closedAt = Date.now();
         await otherTab.close();
         expect((await owner.request.get(`${api}/api/matches/${code}`)).status()).toBe(200);
-        await expect(listedRoom).toHaveCount(0, { timeout: 15_000 });
-        expect(Date.now() - closedAt).toBeGreaterThanOrEqual(9000);
+        await expect(listedRoom).toHaveCount(0, { timeout: 125_000 });
+        expect(Date.now() - closedAt).toBeGreaterThanOrEqual(119_000);
         expect(listingStreams, 'the event stream stays open across idle heartbeats').toBe(1);
       }
 

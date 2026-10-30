@@ -80,6 +80,10 @@ export interface GameEvent {
   };
 }
 export interface Snapshot {
+  gameNumber?: number;
+  rematchVotes?: number[];
+  paused?: boolean;
+  reconnectDeadline?: string;
   updating?: boolean;
   options?: { spectatorsCanSpeak: boolean; cpuSeats?: number[] };
   cpuController?: number;
@@ -131,6 +135,11 @@ export interface CPUResponse {
 }
 export interface HistoryEntry {
   code: string;
+  roomCode?: string;
+  gameNumber?: number;
+  config?: Config;
+  hands?: number;
+  hasCPU?: boolean;
   scores: [number, number];
   winner: number;
   finished: boolean;
@@ -138,4 +147,26 @@ export interface HistoryEntry {
   updatedAt: string;
   team: number;
   players: { name: string; seat: number; team: number; cpu: boolean }[];
+}
+
+export interface Performance {
+  games: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+}
+
+export interface Statistics {
+  overall: Performance;
+  human: Performance;
+  cpu: Performance;
+  partners: { id: string; name: string; human: Performance; cpu: Performance }[];
+}
+
+export interface ResumableMatch {
+  code: string;
+  config: Config;
+  names: string[];
+  reconnectDeadline: string;
+  lastActivity: string;
 }

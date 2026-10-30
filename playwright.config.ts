@@ -15,7 +15,7 @@ export default defineConfig({
     {
       name: 'iphone',
       use: { ...devices['iPhone 15 Pro'] },
-      testMatch: '**/game-interaction.spec.ts',
+      testMatch: ['**/game-interaction.spec.ts', '**/player-features.spec.ts'],
     },
     {
       name: 'webkit',
@@ -35,6 +35,7 @@ export default defineConfig({
         '**/form-errors.spec.ts',
         '**/registration-check.spec.ts',
         '**/match-stream.spec.ts',
+        '**/player-features.spec.ts',
       ],
     },
   ],

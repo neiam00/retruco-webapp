@@ -29,7 +29,10 @@ test('registration verifies, invalidates expired tokens, refreshes used tokens a
       });
     } else if (path === '/api/matches/events') {
       await route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' });
-    } else await route.fulfill({ json: path === '/api/matches' ? [] : null });
+    } else
+      await route.fulfill({
+        json: path === '/api/matches' || path === '/api/matches/resume' ? [] : null,
+      });
   });
   await mockTurnstile(page, false);
   await page.goto('/');
@@ -102,7 +105,10 @@ test('login requires its own fresh verification and retries after incorrect cred
       }
     } else if (path === '/api/matches/events') {
       await route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' });
-    } else await route.fulfill({ json: path === '/api/matches' ? [] : null });
+    } else
+      await route.fulfill({
+        json: path === '/api/matches' || path === '/api/matches/resume' ? [] : null,
+      });
   });
   await mockTurnstile(page, false);
   await page.goto('/');

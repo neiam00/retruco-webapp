@@ -180,6 +180,9 @@ test('an outdated response does not restore an error after editing', async ({ pa
 
 test('direct room entry validates and clears the display name inline', async ({ page }) => {
   const requests = await mockForms(page);
+  await page.routeWebSocket('**/api/matches/ABCD-1234/ws?*', (socket) => {
+    socket.send(JSON.stringify({ type: 'error', status: 404, error: 'No encontramos esa mesa.' }));
+  });
   await page.goto('/mesa/ABCD-1234');
   const name = page.getByLabel('Tu nombre', { exact: true });
   await page.getByRole('button', { name: 'Entrar a mirar', exact: true }).click();

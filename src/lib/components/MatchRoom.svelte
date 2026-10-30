@@ -14,11 +14,13 @@
     saveCardSoundsMuted,
   } from '#lib/sound-settings.js';
   import VoiceControls from '#lib/components/VoiceControls.svelte';
+  import InviteDialog from '#lib/components/InviteDialog.svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import {
     BookOpen,
     Copy,
+    Share2,
     LogOut,
     Eye,
     Wifi,
@@ -67,6 +69,9 @@
   let busy = $state(false);
   let ready = $state(false);
   let copied = $state(false);
+  let inviteOpen = $state(false);
+  let inviteTrigger: HTMLElement | null = null;
+  let disconnectedAt = $state<number | null>(null);
   let hierarchyOpen = $state(false);
   let chatOpen = $state(false);
   let signalsOpen = $state(false);
@@ -254,6 +259,7 @@
 
   function offline() {
     retry.cancel();
+    disconnectedAt ??= Date.now();
     connected = false;
     socket?.close();
   }
@@ -389,6 +395,7 @@
           now = receivedAt;
           offset = Date.parse(incoming.serverTime) - receivedAt;
           connected = true;
+          disconnectedAt = null;
           retry.connected();
           busy = false;
           cpu.update(updating ? undefined : (payload.cpu as CPUWork | undefined));
@@ -419,6 +426,7 @@
       cardSounds.stop();
       cpu.stop();
       connected = false;
+      disconnectedAt ??= Date.now();
       busy = false;
       if (!receivedMessage && navigator.onLine && !roomClosed && !updateRequired) {
         // Older servers reject a failed handshake before sending typed errors.
@@ -546,6 +554,19 @@
   function perspective(seat: number) {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ perspective: seat }));
   }
+  function invite(event?: MouseEvent) {
+    inviteTrigger =
+      event?.currentTarget instanceof HTMLElement
+        ? event.currentTarget
+        : document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+    inviteOpen = true;
+  }
+  function closeInvite() {
+    inviteOpen = false;
+    void tick().then(() => inviteTrigger?.focus());
+  }
   async function copy() {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/mesa/${code}`);
@@ -630,6 +651,13 @@
       <span class="room-code">{code}</span>
       <Button variant="ghost" size="icon" aria-label="Copiar invitación" onclick={copy}>
         <Copy />
+      </Button><Button
+        variant="ghost"
+        size="icon"
+        aria-label="Compartir invitación"
+        onclick={invite}
+      >
+        <Share2 />
       </Button><Button
         variant="ghost"
         size="icon"
@@ -756,14 +784,30 @@
         <div class="table-area" class:four-player={snapshot.config.players === 4}>
           {#if game}
             <TableViewport>
-              <FeltTable {snapshot} {seconds} {myTurn} {cardsMoving} oninvite={copy} />
+              <FeltTable
+                {snapshot}
+                {seconds}
+                {myTurn}
+                {cardsMoving}
+                oninvite={invite}
+                onrematch={() => send({ type: 'rematch' })}
+                rematchDisabled={!connected || busy || updating}
+              />
             </TableViewport>
           {:else}
-            <FeltTable {snapshot} {seconds} {myTurn} {cardsMoving} oninvite={copy} />
+            <FeltTable
+              {snapshot}
+              {seconds}
+              {myTurn}
+              {cardsMoving}
+              oninvite={invite}
+              onrematch={() => send({ type: 'rematch' })}
+              rematchDisabled={!connected || busy || updating}
+            />
           {/if}
         </div>
 
-        {#if game?.phase === 'cutting' && !snapshot.cpuPaused && !snapshot.updating}
+        {#if game?.phase === 'cutting' && !snapshot.cpuPaused && !snapshot.updating && !snapshot.paused}
           <section class="table-status cutting-panel" aria-label="Corte del mazo">
             <span class="cut-countdown" aria-label={seconds + ' segundos restantes'}>
               {seconds}s
@@ -1005,6 +1049,17 @@
           {#if connected}<Wifi size={12} />{:else}<WifiOff size={12} />{/if}
           {connected ? 'En línea' : 'Reconectando…'}
         </span>
+        {#if !connected && disconnectedAt && !updating && !roomUnavailable}
+          <aside class="reconnect-notice" role="status">
+            <p>
+              Reintentando la conexión. La mesa se conserva por 2 minutos cuando todos se
+              desconectan.{now - disconnectedAt >= 120_000
+                ? ' La mesa podría haberse cerrado.'
+                : ''}
+            </p>
+            <Button size="sm" variant="outline" onclick={() => connect()}>Reconectar ahora</Button>
+          </aside>
+        {/if}
         <div class="social-controls" role="group" aria-label="Herramientas de la partida">
           <Button
             class="details-toggle"
@@ -1135,6 +1190,7 @@
     </div>
   {/if}
 </div>
+{#if inviteOpen}<InviteDialog {code} onclose={closeInvite} />{/if}
 {#if hoveredCard && cardLabelsEnabled}
   <span
     class="card-hover-label"
@@ -1328,6 +1384,21 @@
     color: #94b09e;
     font-size: 9px;
     margin-right: auto;
+  }
+  .reconnect-notice {
+    position: absolute;
+    z-index: 30;
+    left: 8px;
+    bottom: 28px;
+    width: min(360px, calc(100% - 76px));
+    padding: 12px;
+    border: 1px solid #94b09e;
+    border-radius: 10px;
+    background: #152d26;
+    font-size: 14px;
+  }
+  .reconnect-notice p {
+    margin: 0 0 8px;
   }
   .hand-area {
     position: relative;

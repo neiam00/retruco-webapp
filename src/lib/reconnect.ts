@@ -18,11 +18,13 @@ export class ReconnectBackoff {
     }
     this.connectedAt = undefined;
     this.disconnectedAt ??= Date.now();
-    // Empty rooms have a ten-second reconnect grace. Keep trying at least as
-    // often as the legacy two-second retry during that window, even if a socket
-    // has repeatedly opened and failed. Longer outages can back off further.
-    const grace = Date.now() - this.disconnectedAt < 10_000;
-    const ceiling = Math.min(grace ? 2_000 : 30_000, 1_000 * 2 ** Math.min(this.attempts++, 5));
+    // Keep the first retries quick; continue regularly during the two-minute
+    // room recovery window without hammering a restarting server.
+    const elapsed = Date.now() - this.disconnectedAt;
+    const ceiling = Math.min(
+      elapsed < 10_000 ? 2_000 : elapsed < 120_000 ? 5_000 : 30_000,
+      1_000 * 2 ** Math.min(this.attempts++, 5),
+    );
     const delay = Math.max(minimumDelay, Math.round(ceiling * (0.5 + Math.random() * 0.5)));
     this.timer = setTimeout(() => {
       this.timer = undefined;
