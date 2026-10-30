@@ -7,9 +7,11 @@ const signals = ['none', 'perico', 'perica', 'seven_spades', 'seven_coins', 'rec
 // One session permanently falls back after an invalid observation or inference
 // failure. A controller retry creates a fresh session and can reload the model.
 export class DecisionSession {
+  source: 'learned' | 'heuristic' | 'random-cut' = 'heuristic';
   constructor(private policy?: Pick<LocalPolicy, 'decide'>) {}
 
   decide(request: CPURequest): CPUResponse {
+    this.source = request.view.phase === 'cutting' ? 'random-cut' : 'heuristic';
     const baseline = fallback(request);
     if (baseline.error || !this.policy || request.version !== 2 || request.view.phase === 'cutting')
       return baseline;
@@ -45,6 +47,7 @@ export class DecisionSession {
       };
       if (signal) result.signal = signals[index];
       else result.command = request.view.legal[index];
+      this.source = 'learned';
       return result;
     } catch {
       this.policy = undefined;

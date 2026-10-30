@@ -49,9 +49,10 @@ export class LocalPolicy {
     wasmBytes: BufferSource,
     modelBytes: Uint8Array<ArrayBuffer>,
     manifest: PolicyManifest,
+    purpose: 'release' | 'evaluation' = 'release',
   ) {
     if (
-      !manifest.approved ||
+      (!manifest.approved && purpose !== 'evaluation') ||
       manifest.format !== 1 ||
       manifest.encoder !== 2 ||
       manifest.rules !== '2' ||
@@ -75,6 +76,12 @@ export class LocalPolicy {
     if (wasm.memory.buffer.byteLength > 4 * 1024 * 1024)
       throw new Error('CPU memory budget exceeded');
     return new LocalPolicy(wasm);
+  }
+
+  // Offline evaluation can measure a candidate before approval. The deployed
+  // worker always uses load's default release purpose; manifests are unchanged.
+  get memoryBytes(): number {
+    return this.wasm.memory.buffer.byteLength;
   }
 
   decide(features: number[], actions: number[][], signal: boolean, entropy: number): number {

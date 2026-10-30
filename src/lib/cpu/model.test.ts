@@ -31,4 +31,21 @@ describe('policy distribution', () => {
       }),
     ).rejects.toThrow('unapproved');
   });
+
+  it('evaluation mode does not waive checksums or mutate approval', async () => {
+    const manifest = {
+      format: 1,
+      encoder: 2,
+      rules: '2',
+      approved: false,
+      architecture: 'candidate-768-96-64-48-32-32-1-signal6',
+      quantization: 'symmetric-int8-per-output-f32-execution',
+      bytes: 0,
+      sha256: 'invalid',
+    };
+    await expect(
+      LocalPolicy.load(new Uint8Array(), new Uint8Array(), manifest, 'evaluation'),
+    ).rejects.toThrow('checksum');
+    expect(manifest.approved).toBe(false);
+  });
 });

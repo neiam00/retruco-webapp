@@ -108,3 +108,43 @@ licensed third-party material retains its own terms and notices:
 - The bundled Go runtime is covered by the [Go license](src/lib/cpu/vendor/LICENSE.GO).
 - Nunito Variable is distributed under the SIL Open Font License. Other
   dependencies are subject to their respective licenses.
+
+## Local model evaluation and performance checks
+
+Unapproved candidates can be exercised locally without changing their manifests:
+set `VITE_CPU_ML_ENABLED=true`, `VITE_CPU_EVALUATION=true`, and a same-origin
+`VITE_CPU_MODEL_MANIFEST` URL when starting Vite on loopback. The evaluation
+exception requires both a development build and a loopback worker hostname.
+Production workers always use release approval checks. Temporary candidate
+assets may go in ignored `static/cpu-evaluation/`; remove them after testing.
+
+The emitted production worker can be checked directly, including a deliberately
+set evaluation flag:
+
+```sh
+VITE_CPU_ML_ENABLED=true VITE_CPU_EVALUATION=true VITE_CPU_MODEL_MANIFEST=/cpu/release/manifest.json pnpm build
+node scripts/check-cpu-production.mjs
+```
+
+The check executes the emitted worker against an unapproved manifest and fails
+if it downloads either binary. It does not rely on searching generated source.
+
+Generate authorized timing inputs with the backend's
+`python -m retruco_ml.benchmark_cases` command, then run:
+
+```sh
+node scripts/benchmark-cpu.mjs /absolute/candidate/bundle /absolute/cases.json output/cpu-benchmark/report.json 200
+```
+
+This isolated benchmark calls the same `LocalPolicy` evaluator using its explicit
+`evaluation` purpose. It never modifies approval, serves only loopback, and
+records artifact/source hashes, per-case latency, worker round trips, startup,
+memory, and total compressed CPU asset size. It requires the production-worker
+approval check to pass first. Network settings are 150 ms latency and 1.6 Mbps
+download; CPU profiles are 1×, 6× and 10× with calibration.
+
+Current Chromium cannot throttle dedicated workers through CDP. The report
+therefore retains unthrottled worker measurements and uses the same evaluator
+on a verified throttled page as a labeled supplement. This approximates older
+hardware; it does not certify a physical device. The 1024-candidate input is a
+labeled capacity stress case, not a claim that normal turns offer that many moves.

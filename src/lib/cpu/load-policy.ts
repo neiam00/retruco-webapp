@@ -4,6 +4,7 @@ import { LocalPolicy, type PolicyManifest } from './model.js';
 export async function loadPolicy(
   enabled: boolean,
   manifestURL: string,
+  purpose: 'release' | 'evaluation' = 'release',
 ): Promise<LocalPolicy | undefined> {
   if (!enabled || !manifestURL) return undefined;
   try {
@@ -13,7 +14,7 @@ export async function loadPolicy(
     const manifestResponse = await fetch(url, { signal });
     if (!manifestResponse.ok) return undefined;
     const manifest = (await manifestResponse.json()) as PolicyManifest;
-    if (!manifest.approved) return undefined;
+    if (!manifest.approved && purpose !== 'evaluation') return undefined;
     const [wasm, model] = await Promise.all([
       fetch(new URL('policy.wasm', url), { signal }),
       fetch(new URL('policy.bin', url), { signal }),
@@ -23,6 +24,7 @@ export async function loadPolicy(
       await wasm.arrayBuffer(),
       new Uint8Array(await model.arrayBuffer()),
       manifest,
+      purpose,
     );
   } catch {
     return undefined;

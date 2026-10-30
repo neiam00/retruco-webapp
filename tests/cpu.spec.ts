@@ -6,14 +6,14 @@ declare global {
     cpuGame?: { data: Snapshot; cpu?: CPUWork };
     gameSocket?: WebSocket;
     cpuMoves: number;
-    cpuPerformance: { startupMs: number[]; decisionMs: number[] };
+    cpuPerformance: { startupMs: number[]; decisionMs: number[]; sources: string[] };
   }
 }
 
 async function observeGame(context: BrowserContext) {
   await context.addInitScript(() => {
     window.cpuMoves = 0;
-    window.cpuPerformance = { startupMs: [], decisionMs: [] };
+    window.cpuPerformance = { startupMs: [], decisionMs: [], sources: [] };
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       private sent = new Map<string, number>();
@@ -24,6 +24,7 @@ async function observeGame(context: BrowserContext) {
           if (data.type === 'ready')
             window.cpuPerformance.startupMs.push(performance.now() - started);
           if (data.type === 'decision' && this.sent.has(data.id)) {
+            window.cpuPerformance.sources.push(data.source ?? 'unknown');
             window.cpuPerformance.decisionMs.push(performance.now() - this.sent.get(data.id)!);
             this.sent.delete(data.id);
           }
@@ -264,6 +265,10 @@ for (const players of [2, 4]) {
       expect(await page.evaluate(() => window.cpuMoves)).toBeGreaterThan(0);
       expect(workers).toHaveLength(1);
       const timings = await page.evaluate(() => window.cpuPerformance);
+      if (process.env.VITE_CPU_ML_ENABLED === 'true') {
+        expect(timings.sources).toContain('learned');
+        expect(timings.sources).not.toContain('heuristic');
+      }
       const durations = timings.decisionMs.sort((a, b) => a - b);
       expect(durations.length).toBeGreaterThan(0);
       const report = {
