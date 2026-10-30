@@ -6,6 +6,7 @@ declare global {
     cpuGame?: { data: Snapshot; cpu?: CPUWork };
     gameSocket?: WebSocket;
     cpuMoves: number;
+    cpuSocketOpens: number;
     cpuPerformance: { startupMs: number[]; decisionMs: number[]; sources: string[] };
   }
 }
@@ -13,6 +14,7 @@ declare global {
 async function observeGame(context: BrowserContext) {
   await context.addInitScript(() => {
     window.cpuMoves = 0;
+    window.cpuSocketOpens = 0;
     window.cpuPerformance = { startupMs: [], decisionMs: [], sources: [] };
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
@@ -43,6 +45,7 @@ async function observeGame(context: BrowserContext) {
         super(url, protocols);
         if (new URL(url).pathname.endsWith('/ws')) {
           window.gameSocket = this;
+          this.addEventListener('open', () => window.cpuSocketOpens++);
           this.addEventListener('message', (event) => {
             const message = JSON.parse(event.data);
             if (message.type === 'snapshot' || message.type === 'game_update')
@@ -368,6 +371,14 @@ test('mixed CPU room keeps human seats open and transfers one worker between pla
         .toBeGreaterThan(revision);
     }
     expect(await returned.evaluate(() => window.cpuMoves)).toBeGreaterThan(0);
+    if (process.env.VITE_CPU_ML_ENABLED === 'true') {
+      await expect
+        .poll(() => returned.evaluate(() => window.cpuPerformance.sources))
+        .toContain('learned');
+      expect(await returned.evaluate(() => window.cpuPerformance.sources)).not.toContain(
+        'heuristic',
+      );
+    }
     expect(watcher.workers()).toHaveLength(0);
     await returned.screenshot({
       path: `output/playwright/cpu-handoff-${testInfo.project.name}.png`,
@@ -377,3 +388,208 @@ test('mixed CPU room keeps human seats open and transfers one worker between pla
     await Promise.allSettled(contexts.map((context) => context.close()));
   }
 });
+
+async function advance(page: Page) {
+  const before = await page.evaluate(() => window.cpuGame!.data.state!);
+  if (before.phase === 'match_over') return false;
+  await humanMove(page);
+  await expect
+    .poll(() => page.evaluate(() => window.cpuGame!.data.state!.revision), { timeout: 15000 })
+    .toBeGreaterThan(before.revision);
+  return true;
+}
+
+for (const failure of ['corrupt', 'incompatible', 'unavailable'] as const) {
+  test(`CPU continues with heuristic after ${failure} model assets`, async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(process.env.VITE_CPU_ML_ENABLED !== 'true', 'requires candidate evaluation assets');
+    test.setTimeout(300000);
+    const context = await browser.newContext({ viewport: testInfo.project.use.viewport });
+    await observeGame(context);
+    let intercepted = 0;
+    const downloads: string[] = [];
+    context.on('request', (request) => {
+      if (/\.wasm(?:\?|$)/.test(request.url())) downloads.push(request.url());
+    });
+    if (failure === 'incompatible') {
+      await context.route('**/cpu-evaluation/**/manifest.json', async (route) => {
+        intercepted++;
+        const response = await route.fetch();
+        const manifest = await response.json();
+        await route.fulfill({ response, json: { ...manifest, encoder: 999 } });
+      });
+    } else {
+      await context.route('**/cpu-evaluation/**/policy.bin', async (route) => {
+        intercepted++;
+        if (failure === 'unavailable') return route.abort('connectionreset');
+        const response = await route.fetch();
+        const bytes = await response.body();
+        bytes[bytes.length - 1] ^= 1;
+        await route.fulfill({ response, body: bytes });
+      });
+    }
+    try {
+      const page = await context.newPage();
+      await createFromUI(page, baseURL!, 4, [1, 2, 3]);
+      for (let step = 0; step < 350 && (await advance(page)); step++) {
+        /* complete actual game */
+      }
+      await expect
+        .poll(() => page.evaluate(() => window.cpuGame?.data.state?.phase))
+        .toBe('match_over');
+      expect(intercepted).toBeGreaterThan(0);
+      const sources = await page.evaluate(() => window.cpuPerformance.sources);
+      expect(sources).toContain('heuristic');
+      expect(sources).not.toContain('learned');
+      expect(downloads.some((url) => /\/cpu\.wasm(?:\?|$)/.test(url))).toBe(false);
+      await expect(
+        page.getByRole('region', { name: 'Estado de la CPU' }).getByRole('alert'),
+      ).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('learned CPU reconnects after server and browser worker restart', async ({
+  browser,
+  baseURL,
+}, testInfo) => {
+  test.skip(
+    !process.env.CPU_TEST_RESTART_URL || process.env.VITE_CPU_ML_ENABLED !== 'true',
+    'requires the isolated integration runner',
+  );
+  test.setTimeout(180000);
+  const restart = new URL(process.env.CPU_TEST_RESTART_URL!);
+  expect(restart.hostname).toBe('127.0.0.1');
+  const context = await browser.newContext({ viewport: testInfo.project.use.viewport });
+  await observeGame(context);
+  try {
+    const page = await context.newPage();
+    await createFromUI(page, baseURL!, 4, [1, 2, 3]);
+    for (let step = 0; step < 100; step++) {
+      if (
+        await page.evaluate(() => window.cpuGame!.data.state!.legal.some((c) => c.type === 'play'))
+      )
+        break;
+      expect(await advance(page)).toBe(true);
+    }
+    expect(
+      await page.evaluate(() => window.cpuGame!.data.state!.legal.some((c) => c.type === 'play')),
+    ).toBe(true);
+    await page.evaluate(() =>
+      window.gameSocket!.send(
+        JSON.stringify({ input: { id: crypto.randomUUID(), signal: 'perico' } }),
+      ),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window.cpuGame!.data.signals.some((s) => s.seat === 0 && s.kind === 'perico'),
+        ),
+      )
+      .toBe(true);
+    const before = await page.evaluate(() => ({
+      data: window.cpuGame!.data,
+      opens: window.cpuSocketOpens,
+    }));
+    const response = await fetch(restart, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.CPU_TEST_RESTART_TOKEN}` },
+    });
+    expect(response.ok).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => window.cpuSocketOpens), { timeout: 15000 })
+      .toBeGreaterThan(before.opens);
+    await expect
+      .poll(() => page.evaluate(() => window.cpuGame!.data.state!.hand))
+      .toEqual(before.data.state!.hand);
+    expect(await page.evaluate(() => window.cpuGame!.data.signals)).toEqual(before.data.signals);
+    expect(await page.evaluate(() => window.cpuGame!.data.state!.revision)).toBe(
+      before.data.state!.revision,
+    );
+    await page.reload();
+    await expect
+      .poll(() => page.evaluate(() => window.cpuGame?.data.state?.hand))
+      .toEqual(before.data.state!.hand);
+    expect(await page.evaluate(() => window.cpuGame!.data.signals)).toEqual(before.data.signals);
+    for (let step = 0; step < 350 && (await advance(page)); step++) {
+      /* resumes through match completion */
+    }
+    await expect
+      .poll(() => page.evaluate(() => window.cpuGame?.data.state?.phase))
+      .toBe('match_over');
+    const sources = await page.evaluate(() => window.cpuPerformance.sources);
+    expect(sources).toContain('learned');
+    expect(sources).not.toContain('heuristic');
+    await expect.poll(() => page.workers().length).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+for (const players of [2, 4]) {
+  test(`learned CPU survives repeated ${players}-seat matches without accumulating workers`, async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.skip(
+      !process.env.CPU_SOAK_MATCHES || process.env.VITE_CPU_ML_ENABLED !== 'true',
+      'requires explicit local soak configuration',
+    );
+    const matches = Number(process.env.CPU_SOAK_MATCHES);
+    expect(Number.isInteger(matches) && matches >= 2 && matches <= 100).toBe(true);
+    test.setTimeout(matches * 300000);
+    const context = await browser.newContext({ viewport: testInfo.project.use.viewport });
+    await observeGame(context);
+    const page = await context.newPage();
+    const session = await context.newCDPSession(page);
+    const measurements: { match: number; worker: Record<string, number>; pageHeap: number }[] = [];
+    try {
+      await createFromUI(page, baseURL!, players, players === 2 ? [1] : [1, 2, 3]);
+      for (let match = 0; match < matches; match++) {
+        await expect.poll(() => page.workers().length).toBe(1);
+        await expect
+          .poll(() => page.evaluate(() => window.cpuPerformance.startupMs.length))
+          .toBe(match + 1);
+        const memory = await workerMemory(browser, page);
+        expect(memory.wasmLinearBytes).toBeGreaterThan(0);
+        expect(memory.wasmLinearBytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+        if (measurements.length)
+          expect(memory.wasmLinearBytes).toBe(measurements[0].worker.wasmLinearBytes);
+        for (let step = 0; step < 350 && (await advance(page)); step++) {
+          /* real rules, UI delays and worker */
+        }
+        await expect
+          .poll(() => page.evaluate(() => window.cpuGame?.data.state?.phase))
+          .toBe('match_over');
+        await expect.poll(() => page.workers().length).toBe(0);
+        await session.send('HeapProfiler.collectGarbage');
+        const heap = await session.send('Runtime.getHeapUsage');
+        measurements.push({ match, worker: memory, pageHeap: heap.usedSize });
+        const sources = await page.evaluate(() => window.cpuPerformance.sources);
+        expect(sources).toContain('learned');
+        expect(sources).not.toContain('heuristic');
+        if (match + 1 < matches) {
+          const previous = await page.evaluate(() => window.cpuGame!.data.gameNumber);
+          await page.getByRole('button', { name: 'Revancha', exact: true }).click();
+          await expect
+            .poll(() => page.evaluate(() => window.cpuGame!.data.gameNumber))
+            .toBe((previous ?? 1) + 1);
+        }
+      }
+      expect(measurements.at(-1)!.pageHeap - measurements[0].pageHeap).toBeLessThan(
+        16 * 1024 * 1024,
+      );
+      await testInfo.attach('cpu-soak', {
+        body: JSON.stringify({ players, matches, measurements }),
+        contentType: 'application/json',
+      });
+    } finally {
+      await session.detach();
+      await context.close();
+    }
+  });
+}

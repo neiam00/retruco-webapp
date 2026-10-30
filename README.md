@@ -143,6 +143,25 @@ memory, and total compressed CPU asset size. It requires the production-worker
 approval check to pass first. Network settings are 150 ms latency and 1.6 Mbps
 download; CPU profiles are 1×, 6× and 10× with calibration.
 
+Run candidate recovery tests against a disposable local PostgreSQL database:
+
+```sh
+node scripts/test-cpu-integration.mjs /absolute/candidate/bundle output/cpu-integration
+```
+
+The runner owns its database, API, Vite server, and temporary candidate assets,
+and removes them on completion or interruption. It does not use the development
+database. The restart test restarts only that owned API, verifies the same hand
+and visible signals after reconnection and page reload, and completes the game
+with learned inference. Other tests exercise controller handoff, corrupted or
+incompatible models, unavailable assets, and rematches without accumulated
+workers. The JSON report binds the model/source hashes to the Playwright evidence.
+
+The default two rematches per mode are a smoke check. Set `CPU_SOAK_MATCHES=10`
+for the release soak. This remains local candidate evaluation; the manifest's
+approval flag is never changed. `PLAYWRIGHT_BASE_URL` can override the browser
+test origin; the isolated runner selects loopback ports automatically.
+
 Current Chromium cannot throttle dedicated workers through CDP. The report
 therefore retains unthrottled worker measurements and uses the same evaluator
 on a verified throttled page as a labeled supplement. This approximates older
