@@ -17,7 +17,7 @@ export class DecisionSession {
       if (
         !request.token ||
         !request.features ||
-        request.features.version !== 1 ||
+        request.features.version !== 2 ||
         !['game', 'signal'].includes(request.kind ?? '')
       )
         throw new Error('Unsupported model input');

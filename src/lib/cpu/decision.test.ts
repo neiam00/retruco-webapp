@@ -13,7 +13,7 @@ function request(kind: 'game' | 'signal'): CPURequest {
     kind,
     token: 'work-token',
     features: {
-      version: 1,
+      version: 2,
       state: new Array(768).fill(0),
       actions: base.view.legal.map(() => new Array(48).fill(0)),
     },

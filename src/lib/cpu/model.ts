@@ -53,7 +53,7 @@ export class LocalPolicy {
     if (
       !manifest.approved ||
       manifest.format !== 1 ||
-      manifest.encoder !== 1 ||
+      manifest.encoder !== 2 ||
       manifest.rules !== '2' ||
       manifest.architecture !== 'candidate-768-96-64-48-32-32-1-signal6' ||
       manifest.quantization !== 'symmetric-int8-per-output-f32-execution' ||
