@@ -592,6 +592,9 @@
       <p class="muted text-sm practice-note">
         Sin espera · {players === 2 ? '1 vs 1' : '2 vs 2'} · {target} piedras
       </p>
+      <Button href={resolve('/aprender')} variant="link" class="w-full">
+        <BookOpen />Aprender jugando
+      </Button>
       <div class="or-divider"><span>O entra con un código</span></div>
       <form
         class="row join-form"

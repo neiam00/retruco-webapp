@@ -41,6 +41,7 @@
   import Card from '#lib/components/Card.svelte';
   import ChatPanel from '#lib/components/ChatPanel.svelte';
   import CantoHistory from '#lib/components/CantoHistory.svelte';
+  import HandRecap from '#lib/components/HandRecap.svelte';
   import FeltTable from '#lib/components/FeltTable.svelte';
   import TableViewport from '#lib/components/TableViewport.svelte';
   import SeatSelector from '#lib/components/SeatSelector.svelte';
@@ -54,7 +55,14 @@
   import { CPUController, type CPUStatus } from '#lib/cpu/controller.js';
   import { MatchStream, type GameUpdateMessage, type SnapshotMessage } from '#lib/match-stream.js';
   import { ReconnectBackoff } from '#lib/reconnect.js';
-  import type { User, Snapshot, Command, CPUWork } from '#lib/protocol.js';
+  import type {
+    User,
+    Snapshot,
+    Command,
+    CPUWork,
+    HandRecap as Recap,
+    GameEvent,
+  } from '#lib/protocol.js';
 
   let { code }: { code: string } = $props();
   let snapshot = $state.raw<Snapshot | null>(null);
@@ -78,6 +86,14 @@
   let declarationOpen = $state(false);
   let moreActionsOpen = $state(false);
   let detailsOpen = $state(false);
+  let recapOpen = $state(false);
+  let recapSelection = $state.raw<{
+    recap: Recap;
+    seats: { name: string }[];
+    viewerSeat: number;
+    events: GameEvent[];
+  } | null>(null);
+  let recapTrigger: HTMLElement | null = null;
   let leaveOpen = $state(false);
   let leaving = $state(false);
   let roomClosed = false;
@@ -567,6 +583,26 @@
     inviteOpen = false;
     void tick().then(() => inviteTrigger?.focus());
   }
+  function showRecap(event?: MouseEvent) {
+    if (!snapshot?.state?.lastHand) return;
+    recapTrigger = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    // A new hand can start while the dialog is open. Keep the selected public
+    // result, names and perspective together until the player closes it.
+    recapSelection = {
+      recap: structuredClone(snapshot.state.lastHand),
+      seats: snapshot.seats.map(({ name }) => ({ name })),
+      viewerSeat: snapshot.seat,
+      events: structuredClone(snapshot.cantoHistory ?? snapshot.events ?? []),
+    };
+    recapOpen = true;
+  }
+  function restoreRecapFocus(event: Event) {
+    event.preventDefault();
+    void tick().then(() => {
+      if (recapTrigger?.isConnected && recapTrigger.getClientRects().length) recapTrigger.focus();
+      else document.querySelector<HTMLButtonElement>('[aria-controls="match-details"]')?.focus();
+    });
+  }
   async function copy() {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/mesa/${code}`);
@@ -623,6 +659,7 @@
   onkeydown={(event) => {
     cardSounds.unlock();
     if (event.key === 'Escape') {
+      if (recapOpen) return;
       detailsOpen = false;
       clearCardLabel();
     }
@@ -791,6 +828,7 @@
                 {cardsMoving}
                 oninvite={invite}
                 onrematch={() => send({ type: 'rematch' })}
+                onrecap={showRecap}
                 rematchDisabled={!connected || busy || updating}
               />
             </TableViewport>
@@ -802,6 +840,7 @@
               {cardsMoving}
               oninvite={invite}
               onrematch={() => send({ type: 'rematch' })}
+              onrecap={showRecap}
               rematchDisabled={!connected || busy || updating}
             />
           {/if}
@@ -1132,6 +1171,9 @@
           {/if}
         </div>
         <VoiceControls {code} />
+        {#if game?.lastHand}
+          <Button variant="outline" onclick={showRecap}>Resumen de la última mano</Button>
+        {/if}
         <label class="card-label-option">
           <input
             type="checkbox"
@@ -1191,6 +1233,22 @@
   {/if}
 </div>
 {#if inviteOpen}<InviteDialog {code} onclose={closeInvite} />{/if}
+<Dialog.Root bind:open={recapOpen}>
+  <Dialog.Content onCloseAutoFocus={restoreRecapFocus}>
+    <Dialog.Header>
+      <Dialog.Title>Resumen de la mano {recapSelection?.recap.handNumber}</Dialog.Title>
+      <Dialog.Description>Las vueltas, los cantos y las piedras que se sumaron.</Dialog.Description>
+    </Dialog.Header>
+    {#if recapSelection}
+      <HandRecap {...recapSelection} />
+    {/if}
+    {#if game && game.phase !== 'match_over' && !updating && !snapshot?.paused && !snapshot?.cpuPaused}
+      <p class="muted text-sm">
+        La partida sigue y los tiempos continúan mientras lees el resumen.
+      </p>
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
 {#if hoveredCard && cardLabelsEnabled}
   <span
     class="card-hover-label"

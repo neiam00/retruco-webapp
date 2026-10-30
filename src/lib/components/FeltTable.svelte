@@ -16,6 +16,7 @@
     cardsMoving = false,
     oninvite,
     onrematch,
+    onrecap,
     rematchDisabled = false,
   }: {
     snapshot: Snapshot;
@@ -24,6 +25,7 @@
     cardsMoving?: boolean;
     oninvite: () => void;
     onrematch?: () => void;
+    onrecap?: (event?: MouseEvent) => void;
     rematchDisabled?: boolean;
   } = $props();
 
@@ -216,6 +218,9 @@
           </p>
         {/if}
         <Button href={resolve('/')} variant="outline">Volver a las mesas</Button>
+        {#if game.lastHand && onrecap}
+          <Button variant="ghost" onclick={onrecap}>Ver resumen de la mano</Button>
+        {/if}
       {:else if game.phase === 'hand_over'}
         <span class="status-eyebrow">Se cierra la mano</span>
         <h2>La próxima ya viene.</h2>
@@ -231,6 +236,9 @@
         {#each game.payouts as payout, i (i)}
           <p>{teamLabel(payout.team, snapshot.seat)}: +{payout.points} de {payout.kind}</p>
         {/each}
+        {#if game.lastHand && onrecap}
+          <Button variant="outline" onclick={onrecap}>Ver resumen de la mano</Button>
+        {/if}
       {:else}
         <div class="turn-message">
           <span class="turn-dot"></span>

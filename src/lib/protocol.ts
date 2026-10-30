@@ -31,6 +31,7 @@ export interface Wager {
   mode?: string;
 }
 export interface GameView {
+  lastHand?: HandRecap;
   config: Config;
   version: string;
   revision: number;
@@ -63,6 +64,27 @@ export interface GameView {
   envidoResults?: { seat: number; value: number; eligible: boolean }[];
   privando?: [boolean, boolean];
   privoEnvido?: { team: number; value: number }[];
+}
+
+export interface HandRecap {
+  vira?: Card;
+  handNumber: number;
+  mano: number;
+  winner: number;
+  matchWinner: number;
+  target: number;
+  reason: string;
+  scoresBefore: [number, number];
+  scoresAfter: [number, number];
+  tricks: {
+    round: number;
+    status: 'unplayed' | 'incomplete' | 'hidden' | 'tie' | 'won';
+    winnerSeat: number;
+    winnerTeam: number;
+    plays: { seat: number; card?: Card; present: boolean; burned: boolean; concealed: boolean }[];
+  }[];
+  payouts: { kind: string; team: number; points: number }[];
+  envidoResults: { seat: number; value: number; eligible: boolean }[];
 }
 export interface GameEvent {
   id: number;

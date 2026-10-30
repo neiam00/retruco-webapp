@@ -119,8 +119,8 @@ export const rulebook = [
       'Hay 30 segundos para jugar una carta, partir el mazo o responder un canto. La respuesta es un único plazo compartido por el equipo. Un canto suspende las cartas y, al terminar, el jugador recibe 30 segundos nuevos. Si envido interrumpe truco, al volver a truco su equipo también recibe 30 segundos nuevos.',
       'Si se acaba el tiempo en la primera vuelta, se juega una carta al azar boca arriba y válida. Nunca se quema la primera. En otras vueltas se quema una carta restante al azar y se consume esa jugada. En pegado obligatorio se queman las dos restantes.',
       'Si vence el plazo de respuesta, se aplica «No quiero»; en flor envidada se aplica «Con mi flor me achico». Un plazo de truco o envido ordinario no quema flores por omisión de un integrante. El de flor envidada invalida las flores ordinarias de ambos compañeros. La receta sigue protegida.',
-      'Desconectarse no detiene el juego ni los tiempos. Al volver recibes el estado actual y las consecuencias que ya hayan ocurrido. Salir expresamente de una partida hace perder inmediatamente a todo tu equipo.',
-      'Una mesa que todavía espera jugadores se elimina cuando sale su último jugador humano. Si cierra la página o pierde conexión, tiene 10 segundos para volver antes de que se elimine. Otra pestaña conectada conserva la mesa; los espectadores y las CPU no. Esto no cambia las reglas de desconexión de las partidas que ya empezaron.',
+      'Si queda otro jugador humano conectado, la partida y sus tiempos continúan. Cuando todos los jugadores humanos se desconectan, el juego se pausa y la mesa se conserva durante 2 minutos. Al volver un jugador, la partida se reanuda con un plazo nuevo para jugar o responder. Salir expresamente de una partida hace perder inmediatamente a todo tu equipo.',
+      'Una mesa que todavía espera jugadores se elimina inmediatamente cuando sale expresamente su último jugador humano. Cerrar la página o perder conexión deja un plazo de 2 minutos para volver. Otra pestaña de un jugador humano conserva la mesa; los espectadores y las CPU no la mantienen abierta.',
     ],
   },
   {

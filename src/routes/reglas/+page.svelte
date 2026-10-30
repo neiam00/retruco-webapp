@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from '$app/paths';
   import { Button } from '#lib/components/ui/button/index.js';
   import Hierarchy from '#lib/components/Hierarchy.svelte';
   import { rulebook } from '#lib/rulebook.js';
@@ -26,6 +27,7 @@
     <p class="muted">
       Truco venezolano, con las reglas de Retruco. Tenlas a mano; la picardía viene con la práctica.
     </p>
+    <Button href={resolve('/aprender')}>Aprender jugando</Button>
   </div>
   <section class="hierarchy-section">
     <h2>La jerarquía de las cartas</h2>

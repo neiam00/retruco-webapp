@@ -5,7 +5,7 @@ export const prerender = Boolean(SITE_ORIGIN);
 
 export const GET: RequestHandler = ({ url }) => {
   const origin = (SITE_ORIGIN || url.origin).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const entries = ['/', '/reglas', '/creditos']
+  const entries = ['/', '/aprender', '/reglas', '/creditos']
     .map((path) => `  <url><loc>${origin}${path}</loc></url>`)
     .join('\n');
   return new Response(
