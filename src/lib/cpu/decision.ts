@@ -1,0 +1,54 @@
+import type { CPURequest, CPUResponse } from '#lib/protocol.js';
+import { fallback } from './fallback.js';
+import type { LocalPolicy } from './model.js';
+
+const signals = ['none', 'perico', 'perica', 'seven_spades', 'seven_coins', 'receta'] as const;
+
+// One session permanently falls back after an invalid observation or inference
+// failure. A controller retry creates a fresh session and can reload the model.
+export class DecisionSession {
+  constructor(private policy?: Pick<LocalPolicy, 'decide'>) {}
+
+  decide(request: CPURequest): CPUResponse {
+    const baseline = fallback(request);
+    if (baseline.error || !this.policy || request.version !== 2 || request.view.phase === 'cutting')
+      return baseline;
+    try {
+      if (
+        !request.token ||
+        !request.features ||
+        request.features.version !== 1 ||
+        !['game', 'signal'].includes(request.kind ?? '')
+      )
+        throw new Error('Unsupported model input');
+      const signal = request.kind === 'signal';
+      if (!signal && request.features.actions.length !== request.view.legal.length)
+        throw new Error('Candidate mismatch');
+      const index = this.policy.decide(
+        request.features.state,
+        request.features.actions,
+        signal,
+        request.entropy,
+      );
+      if (
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= (signal ? signals.length : request.view.legal.length)
+      )
+        throw new Error('Invalid selection');
+      const result: CPUResponse = {
+        version: 2,
+        seat: request.seat,
+        revision: request.view.revision,
+        kind: request.kind,
+        token: request.token,
+      };
+      if (signal) result.signal = signals[index];
+      else result.command = request.view.legal[index];
+      return result;
+    } catch {
+      this.policy = undefined;
+      return baseline;
+    }
+  }
+}

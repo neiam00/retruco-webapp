@@ -176,11 +176,19 @@
     }
   }
   const cpu = new CPUController(
-    (seat, revision, command) => {
+    (seat, revision, command, decision) => {
       if (!disposed && !suspended && socket?.readyState === WebSocket.OPEN) {
         socket.send(
           JSON.stringify({
-            input: { id: crypto.randomUUID(), cpuSeat: seat, revision, command },
+            input: {
+              id: crypto.randomUUID(),
+              cpuSeat: seat,
+              revision,
+              command,
+              cpuKind: decision?.kind,
+              cpuToken: decision?.token,
+              signal: decision?.signal,
+            },
           }),
         );
       }
@@ -339,6 +347,7 @@
     const generation = ++connectionGeneration;
     const url = new URL(socketURL(code));
     url.searchParams.set('transport', '2');
+    url.searchParams.set('cpuProtocol', '2');
     const current = new WebSocket(url);
     socket = current;
     const stream = new MatchStream();

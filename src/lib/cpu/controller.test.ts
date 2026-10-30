@@ -30,7 +30,11 @@ class TestWorker {
           version: request.version,
           seat: request.seat,
           revision: request.view.revision,
-          command: { type: 'play', card: 0 },
+          kind: request.kind,
+          token: request.token,
+          ...(request.kind === 'signal'
+            ? { signal: 'none' }
+            : { command: { type: 'play', card: 0 } }),
         },
       },
     });
@@ -135,5 +139,47 @@ test('loading timeout survives revision updates and a retry replaces the failed 
   expect(TestWorker.instances).toHaveLength(2);
   TestWorker.instances[1].ready();
   expect(TestWorker.instances[1].messages[0].request.view.revision).toBe(2);
+  controller.stop();
+});
+
+test('v2 tokens invalidate decisions even when rules revision is unchanged', () => {
+  const send = vi.fn();
+  const controller = new CPUController(send, vi.fn());
+  const first: CPUWork = { ...work(7), version: 2, kind: 'game', token: 'old' };
+  controller.update(first);
+  const worker = TestWorker.instances[0];
+  worker.ready();
+  controller.update({ ...first, token: 'new' });
+  worker.answer(0);
+  vi.advanceTimersByTime(1000);
+  expect(send).not.toHaveBeenCalled();
+  worker.answer(1);
+  vi.advanceTimersByTime(650);
+  expect(send).toHaveBeenCalledExactlyOnceWith(
+    1,
+    7,
+    { type: 'play', card: 0 },
+    expect.objectContaining({ token: 'new', kind: 'game' }),
+  );
+  controller.stop();
+});
+
+test('signal none is acknowledged once without delaying for card animation', () => {
+  const send = vi.fn();
+  const controller = new CPUController(send, vi.fn(), () => true);
+  const input: CPUWork = { ...work(7), version: 2, kind: 'signal', token: 'signal-work' };
+  controller.update(input);
+  const worker = TestWorker.instances[0];
+  worker.ready();
+  worker.answer(0);
+  vi.advanceTimersByTime(1);
+  expect(send).toHaveBeenCalledExactlyOnceWith(
+    1,
+    7,
+    undefined,
+    expect.objectContaining({ signal: 'none', token: 'signal-work' }),
+  );
+  controller.update(input);
+  expect(worker.messages).toHaveLength(1);
   controller.stop();
 });

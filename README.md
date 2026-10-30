@@ -74,10 +74,26 @@ Edit `artwork/social-preview.html` and run `pnpm social:build` to regenerate the
 social image; this requires Playwright Chromium. See
 [the image license](static/og-image.LICENSE.md).
 
-CPU decisions run in a browser Worker using the Go engine and its matching WASM
-runtime. The server validates every move. To update both files from a backend
-checkout, run `pnpm update:cpu /path/to/retruco-backend`, then run the checks
-above. Human-only matches do not load the CPU module.
+CPU decisions run in a dedicated browser Worker. The server validates every
+move and authorizes each CPU v2 signal opportunity with a fresh work token.
+Human-only matches do not start the worker. The normal fallback is TypeScript,
+verified against native Go decisions; it does not download the legacy Go WASM.
+
+Learned inference is disabled by default. Set `VITE_CPU_ML_ENABLED=true` and
+`VITE_CPU_MODEL_MANIFEST=/cpu/<release>/manifest.json` at build time only for an
+approved release. The same directory must contain `policy.wasm` and `policy.bin`.
+The manifest must include the model's `sha256` and evaluator's `wasm_sha256`,
+compatible encoder/architecture versions, and `approved: true`. Checksums and
+approval must come from the release evaluation process, not a smoke checkpoint.
+Loading, compatibility or inference errors switch the worker to the heuristic
+for its session; signaling falls back to `none`. Rebuild with the flag false to
+roll back learned inference.
+
+The native parity corpus is generated from the backend with
+`go run ./cmd/cpu-fixtures > ../frontend/src/lib/cpu/testdata/native-policy.json`.
+Regenerate it whenever the native heuristic changes, then run `pnpm test`.
+`pnpm update:cpu` remains available for legacy Go artifacts, which are not
+imported by the active worker.
 
 ## License
 

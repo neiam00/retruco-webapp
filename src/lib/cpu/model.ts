@@ -8,6 +8,7 @@ export interface PolicyManifest {
   quantization: string;
   bytes: number;
   sha256: string;
+  wasm_sha256?: string;
 }
 
 interface PolicyExports extends WebAssembly.Exports {
@@ -64,6 +65,9 @@ export class LocalPolicy {
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', modelBytes));
     const hash = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
     if (hash !== manifest.sha256) throw new Error('CPU model checksum mismatch');
+    const wasmDigest = new Uint8Array(await crypto.subtle.digest('SHA-256', wasmBytes));
+    const wasmHash = Array.from(wasmDigest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    if (wasmHash !== manifest.wasm_sha256) throw new Error('CPU evaluator checksum mismatch');
     const { instance } = await WebAssembly.instantiate(wasmBytes, {});
     const wasm = instance.exports as PolicyExports;
     new Uint8Array(wasm.memory.buffer, wasm.model_ptr(), modelBytes.length).set(modelBytes);

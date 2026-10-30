@@ -15,7 +15,12 @@ export class CPUController {
   private delay?: ReturnType<typeof setTimeout>;
 
   constructor(
-    private readonly send: (seat: number, revision: number, command: Command) => void,
+    private readonly send: (
+      seat: number,
+      revision: number,
+      command: Command | undefined,
+      decision?: CPUResponse,
+    ) => void,
     private readonly changed: (status: CPUStatus, error?: string) => void,
     private readonly presentationBusy: () => boolean = () => false,
   ) {}
@@ -52,7 +57,8 @@ export class CPUController {
   }
 
   private key(work?: CPUWork) {
-    return work?.view ? `${work.seat}:${work.view.revision}` : undefined;
+    if (!work?.view) return undefined;
+    return work.version === 2 ? work.token : `${work.seat}:${work.view.revision}`;
   }
 
   private start() {
@@ -104,6 +110,9 @@ export class CPUController {
       id: key,
       request: {
         version: work.version,
+        kind: work.kind,
+        token: work.token,
+        features: work.features,
         seat: work.seat,
         entropy: crypto.getRandomValues(new Uint32Array(1))[0],
         view: work.view,
@@ -119,7 +128,15 @@ export class CPUController {
       result.version !== this.work.version ||
       result.revision !== this.work.view.revision ||
       result.seat !== this.work.seat ||
-      !result.command
+      (this.work.version === 2 &&
+        (result.token !== this.work.token || result.kind !== this.work.kind)) ||
+      (this.work.kind === 'signal'
+        ? !result.signal ||
+          !['none', 'perico', 'perica', 'seven_spades', 'seven_coins', 'receta'].includes(
+            result.signal,
+          ) ||
+          !!result.command
+        : !result.command)
     ) {
       this.fail(result.error ?? 'La respuesta del motor CPU no coincide con esta mano.');
       return;
@@ -130,16 +147,17 @@ export class CPUController {
       if (this.pending !== key || this.key(this.work) !== key) return;
       // Let dealt cards arrive before a CPU plays one. Decisions are still
       // computed immediately; only the existing presentation pause is extended.
-      if (this.presentationBusy()) {
+      if (result.kind !== 'signal' && this.presentationBusy()) {
         this.delay = setTimeout(submit, 50);
         return;
       }
       this.lastSubmitted = key;
       this.pending = undefined;
-      this.send(result.seat, result.revision, result.command!);
+      if (result.version === 2) this.send(result.seat, result.revision, result.command, result);
+      else this.send(result.seat, result.revision, result.command!);
       this.changed('ready');
     };
-    this.delay = setTimeout(submit, 650);
+    this.delay = setTimeout(submit, result.kind === 'signal' ? 0 : 650);
   }
 
   private fail(error: string) {

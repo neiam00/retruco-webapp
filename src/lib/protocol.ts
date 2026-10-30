@@ -136,19 +136,33 @@ export interface Listing {
   host: string;
 }
 
+export interface CPUFeatures {
+  version: number;
+  state: number[];
+  actions: number[][];
+}
 export interface CPUWork {
+  kind?: 'game' | 'signal';
+  token?: string;
+  features?: CPUFeatures;
   version: number;
   controlled: boolean;
   seat: number;
   view?: GameView;
 }
 export interface CPURequest {
+  kind?: 'game' | 'signal';
+  token?: string;
+  features?: CPUFeatures;
   version: number;
   seat: number;
   entropy: number;
   view: GameView;
 }
 export interface CPUResponse {
+  kind?: 'game' | 'signal';
+  token?: string;
+  signal?: string;
   version: number;
   revision: number;
   seat: number;

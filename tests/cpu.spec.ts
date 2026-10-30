@@ -231,7 +231,8 @@ for (const players of [2, 4]) {
       await expect.poll(() => page.evaluate(() => window.cpuPerformance.startupMs.length)).toBe(1);
       const memory = await workerMemory(browser, page);
       expect(memory.usedSize).toBeGreaterThan(0);
-      expect(memory.wasmLinearBytes).toBeGreaterThan(0);
+      expect(memory.wasmLinearBytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+      if (process.env.VITE_CPU_ML_ENABLED !== 'true') expect(memory.wasmLinearBytes).toBe(0);
       const downloads = await page.workers()[0].evaluate(() =>
         (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
           .filter((entry) => /\.wasm(?:\?|$)/.test(entry.name))
