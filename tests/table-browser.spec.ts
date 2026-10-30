@@ -1,6 +1,67 @@
 import { expect, test } from '@playwright/test';
 import type { Listing } from '../src/lib/protocol.js';
 
+test('versioned lobby updates apply removals and occupancy without a stale HTTP baseline restoring rows', async ({
+  page,
+}) => {
+  const table = (code: string, host: string, players = 1): Listing => ({
+    code,
+    host,
+    players,
+    capacity: 4,
+    target: 24,
+    florRequired: true,
+    started: false,
+  });
+  const first = table('ANAA-0001', 'Ana');
+  const second = table('BETO-0002', 'Beto');
+  const baseline = {
+    type: 'listings_snapshot',
+    epoch: 'test-epoch',
+    revision: 0,
+    listings: [first, second],
+  };
+  const delta = {
+    type: 'listings_delta',
+    epoch: 'test-epoch',
+    baseRevision: 0,
+    revision: 1,
+    upserts: [table(second.code, second.host, 4), table('CARL-0003', 'Carla')],
+    removed: [first.code],
+  };
+  let release!: () => void;
+  const heldResponse = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/matches') {
+      expect(url.searchParams.get('transport')).toBe('2');
+      await heldResponse;
+      await route.fulfill({ json: baseline });
+    } else if (url.pathname === '/api/matches/events') {
+      expect(url.searchParams.get('transport')).toBe('2');
+      await route.fulfill({
+        contentType: 'text/event-stream',
+        body: `data: ${JSON.stringify(baseline)}\n\ndata: ${JSON.stringify(delta)}\n\n`,
+      });
+    } else await route.fulfill({ json: null });
+  });
+  await page.goto('/');
+  const names = page.locator('.table-row strong');
+  await expect(names).toHaveText(['Mesa de Beto', 'Mesa de Carla']);
+  const response = page.waitForResponse(
+    (value) => new URL(value.url()).pathname === '/api/matches',
+  );
+  release();
+  await response;
+  await expect(names).toHaveText(['Mesa de Beto', 'Mesa de Carla']);
+  await page.getByLabel('Ocultar mesas llenas').check();
+  await expect(names).toHaveText(['Mesa de Carla']);
+  await page.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('carla');
+  await expect(names).toHaveText(['Mesa de Carla']);
+});
+
 test('ambient cards only load artwork visible at the current screen and motion preference', async ({
   page,
 }) => {

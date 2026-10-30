@@ -70,7 +70,7 @@ test('registration fails closed when the verification script is unavailable and 
   page,
 }) => {
   await page.route('**/api/**', (route) =>
-    route.fulfill({ json: route.request().url().endsWith('/matches') ? [] : null }),
+    route.fulfill({ json: new URL(route.request().url()).pathname === '/api/matches' ? [] : null }),
   );
   await mockTurnstile(page, false);
   await page.route('https://challenges.cloudflare.com/turnstile/v0/api.js*', (route) =>

@@ -131,7 +131,7 @@ test('account validation focuses the first invalid field and keeps errors inside
 
 test('table-list failures receive focus on initial load and manual retry', async ({ page }) => {
   await mockForms(page);
-  await page.route('**/api/matches', (route) =>
+  await page.route(/\/api\/matches(?:\?.*)?$/, (route) =>
     route.fulfill({ status: 503, json: { error: 'No pudimos cargar las mesas.' } }),
   );
   await page.goto('/');

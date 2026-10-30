@@ -92,6 +92,7 @@
   const retry = new ReconnectBackoff();
   let connectionGeneration = 0;
   let disposed = false;
+  let suspended = false;
   let stopPreloading: (() => void) | undefined;
   let gameSurface = $state<HTMLElement>();
   let cardsMoving = $state(false);
@@ -155,7 +156,7 @@
   }
   const cpu = new CPUController(
     (seat, revision, command) => {
-      if (!disposed && socket?.readyState === WebSocket.OPEN) {
+      if (!disposed && !suspended && socket?.readyState === WebSocket.OPEN) {
         socket.send(
           JSON.stringify({
             input: { id: crypto.randomUUID(), cpuSeat: seat, revision, command },
@@ -238,7 +239,15 @@
   }
 
   function scheduleReconnect(minimumDelay = 0) {
-    if (disposed || roomClosed || roomUnavailable || updateRequired || !user || !navigator.onLine)
+    if (
+      disposed ||
+      suspended ||
+      roomClosed ||
+      roomUnavailable ||
+      updateRequired ||
+      !user ||
+      !navigator.onLine
+    )
       return;
     retry.schedule(connect, minimumDelay);
   }
@@ -254,9 +263,48 @@
     connect();
   }
 
+  function releaseConnection() {
+    retry.cancel();
+    cpu.stop();
+    cardMotion.cancel();
+    cardSounds.stop();
+    connected = false;
+    busy = false;
+    const current = socket;
+    socket = undefined;
+    ++connectionGeneration;
+    if (!current) return;
+    const disconnect = () => {
+      try {
+        if (current.readyState === WebSocket.OPEN)
+          current.send(JSON.stringify({ disconnect: true }));
+      } catch {
+        // A concurrent transport failure can race navigation; close remains the fallback.
+      }
+      current.close();
+    };
+    // A pending handshake can finish after teardown if transport closure is delayed.
+    if (current.readyState === WebSocket.CONNECTING)
+      current.addEventListener('open', disconnect, { once: true });
+    disconnect();
+  }
+
+  function pagehide() {
+    suspended = true;
+    releaseConnection();
+  }
+
+  function pageshow(event: PageTransitionEvent) {
+    if (!event.persisted || disposed || !suspended) return;
+    suspended = false;
+    connect();
+  }
+
   function connect() {
     if (
       disposed ||
+      suspended ||
+      roomClosed ||
       updateRequired ||
       roomUnavailable ||
       !user ||
@@ -275,7 +323,7 @@
     let receivedMessage = false;
     let resyncPending = false;
     let retryAfter = 0;
-    const active = () => !disposed && generation === connectionGeneration;
+    const active = () => !disposed && !suspended && generation === connectionGeneration;
     const resync = () => {
       connected = false;
       busy = false;
@@ -327,7 +375,7 @@
           snapshot = incoming;
           void tick().then(() => {
             if (
-              !disposed &&
+              active() &&
               snapshot?.state?.revision === incoming.state?.revision &&
               snapshot?.seat === incoming.seat &&
               snapshot?.perspective === incoming.perspective
@@ -400,25 +448,25 @@
     motionPreference.addEventListener('change', stopMotion);
     void api<User | null>('/session')
       .then((value) => {
+        if (disposed) return;
         user = value;
         ready = true;
         if (user) connect();
       })
       .catch((e) => {
+        if (disposed) return;
         error = e.message;
         ready = true;
       });
     const timer = setInterval(() => (now = Date.now()), 250);
     return () => {
       disposed = true;
+      releaseConnection();
       stopPreloading?.();
       cardMotion.cancel();
       cardSounds.close();
       motionPreference.removeEventListener('change', stopMotion);
-      cpu.stop();
       clearInterval(timer);
-      retry.cancel();
-      socket?.close();
     };
   });
   async function enter(seat?: number) {
@@ -536,6 +584,8 @@
 </script>
 
 <svelte:window
+  onpagehide={pagehide}
+  onpageshow={pageshow}
   ononline={online}
   onoffline={offline}
   onresize={() => {

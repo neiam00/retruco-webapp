@@ -132,6 +132,44 @@ test('pauses reconnects while offline and cancels pending reconnects after leavi
   expect(connections).toBe(2);
 });
 
+test('releases a suspended page connection and reconnects once when restored', async ({ page }) => {
+  await session(page);
+  await page.clock.install();
+  const initial = tableSnapshot(4, 0, false);
+  initial.state!.legal = [{ type: 'play', card: 1 }];
+  let connections = 0;
+  const requests: object[] = [];
+  await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', (socket) => {
+    connections++;
+    socket.onMessage((message) => requests.push(JSON.parse(message.toString())));
+    socket.send(JSON.stringify({ type: 'snapshot', data: initial }));
+  });
+  await page.goto('/mesa/VIRA-1234');
+  const card = page.locator('[data-hand-card="1"]');
+  await expect(card).toBeEnabled();
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })),
+  );
+  await expect.poll(() => requests).toEqual([{ disconnect: true }]);
+  await expect(card).toBeDisabled();
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('online'));
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
+  });
+  await page.clock.fastForward(60_000);
+  expect(connections).toBe(1);
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })),
+  );
+  await expect.poll(() => connections).toBe(2);
+  await expect(card).toBeEnabled();
+  await page.evaluate(() =>
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })),
+  );
+  await page.clock.fastForward(60_000);
+  expect(connections).toBe(2);
+});
+
 test('diagnoses rejected legacy handshakes once instead of retrying missing tables', async ({
   page,
 }) => {

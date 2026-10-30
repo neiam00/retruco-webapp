@@ -4,9 +4,9 @@ test('the room browser recovers when the live-list endpoint is temporarily unava
   page,
 }) => {
   await page.route('**/api/session', (route) => route.fulfill({ json: null }));
-  await page.route('**/api/matches', (route) => route.fulfill({ json: [] }));
+  await page.route(/\/api\/matches(?:\?.*)?$/, (route) => route.fulfill({ json: [] }));
   let attempts = 0;
-  await page.route('**/api/matches/events', async (route) => {
+  await page.route(/\/api\/matches\/events(?:\?.*)?$/, async (route) => {
     if (++attempts === 1) {
       await route.fulfill({ status: 404, json: { error: 'Deployment in progress' } });
       return;
@@ -35,18 +35,37 @@ test('the room browser recovers when the live-list endpoint is temporarily unava
   expect(attempts).toBeGreaterThan(1);
 });
 
-for (const departure of ['leave', 'disconnect', 'cpu_disconnect'] as const) {
+for (const departure of ['leave', 'disconnect', 'cpu_disconnect', 'cpu_navigate'] as const) {
   test(`vacant rooms disappear live after ${departure} and cannot be rejoined`, async ({
     browser,
     baseURL,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60_000);
-    const contexts = await Promise.all([0, 1, 2].map(() => browser.newContext({ baseURL })));
+    const contexts = await Promise.all(
+      [0, 1, 2].map(() => browser.newContext({ baseURL, viewport: testInfo.project.use.viewport })),
+    );
     const [owner, watcher, visitor] = contexts;
     const api = process.env.TEST_API_ORIGIN ?? 'http://127.0.0.1:8080';
     const headers = { Origin: baseURL! };
     const ownerName = `Lobby ${crypto.randomUUID().slice(0, 8)}`;
+    const cpuRoom = departure === 'cpu_disconnect' || departure === 'cpu_navigate';
     try {
+      if (departure === 'cpu_navigate') {
+        await owner.addInitScript(() => {
+          const close = WebSocket.prototype.close;
+          WebSocket.prototype.close = function (...args) {
+            if (/^\/api\/matches\/[^/]+\/ws$/.test(new URL(this.url).pathname)) {
+              // Keep the real connection receiving frames and answering control pings.
+              // Navigation must release this connection without relying on close propagation.
+              document.documentElement.dataset.delayedGameCloses = String(
+                Number(document.documentElement.dataset.delayedGameCloses ?? 0) + 1,
+              );
+              return;
+            }
+            close.apply(this, args);
+          };
+        });
+      }
       for (const [context, name] of [
         [owner, ownerName],
         [watcher, 'Lobby spectator'],
@@ -61,7 +80,7 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect'] as const) {
         if (new URL(request.url()).pathname === '/api/matches/events') listingStreams++;
       });
       // Disable polling responses: list changes must arrive through the live stream.
-      await roomBrowser.route('**/api/matches', async (route) => {
+      await roomBrowser.route(/\/api\/matches(?:\?.*)?$/, async (route) => {
         await route.fulfill({ json: [] });
       });
       await roomBrowser.goto('/');
@@ -71,11 +90,11 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect'] as const) {
         data: {
           private: false,
           config: {
-            players: departure === 'cpu_disconnect' ? 2 : 4,
+            players: cpuRoom ? 2 : 4,
             target: 12,
             florRequired: false,
           },
-          options: { cpuSeats: departure === 'cpu_disconnect' ? [1] : [] },
+          options: { cpuSeats: cpuRoom ? [1] : [] },
         },
       });
       expect(created.ok()).toBe(true);
@@ -100,6 +119,47 @@ for (const departure of ['leave', 'disconnect', 'cpu_disconnect'] as const) {
           .click();
         await expect(ownerPage).toHaveURL(`${baseURL}/`);
         await expect(listedRoom).toHaveCount(0, { timeout: 2000 });
+      } else if (departure === 'cpu_navigate') {
+        // A document marker proves both links use SPA navigation in the original tab.
+        await ownerPage.evaluate(() => {
+          document.documentElement.dataset.navigationMarker = 'same-document';
+        });
+        const departedAt = Date.now();
+        await ownerPage.locator('.match-header .brand').click();
+        await expect(ownerPage).toHaveURL(`${baseURL}/`);
+        await expect(ownerPage.locator('html')).toHaveAttribute('data-delayed-game-closes', '1');
+        expect((await owner.request.get(`${api}/api/matches/${code}`)).status()).toBe(200);
+
+        // Keep the replacement private so the public row still identifies only the old room.
+        await ownerPage.getByText('Opciones de mesa', { exact: true }).click();
+        await ownerPage.getByRole('button', { name: 'Cambiar', exact: true }).click();
+        await expect(ownerPage.getByText('Mesa privada', { exact: true })).toBeVisible();
+        await ownerPage.getByRole('button', { name: /Crear una mesa/ }).click();
+        await expect(ownerPage).toHaveURL(/\/mesa\/[A-Z]{4}-\d{4}$/);
+        const replacementCode = new URL(ownerPage.url()).pathname.split('/').at(-1)!;
+        expect(replacementCode).not.toBe(code);
+        await expect(ownerPage.getByText('En línea', { exact: true })).toBeVisible();
+        await expect(ownerPage.locator('html')).toHaveAttribute(
+          'data-navigation-marker',
+          'same-document',
+        );
+
+        await expect(listedRoom).toHaveCount(0, {
+          timeout: Math.max(1000, 15_000 - (Date.now() - departedAt)),
+        });
+        expect(Date.now() - departedAt).toBeGreaterThanOrEqual(9000);
+        expect(listingStreams, 'navigation does not reconnect the independent room browser').toBe(
+          1,
+        );
+        expect((await owner.request.get(`${api}/api/matches/${replacementCode}`)).status()).toBe(
+          200,
+        );
+        await ownerPage.getByRole('button', { name: 'Abrir chat', exact: true }).click();
+        await ownerPage.getByLabel('Mensaje', { exact: true }).fill('Seguimos en la nueva mesa');
+        await ownerPage.getByRole('button', { name: 'Enviar mensaje', exact: true }).click();
+        await expect(
+          ownerPage.getByText('Seguimos en la nueva mesa', { exact: true }),
+        ).toBeVisible();
       } else {
         const otherTab = await owner.newPage();
         await otherTab.goto(`/mesa/${code}`);

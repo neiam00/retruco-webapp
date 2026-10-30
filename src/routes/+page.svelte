@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { API_ORIGIN } from '$app/env/public';
+  import { LobbyFeed } from '#lib/lobby-stream.js';
   import {
     ArrowRight,
     Plus,
@@ -105,58 +105,33 @@
   let turnstileAttempt = $state(0);
   let historyOpen = $state(false);
   let history = $state<HistoryEntry[]>([]);
-  let listingRevision = 0;
+  let listingFeed: LobbyFeed | undefined;
 
   async function refresh(focusOnError = false) {
-    const revision = ++listingRevision;
-    try {
-      const latest = await api<Listing[]>('/matches');
-      if (revision === listingRevision) {
-        tables = latest;
-        listError = '';
-      }
-    } catch (e) {
-      if (revision === listingRevision) {
-        listError = e instanceof Error ? e.message : 'No pudimos cargar las mesas.';
-        loading = false;
-        if (focusOnError) await focusField('table-list-error');
-      }
-    } finally {
-      if (revision === listingRevision) loading = false;
-    }
-  }
-  function openListingStream() {
-    const updates = new EventSource(`${API_ORIGIN}/api/matches/events`, { withCredentials: true });
-    updates.onmessage = (event) => {
-      try {
-        const latest = JSON.parse(event.data) as Listing[];
-        // A slower HTTP refresh must not restore a room removed by the stream.
-        listingRevision++;
-        tables = latest;
-        loading = false;
-        listError = '';
-      } catch {
-        void refresh();
-      }
-    };
-    return updates;
+    await listingFeed?.refresh();
+    if (focusOnError && listError) await focusField('table-list-error');
   }
   onMount(() => {
     ready = true;
     void api<User | null>('/session')
       .then((value) => (user = value))
       .catch(() => {});
+    listingFeed = new LobbyFeed(
+      (latest) => {
+        tables = latest;
+        listError = '';
+        loading = false;
+      },
+      (message) => {
+        listError = message;
+        loading = false;
+      },
+    );
+    listingFeed.start();
     void refresh(true);
-    let updates = openListingStream();
-    // Ordinary disconnects reconnect automatically; HTTP errors such as a
-    // deployment-time 404 can close EventSource permanently, so reopen it.
-    const timer = setInterval(() => {
-      if (updates.readyState !== EventSource.OPEN) void refresh();
-      if (updates.readyState === EventSource.CLOSED) updates = openListingStream();
-    }, 10000);
     return () => {
-      updates.close();
-      clearInterval(timer);
+      listingFeed?.stop();
+      listingFeed = undefined;
     };
   });
   function clearFieldError(field: string) {
