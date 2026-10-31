@@ -48,4 +48,27 @@ describe('policy distribution', () => {
     ).rejects.toThrow('checksum');
     expect(manifest.approved).toBe(false);
   });
+
+  it.each(['false', 1, null])(
+    'evaluation rejects malformed approval %j before checksums',
+    async (approved) => {
+      await expect(
+        LocalPolicy.load(
+          new Uint8Array(),
+          new Uint8Array(),
+          {
+            format: 1,
+            encoder: 2,
+            rules: '2',
+            approved: approved as unknown as boolean,
+            architecture: 'candidate-768-96-64-48-32-32-1-signal6',
+            quantization: 'symmetric-int8-per-output-f32-execution',
+            bytes: 0,
+            sha256: 'invalid',
+          },
+          'evaluation',
+        ),
+      ).rejects.toThrow('Unsupported');
+    },
+  );
 });

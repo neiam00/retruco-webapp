@@ -162,6 +162,11 @@ for the release soak. This remains local candidate evaluation; the manifest's
 approval flag is never changed. `PLAYWRIGHT_BASE_URL` can override the browser
 test origin; the isolated runner selects loopback ports automatically.
 
+Release approval must be the JSON boolean `true`; strings and other truthy
+values cannot authorize downloads. The production-worker guard checks seven
+unapproved or malformed approval cases against the emitted JavaScript. Offline
+evaluation accepts boolean `false` while retaining compatibility and hash checks.
+
 Current Chromium cannot throttle dedicated workers through CDP. The report
 therefore retains unthrottled worker measurements and uses the same evaluator
 on a verified throttled page as a labeled supplement. This approximates older

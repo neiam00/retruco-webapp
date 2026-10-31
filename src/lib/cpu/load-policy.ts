@@ -14,7 +14,11 @@ export async function loadPolicy(
     const manifestResponse = await fetch(url, { signal });
     if (!manifestResponse.ok) return undefined;
     const manifest = (await manifestResponse.json()) as PolicyManifest;
-    if (!manifest.approved && purpose !== 'evaluation') return undefined;
+    if (
+      typeof manifest.approved !== 'boolean' ||
+      (manifest.approved !== true && purpose !== 'evaluation')
+    )
+      return undefined;
     const [wasm, model] = await Promise.all([
       fetch(new URL('policy.wasm', url), { signal }),
       fetch(new URL('policy.bin', url), { signal }),

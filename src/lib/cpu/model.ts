@@ -52,7 +52,8 @@ export class LocalPolicy {
     purpose: 'release' | 'evaluation' = 'release',
   ) {
     if (
-      (!manifest.approved && purpose !== 'evaluation') ||
+      typeof manifest.approved !== 'boolean' ||
+      (manifest.approved !== true && purpose !== 'evaluation') ||
       manifest.format !== 1 ||
       manifest.encoder !== 2 ||
       manifest.rules !== '2' ||
