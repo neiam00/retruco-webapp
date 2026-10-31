@@ -9,7 +9,6 @@ import {
   mkdirSync,
   readFileSync,
   writeFileSync,
-  copyFileSync,
   rmSync,
   openSync,
   closeSync,
@@ -23,21 +22,38 @@ const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const backend = resolve(frontend, '../backend');
 const [bundleArgument, outputArgument, ...testArguments] = process.argv.slice(2);
 if (!outputArgument)
-  throw Error('Usage: node scripts/test-cpu-integration.mjs BUNDLE OUTPUT [Playwright arguments]');
+  throw Error(
+    'Usage: node scripts/test-cpu-integration.mjs BUNDLE OUTPUT [--human-review | Playwright arguments]',
+  );
+const humanReview = testArguments.includes('--human-review');
+if (humanReview && (testArguments.length !== 1 || testArguments[0] !== '--human-review'))
+  throw Error('--human-review cannot be combined with Playwright arguments');
 const bundle = resolve(bundleArgument);
 const output = resolve(outputArgument);
+if (
+  humanReview &&
+  ['review-session.json', 'human-review.template.json', 'human-review.json'].some((name) =>
+    existsSync(resolve(output, name)),
+  )
+)
+  throw Error('Use a new output directory for each human review session');
 mkdirSync(output, { recursive: true });
 const temporary = mkdtempSync(resolve(tmpdir(), 'retruco-cpu-e2e-'));
 const suffix = randomUUID().slice(0, 8);
 const assetDirectory = resolve(frontend, 'static/cpu-evaluation', suffix);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const manifest = JSON.parse(readFileSync(resolve(bundle, 'manifest.json'), 'utf8'));
+const candidateAssets = new Map(
+  ['manifest.json', 'policy.bin', 'policy.wasm'].map((name) => [
+    name,
+    readFileSync(resolve(bundle, name)),
+  ]),
+);
+const manifest = JSON.parse(candidateAssets.get('manifest.json').toString('utf8'));
 for (const [file, expected] of [
   ['policy.bin', manifest.sha256],
   ['policy.wasm', manifest.wasm_sha256],
 ]) {
-  if (sha(readFileSync(resolve(bundle, file))) !== expected)
-    throw Error(`Invalid candidate ${file}`);
+  if (sha(candidateAssets.get(file)) !== expected) throw Error(`Invalid candidate ${file}`);
 }
 const git = (root, ...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const source = {
@@ -142,6 +158,82 @@ const report = {
   soak_matches_per_mode: Number(process.env.CPU_SOAK_MATCHES ?? 2),
   checks: [],
 };
+async function holdForHumanReview(origin) {
+  if (
+    !['browser-1v1', 'browser-2v2'].every((name) =>
+      report.checks.some((check) => check.name === name),
+    )
+  )
+    throw Error('Human review requires successful learned-policy matches in both modes');
+  const session = {
+    ...source,
+    approved: false,
+    kind: 'local-human-review-session',
+    checkpoint_sha256: manifest.checkpoint_sha256,
+    model_sha256: manifest.sha256,
+    wasm_sha256: manifest.wasm_sha256,
+    manifest_sha256: sha(candidateAssets.get('manifest.json')),
+    preflight_sha256: sha(readFileSync(resolve(output, 'review-preflight.json'))),
+    url: origin,
+    started_at: new Date().toISOString(),
+    ended_at: null,
+    status: 'ready',
+  };
+  const save = () =>
+    writeFileSync(resolve(output, 'review-session.json'), JSON.stringify(session, null, 2) + '\n');
+  writeFileSync(
+    resolve(output, 'human-review.template.json'),
+    JSON.stringify(
+      {
+        checkpoint_sha256: manifest.checkpoint_sha256,
+        model_sha256: manifest.sha256,
+        reviewer: '',
+        played_modes: [],
+        notes: '',
+        coordination_acceptable: false,
+        weaknesses_reviewed: false,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  save();
+  console.log(`Human review ready: ${origin}`);
+  console.log(
+    'Play both 1v1 and 2v2, including a CPU teammate. Review the named señas, cooperation and known weaknesses.',
+  );
+  console.log(
+    'Record your own findings in a copy of human-review.template.json. This launcher never marks the review passed or approves the model. Ctrl+C cleans up the local services.',
+  );
+  let onAbort;
+  try {
+    await Promise.race([
+      new Promise((accept) => {
+        onAbort = accept;
+        if (abort.signal.aborted) accept();
+        else abort.signal.addEventListener('abort', onAbort, { once: true });
+      }),
+      ...[api, vite].map((child) =>
+        child.done.then(() => {
+          throw Error('A local review service stopped unexpectedly');
+        }),
+      ),
+    ]);
+    session.status = 'closed';
+  } catch (error) {
+    session.status = 'failed';
+    session.error = String(error);
+    throw error;
+  } finally {
+    abort.signal.removeEventListener('abort', onAbort);
+    session.ended_at = new Date().toISOString();
+    session.source_changed =
+      git(backend, 'rev-parse', 'HEAD') !== source.backend_commit ||
+      git(frontend, 'rev-parse', 'HEAD') !== source.frontend_commit ||
+      Boolean(git(backend, 'status', '--porcelain') || git(frontend, 'status', '--porcelain'));
+    save();
+  }
+}
 try {
   if (
     !Number.isInteger(report.soak_matches_per_mode) ||
@@ -257,8 +349,7 @@ try {
     control.listen(0, '127.0.0.1', accept);
   });
   mkdirSync(assetDirectory, { recursive: true });
-  for (const file of ['policy.bin', 'policy.wasm', 'manifest.json'])
-    copyFileSync(resolve(bundle, file), resolve(assetDirectory, file));
+  for (const [file, data] of candidateAssets) writeFileSync(resolve(assetDirectory, file), data);
   const frontendEnvironment = {
     ...environment,
     API_ORIGIN: apiOrigin,
@@ -295,7 +386,9 @@ try {
     '--project=desktop',
     '--reporter=line,json',
     `--output=${resolve(output, 'test-results')}`,
-    ...testArguments,
+    ...(humanReview
+      ? ['--grep', 'seats can finish a match with browser CPU players']
+      : testArguments),
   ];
   const log = resolve(output, 'playwright.log');
   try {
@@ -364,15 +457,17 @@ try {
   report.source_dirty ||= Boolean(
     git(backend, 'status', '--porcelain') || git(frontend, 'status', '--porcelain'),
   );
-  writeFileSync(resolve(output, 'integration.json'), JSON.stringify(report, null, 2) + '\n');
+  const reportPath = resolve(output, humanReview ? 'review-preflight.json' : 'integration.json');
+  writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
   console.log(
     JSON.stringify({
       exit_code: report.exit_code,
       server_restarts: restarts,
-      report: resolve(output, 'integration.json'),
+      report: reportPath,
     }),
   );
   if (report.exit_code) process.exitCode = 1;
+  else if (humanReview) await holdForHumanReview(frontendOrigin);
 } finally {
   for (const child of [...children]) await stop(child);
   if (control) {
