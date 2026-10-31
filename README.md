@@ -42,6 +42,14 @@ tests, configure the backend with Cloudflare's [Turnstile test keys](https://dev
 
 ## Deployment
 
+Keep unfinished learned-CPU work on `ml-cpu`. Before pushing frontend changes,
+verify in the authenticated Cloudflare Pages project that the production branch
+is `master`; `wrangler.toml` does not establish that remote setting. Any branch
+preview must use an isolated nonproduction backend and its matching proxy secret.
+Do not push work that could create a preview against the production backend.
+Merge into `master` only after the model and integration release gates pass and
+the separate release decision is made. Deploy the compatible backend first.
+
 The Cloudflare Pages build command is `pnpm build`, with output in
 `.svelte-kit/cloudflare`. Leave `API_ORIGIN` empty to use the same-origin
 `/api` proxy. Set `BACKEND_ORIGIN` to the backend HTTPS origin and
