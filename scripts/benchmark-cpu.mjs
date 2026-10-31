@@ -23,12 +23,21 @@ const manifest = JSON.parse(readFileSync(resolve(bundle, 'manifest.json'), 'utf8
 const caseData = readFileSync(resolve(casesArgument));
 const cases = JSON.parse(caseData);
 if (
+  cases.format !== 2 ||
   cases.encoder !== manifest.encoder ||
+  cases.action_encoder !== manifest.action_encoder ||
+  cases.cases.some(
+    (c) =>
+      !c.view ||
+      !Number.isInteger(c.seat) ||
+      (!c.signal && c.view.legal.length !== c.actions.length),
+  ) ||
   !cases.cases.some((c) => c.signal) ||
+  !cases.cases.some((c) => c.history?.signals === 20 && c.history?.cantos >= 16) ||
   !cases.cases.some((c) => !c.signal && c.actions.length === 1024)
 ) {
   throw new Error(
-    'Cases must match the encoder and include signaling and the 1024-candidate capacity case',
+    'Cases must include complete requests, matching encoders, signaling, full histories and 1024 candidates',
   );
 }
 const productionGuard = JSON.parse(
@@ -38,47 +47,109 @@ const productionWorker = readFileSync(
   resolve('.svelte-kit/output/client/_app/immutable/workers', productionGuard.worker),
 );
 
-const source = readFileSync(new URL('../src/lib/cpu/model.ts', import.meta.url), 'utf8');
-const moduleCode = ts.transpileModule(source, {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-}).outputText;
-const helpers = `
-import { LocalPolicy } from '/model.js';
-export async function load() {
-  const [wasm, model, manifest] = await Promise.all([fetch('/policy.wasm').then(r=>r.arrayBuffer()),fetch('/policy.bin').then(r=>r.arrayBuffer()),fetch('/manifest.json').then(r=>r.json())]);
-  const started = performance.now();
-  const policy = await LocalPolicy.load(wasm, new Uint8Array(model), manifest, 'evaluation');
-  return { policy, initMs: performance.now()-started };
+const moduleSources = new Map();
+const modules = new Map();
+const evaluationEnvironment = {
+  DEV: true,
+  VITE_CPU_EVALUATION: 'true',
+  VITE_CPU_ML_ENABLED: 'true',
+  VITE_CPU_MODEL_MANIFEST: '/manifest.json',
+};
+for (const name of ['model', 'fallback', 'decision', 'load-policy', 'worker']) {
+  const source = readFileSync(new URL(`../src/lib/cpu/${name}.ts`, import.meta.url), 'utf8');
+  moduleSources.set(name, source);
+  // Match the documented local-development evaluation configuration. This
+  // substitution changes build constants only; the actual worker body runs.
+  const configured =
+    name === 'worker'
+      ? source.replaceAll('import.meta.env', `(${JSON.stringify(evaluationEnvironment)})`)
+      : source;
+  modules.set(
+    name,
+    ts.transpileModule(configured, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+    }).outputText,
+  );
 }
-export function calibrate() {
+function requestFor(input) {
+  return {
+    version: 2,
+    kind: input.signal ? 'signal' : 'game',
+    token: '0'.repeat(64),
+    seat: input.seat,
+    view: input.view,
+    entropy: input.entropy ?? 0,
+    features: { version: cases.encoder, state: input.features, actions: input.actions },
+  };
+}
+const calibrationCode = `function calibrate() {
   let value=73; const start=performance.now();
   for(let i=0;i<2000000;i++) value=(Math.imul(value^i,1664525)+1013904223)|0;
   return {ms:performance.now()-start,value};
+}`;
+const helpers = `
+import { DecisionSession } from '/decision.js';
+import { loadPolicy } from '/load-policy.js';
+const cases={encoder:${cases.encoder}};
+export ${requestFor.toString()}
+export async function load() {
+  const started = performance.now();
+  const policy = await loadPolicy(true,'/manifest.json','evaluation');
+  if(!policy) throw Error('Offline candidate did not load');
+  return { policy, session: new DecisionSession(policy), initMs: performance.now()-started };
 }
-export function run(policy,input) {
+export ${calibrationCode}
+export function validate(request,result) {
+  if(result.error || result.version!==2 || result.kind!==request.kind || result.token!==request.token || result.seat!==request.seat || result.revision!==request.view.revision) throw Error('Invalid worker response');
+  if(request.kind==='signal') {
+    if(!['none','perico','perica','seven_spades','seven_coins','receta'].includes(result.signal)) throw Error('Invalid signal');
+  } else if(!request.view.legal.some(c=>JSON.stringify(c)===JSON.stringify(result.command))) throw Error('Illegal command');
+}
+export async function run(loaded,input) {
+  const request=requestFor(input);
   const start=performance.now();
-  const index=policy.decide(input.features,input.actions,input.signal,input.entropy);
-  return {index,ms:performance.now()-start,memoryBytes:policy.memoryBytes};
+  await Promise.resolve();
+  const result=loaded.session.decide(request);
+  const ms=performance.now()-start;
+  if(loaded.session.source!=='learned') throw Error('Benchmark silently fell back');
+  validate(request,result);
+  return {result,ms,memoryBytes:loaded.policy.memoryBytes};
 }`;
 const workerCode = `
-import {load,run,calibrate} from '/helpers.js';
-const loaded=await load();
+${calibrationCode}
 globalThis.calibrate=calibrate;
-self.postMessage({type:'ready',initMs:loaded.initMs,memoryBytes:loaded.policy.memoryBytes});
-self.onmessage=({data})=>{try{self.postMessage({id:data.id,...run(loaded.policy,data)})}catch(error){self.postMessage({id:data.id,error:String(error)})}};
+const starts=new Map();let lastID, memory, initialMemory;
+const started=performance.now();
+const instantiate=WebAssembly.instantiate.bind(WebAssembly);
+WebAssembly.instantiate=async(...args)=>{
+  const result=await instantiate(...args);memory=(result.instance??result).exports.memory;return result;
+};
+self.addEventListener('message',({data})=>{lastID=data.id;starts.set(data.id,performance.now())});
+const post=self.postMessage.bind(self);
+self.postMessage=(message,...args)=>{
+  if(message.type==='ready') {
+    initialMemory=memory?.buffer.byteLength??0;
+    return post({...message,initMs:performance.now()-started,memoryBytes:initialMemory,includesNetwork:true},...args);
+  }
+  const id=message.id??lastID;
+  const ms=performance.now()-starts.get(id);starts.delete(id);
+  const failed=message.type==='error' || message.source!=='learned' || memory?.buffer.byteLength!==initialMemory;
+  return post({...message,id,ms,memoryBytes:memory?.buffer.byteLength??0,error:failed?(message.error??'Worker fallback or memory growth'):undefined},...args);
+};
+await import('/actual-worker.js');
 `;
 const pageCode = `
-import {load,run,calibrate} from '/helpers.js';
+import {load,run,calibrate,requestFor,validate} from '/helpers.js';
 window.calibrate=calibrate;
 window.inputs=(await fetch('/cases.json').then(r=>r.json())).cases;
 const loaded=await load();window.pageInitMs=loaded.initMs;
-window.runPage=input=>run(loaded.policy,input);
+window.runPage=input=>run(loaded,input);
 let next=0;const pending=new Map();
 window.workerReady=new Promise((resolve,reject)=>{
  const worker=new Worker('/worker.js',{type:'module'});
  worker.onerror=event=>reject(new Error(event.message));
- worker.onmessage=({data})=>{if(data.type==='ready'){window.workerInit=data;resolve();return}const task=pending.get(data.id);pending.delete(data.id);if(data.error)task.reject(new Error(data.error));else task.resolve(data)};
- window.ask=input=>new Promise((resolve,reject)=>{const id=++next;pending.set(id,{resolve,reject});worker.postMessage({...input,id})});
+ worker.onmessage=({data})=>{if(data.type==='ready'){window.workerInit=data;resolve();return}const task=pending.get(data.id);pending.delete(data.id);if(data.error)task.reject(new Error(data.error));else {try{validate(task.request,data.result);task.resolve(data)}catch(error){task.reject(error)}}};
+ window.ask=input=>new Promise((resolve,reject)=>{const id=++next;const request=requestFor(input);pending.set(id,{resolve,reject,request});worker.postMessage({id,request})});
 });
 window.booted=true;
 `;
@@ -92,12 +163,42 @@ const assets = new Map([
   ],
   ['/page.js', ['text/javascript', pageCode]],
   ['/worker.js', ['text/javascript', workerCode]],
-  ['/model.js', ['text/javascript', moduleCode]],
   ['/helpers.js', ['text/javascript', helpers]],
   ['/manifest.json', ['application/json', JSON.stringify(manifest)]],
   ['/cases.json', ['application/json', caseData]],
   ['/policy.wasm', ['application/wasm', readFileSync(resolve(bundle, 'policy.wasm'))]],
   ['/policy.bin', ['application/octet-stream', readFileSync(resolve(bundle, 'policy.bin'))]],
+]);
+for (const [name, code] of modules)
+  assets.set(name === 'worker' ? '/actual-worker.js' : `/${name}.js`, ['text/javascript', code]);
+const coldInput = cases.cases.find((c) => !c.signal && c.actions.length === 1024);
+assets.set('/cold-input.json', ['application/json', JSON.stringify(coldInput)]);
+assets.set('/cold-request.json', ['application/json', JSON.stringify(requestFor(coldInput))]);
+assets.set('/cold-page', [
+  'text/html',
+  `<!doctype html><script type="module">
+const input=await fetch('/cold-input.json').then(r=>r.json());
+const start=performance.now();
+const {load,run,calibrate}=await import('/helpers.js');
+const loaded=await load();const readyMs=performance.now()-start;
+await run(loaded,input);
+window.coldResult={totalMs:performance.now()-start,readyMs,memoryBytes:loaded.policy.memoryBytes};
+window.calibrate=calibrate;
+</script>`,
+]);
+assets.set('/cold-worker', [
+  'text/html',
+  `<!doctype html><script type="module">
+const request=await fetch('/cold-request.json').then(r=>r.json());
+const start=performance.now();const worker=new Worker('/worker.js',{type:'module'});let readyMs;
+worker.onerror=e=>{window.coldResult={error:e.message}};
+worker.onmessage=({data})=>{
+ if(data.error){window.coldResult={error:data.error};return}
+ if(data.type==='ready'){readyMs=performance.now()-start;worker.postMessage({id:1,request});return}
+ if(data.source!=='learned'){window.coldResult={error:'Cold probe fell back'};return}
+ window.coldResult={totalMs:performance.now()-start,readyMs,memoryBytes:data.memoryBytes};
+};
+</script>`,
 ]);
 const server = createServer((request, response) => {
   const asset = assets.get(new URL(request.url, 'http://localhost').pathname);
@@ -170,8 +271,40 @@ function summarize(values) {
     maxMs: values.at(-1),
   };
 }
+async function coldInitialization(rate) {
+  const result = {};
+  for (const target of ['page', 'worker']) {
+    // Fresh browser processes avoid a compiled-WASM cache shared with the warm
+    // benchmark. Fast loopback traffic stays in elapsed time: this is a
+    // conservative upper bound on initialization with network time excluded.
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage({ viewport: { width: 360, height: 640 } });
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate });
+      await page.goto(`${origin}/cold-${target}`);
+      await page.waitForFunction(() => window.coldResult);
+      const value = await page.evaluate(() => window.coldResult);
+      if (value.error || !value.memoryBytes)
+        throw Error(value.error ?? 'Cold probe did not load WASM');
+      result[target] = value;
+      if (target === 'page') {
+        const calibration = await page.evaluate(() => {
+          for (let i = 0; i < 5; i++) window.calibrate();
+          return Array.from({ length: 5 }, () => window.calibrate().ms);
+        });
+        result.pageCalibrationMs = summarize(calibration).medianMs;
+      }
+    } finally {
+      await browser.close();
+    }
+  }
+  return result;
+}
 const report = {
   approved: false,
+  measurementVersion: 2,
+  decisionPath: 'actual-worker-and-decision-session',
   harnessSha256: createHash('sha256')
     .update(readFileSync(new URL(import.meta.url)))
     .digest('hex'),
@@ -179,11 +312,19 @@ const report = {
   artifactApproved: manifest.approved,
   modelSha256: manifest.sha256,
   wasmSha256: manifest.wasm_sha256,
-  runtimeSourceSha256: createHash('sha256').update(source).digest('hex'),
+  sourceSha256: Object.fromEntries(
+    [...moduleSources].map(([name, code]) => [
+      name,
+      createHash('sha256').update(code).digest('hex'),
+    ]),
+  ),
+  workerBuildConstants: evaluationEnvironment,
   casesSha256: createHash('sha256').update(caseData).digest('hex'),
   host: { platform: os.platform(), architecture: os.arch(), cpu: os.cpus()[0]?.model },
   profiles: [],
-  note: 'Emulated timing, not a claim about a physical phone. Page supplement is used if actual worker throttling cannot be verified.',
+  note: 'Actual worker requests include the heuristic precheck and message handling. When worker throttling is unavailable, estimatedComplete combines calibrated page DecisionSession time with measured worker round-trip overhead. This is emulation, not a physical-phone measurement.',
+  coldScope:
+    'Fresh processes; complete initialization and first 1024-candidate decision, including fast loopback network as a conservative upper bound. The page DecisionSession supplies the calibrated slow target when worker throttling is unavailable.',
   networkPreset: { latencyMs: 150, downloadBytesPerSecond: 200000, uploadBytesPerSecond: 75000 },
   assets: {
     model: manifest.bytes,
@@ -194,7 +335,7 @@ const report = {
     gzipManifest: gzipSync(readFileSync(resolve(bundle, 'manifest.json'))).length,
   },
 };
-let baselineWorker, baselinePage;
+let baselineWorker, baselinePage, baselineCold;
 try {
   for (const rate of [1, 6, 10]) {
     const browser = await chromium.launch();
@@ -249,7 +390,8 @@ try {
             for (let i = 0; i < 25; i++) await window.ask({ ...input, entropy: i });
             const worker = [],
               roundTrip = [],
-              page = [];
+              page = [],
+              workerResults = [];
             for (let i = 0; i < samples; i++) {
               const start = performance.now();
               const result = await window.ask({
@@ -257,18 +399,30 @@ try {
                 entropy: Math.imul(i + 1, 2654435761) >>> 0,
               });
               worker.push(result.ms);
+              workerResults.push(result.result);
               roundTrip.push(performance.now() - start);
             }
-            for (let i = 0; i < 25; i++) window.runPage({ ...input, entropy: i });
-            for (let i = 0; i < samples; i++)
-              page.push(window.runPage({ ...input, entropy: i }).ms);
+            for (let i = 0; i < 25; i++) await window.runPage({ ...input, entropy: i });
+            for (let i = 0; i < samples; i++) {
+              const result = await window.runPage({
+                ...input,
+                entropy: Math.imul(i + 1, 2654435761) >>> 0,
+              });
+              if (JSON.stringify(result.result) !== JSON.stringify(workerResults[i]))
+                throw Error('Worker/page decision mismatch');
+              page.push(result.ms);
+            }
+            const overhead = roundTrip.map((duration, i) => Math.max(0, duration - worker[i]));
             records.push({
               name: input.name,
               synthetic: input.synthetic,
               actions: input.actions.length,
+              history: input.history,
               worker,
               roundTrip,
               page,
+              overhead,
+              estimatedComplete: page.map((duration, i) => duration + overhead[i]),
             });
           }
           return records;
@@ -281,6 +435,10 @@ try {
         worker: window.workerInit,
         pageMs: window.pageInitMs,
       }));
+      const cold = await coldInitialization(rate);
+      if (rate === 1) baselineCold = cold.pageCalibrationMs;
+      cold.pageCalibrationRatio = cold.pageCalibrationMs / baselineCold;
+      cold.pageThrottleVerified = rate === 1 || cold.pageCalibrationRatio >= rate * 0.55;
       const profile = {
         rate,
         browser: browser.version(),
@@ -290,12 +448,15 @@ try {
         workerCalibrationRatio: workerMedian / baselineWorker,
         pageCalibrationRatio: pageMedian / baselinePage,
         startup,
+        cold,
         memory,
         cases: profiles.map((item) => ({
           ...item,
           worker: summarize(item.worker),
           roundTrip: summarize(item.roundTrip),
           page: summarize(item.page),
+          overhead: summarize(item.overhead),
+          estimatedComplete: summarize(item.estimatedComplete),
         })),
       };
       report.profiles.push(profile);
@@ -306,7 +467,7 @@ try {
           pageThrottleVerified: pageVerified,
           cases: profile.cases.map((c) => ({
             name: c.name,
-            p95Ms: (verified ? c.worker : c.page).p95Ms,
+            p95Ms: (verified ? c.roundTrip : c.estimatedComplete).p95Ms,
           })),
         }),
       );
@@ -324,15 +485,17 @@ try {
   report.performancePass =
     (slow.workerThrottleVerified || slow.pageThrottleVerified) &&
     slow.cases.every((c) => {
-      const value = slow.workerThrottleVerified ? c.worker : c.page;
+      const value = slow.workerThrottleVerified ? c.roundTrip : c.estimatedComplete;
       return value.p95Ms <= 20 && value.p99Ms <= 50;
     }) &&
     slow.startup.worker.memoryBytes <= 4 * 1024 * 1024 &&
-    slow.startup.pageMs <= 500 &&
+    slow.cold.pageThrottleVerified &&
+    slow.cold.page.totalMs <= 500 &&
+    slow.cold.worker.totalMs <= 500 &&
     report.assets.totalGzipBytes <= 256 * 1024;
   report.timingScope = slow.workerThrottleVerified
     ? 'throttled-worker'
-    : 'verified-throttled-page-supplement';
+    : 'calibrated-page-decision-session-plus-measured-worker-overhead';
   if (!report.performancePass) process.exitCode = 2;
 } finally {
   server.close();
