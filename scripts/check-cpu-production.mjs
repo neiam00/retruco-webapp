@@ -17,6 +17,7 @@ for (const approved of approvals) {
     approved,
     format: 1,
     encoder: 2,
+    action_encoder: 1,
     rules: '2',
     bytes: 86804,
     architecture: 'candidate-768-96-64-48-32-32-1-signal6',

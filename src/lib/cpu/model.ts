@@ -2,6 +2,7 @@
 export interface PolicyManifest {
   format: number;
   encoder: number;
+  action_encoder: number;
   rules: string;
   approved: boolean;
   architecture: string;
@@ -56,6 +57,7 @@ export class LocalPolicy {
       (manifest.approved !== true && purpose !== 'evaluation') ||
       manifest.format !== 1 ||
       manifest.encoder !== 2 ||
+      manifest.action_encoder !== 1 ||
       manifest.rules !== '2' ||
       manifest.architecture !== 'candidate-768-96-64-48-32-32-1-signal6' ||
       manifest.quantization !== 'symmetric-int8-per-output-f32-execution' ||
