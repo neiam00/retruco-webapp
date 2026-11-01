@@ -10,6 +10,8 @@ export interface PolicyManifest {
   bytes: number;
   sha256: string;
   wasm_sha256?: string;
+  memory_version?: number;
+  memory_reset?: string;
 }
 
 interface PolicyExports extends WebAssembly.Exports {
@@ -20,6 +22,9 @@ interface PolicyExports extends WebAssembly.Exports {
   output_ptr: () => number;
   load_model: (length: number) => number;
   infer: (count: number, signal: number) => number;
+  memory_ptr: () => number;
+  reset_memory: () => void;
+  advance_memory: () => number;
 }
 
 // Use the distribution itself, preserving learned mixtures and bluff rates.
@@ -44,7 +49,11 @@ export function sampleLogits(logits: ArrayLike<number>, entropy: number): number
 }
 
 export class LocalPolicy {
-  private constructor(private readonly wasm: PolicyExports) {}
+  private memoryReady = false;
+  private constructor(
+    private readonly wasm: PolicyExports,
+    readonly recurrent = false,
+  ) {}
 
   static async load(
     wasmBytes: BufferSource,
@@ -55,11 +64,16 @@ export class LocalPolicy {
     if (
       typeof manifest.approved !== 'boolean' ||
       (manifest.approved !== true && purpose !== 'evaluation') ||
-      manifest.format !== 1 ||
+      ![1, 2].includes(manifest.format) ||
       manifest.encoder !== 2 ||
       manifest.action_encoder !== 1 ||
       manifest.rules !== '2' ||
-      manifest.architecture !== 'candidate-768-96-64-48-32-32-1-signal6' ||
+      manifest.architecture !==
+        `candidate-768-96-64-48-32-32-1-signal6${manifest.format === 2 ? '-lstm16-residual' : ''}` ||
+      (manifest.format === 2 &&
+        (purpose !== 'evaluation' ||
+          manifest.memory_version !== 1 ||
+          manifest.memory_reset !== 'hand')) ||
       manifest.quantization !== 'symmetric-int8-per-output-f32-execution' ||
       modelBytes.byteLength !== manifest.bytes ||
       manifest.bytes > 128 * 1024
@@ -78,7 +92,35 @@ export class LocalPolicy {
     if (wasm.load_model(modelBytes.length) !== 0) throw new Error('Invalid CPU model');
     if (wasm.memory.buffer.byteLength > 4 * 1024 * 1024)
       throw new Error('CPU memory budget exceeded');
-    return new LocalPolicy(wasm);
+    return new LocalPolicy(wasm, manifest.format === 2);
+  }
+
+  resetMemory() {
+    this.wasm.reset_memory();
+    this.memoryReady = false;
+  }
+
+  advanceMemory(features: ArrayLike<number>) {
+    if (
+      !this.recurrent ||
+      features.length !== 768 ||
+      Array.from(features).some((x) => !Number.isFinite(x))
+    )
+      throw new Error('Invalid memory event');
+    new Float32Array(this.wasm.memory.buffer, this.wasm.state_ptr(), 768).set(features);
+    if (this.wasm.advance_memory() !== 0) throw new Error('Memory inference failed');
+    this.memoryReady = true;
+  }
+
+  saveMemory(): Float32Array {
+    return new Float32Array(this.wasm.memory.buffer, this.wasm.memory_ptr(), 32).slice();
+  }
+
+  restoreMemory(state: Float32Array) {
+    if (!this.recurrent || state.length !== 32 || state.some((x) => !Number.isFinite(x)))
+      throw new Error('Invalid memory state');
+    new Float32Array(this.wasm.memory.buffer, this.wasm.memory_ptr(), 32).set(state);
+    this.memoryReady = true;
   }
 
   // Offline evaluation can measure a candidate before approval. The deployed
@@ -94,6 +136,7 @@ export class LocalPolicy {
   // The returned view is valid until the next inference. Offline parity checks
   // use this same path as the worker; callers that retain it must copy it.
   logits(features: number[], actions: number[][], signal: boolean): Float32Array {
+    if (this.recurrent && !this.memoryReady) throw new Error('Authorized hand replay required');
     if (
       features.length !== 768 ||
       features.some((x) => !Number.isFinite(x)) ||
