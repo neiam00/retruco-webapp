@@ -142,6 +142,7 @@ export interface CPUFeatures {
   actions: number[][];
 }
 export interface CPUWork {
+  signalMask?: boolean[];
   kind?: 'game' | 'signal';
   token?: string;
   features?: CPUFeatures;
@@ -151,6 +152,7 @@ export interface CPUWork {
   view?: GameView;
 }
 export interface CPURequest {
+  signalMask?: boolean[];
   kind?: 'game' | 'signal';
   token?: string;
   features?: CPUFeatures;

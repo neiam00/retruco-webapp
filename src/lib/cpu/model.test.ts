@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { LocalPolicy, sampleLogits } from './model.js';
 
 describe('policy distribution', () => {
+  it('never samples a masked claim even when its logit dominates', () => {
+    for (const entropy of [0, 0x7fffffff, 0xffffffff])
+      expect(sampleLogits([0, 10000, -1], entropy, [true, false, false])).toBe(0);
+    expect(() => sampleLogits([0, 1], 0, [false, false])).toThrow();
+  });
   it.each([0, 2, undefined])(
     'rejects unsupported or missing action encoder %j',
     async (actionEncoder) => {

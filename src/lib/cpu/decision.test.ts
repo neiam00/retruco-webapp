@@ -12,6 +12,7 @@ function request(kind: 'game' | 'signal'): CPURequest {
     version: 2,
     kind,
     token: 'work-token',
+    signalMask: [true, true, true, true, true, true],
     features: {
       version: 2,
       state: new Array(768).fill(0),
@@ -24,6 +25,11 @@ test('maps signal logits separately from legal game actions', () => {
   const result = new DecisionSession({ decide }).decide(request('signal'));
   expect(result).toMatchObject({ signal: 'receta', token: 'work-token', kind: 'signal' });
   expect(result.command).toBeUndefined();
+});
+test('falls back to none when a model ignores the truthful signal mask', () => {
+  const input = request('signal');
+  input.signalMask = [true, false, false, false, false, false];
+  expect(new DecisionSession({ decide: () => 5 }).decide(input).signal).toBe('none');
 });
 test('falls back for the whole session after invalid model output', () => {
   const decide = vi.fn().mockReturnValue(-1);

@@ -24,6 +24,14 @@ export class DecisionSession {
       )
         throw new Error('Unsupported model input');
       const signal = request.kind === 'signal';
+      if (
+        signal &&
+        (!request.signalMask ||
+          request.signalMask.length !== 6 ||
+          request.signalMask[0] !== true ||
+          request.signalMask.some((x) => typeof x !== 'boolean'))
+      )
+        throw new Error('Missing truthful signal mask');
       if (!signal && request.features.actions.length !== request.view.legal.length)
         throw new Error('Candidate mismatch');
       const index = this.policy.decide(
@@ -31,11 +39,13 @@ export class DecisionSession {
         request.features.actions,
         signal,
         request.entropy,
+        signal ? request.signalMask : undefined,
       );
       if (
         !Number.isInteger(index) ||
         index < 0 ||
-        index >= (signal ? signals.length : request.view.legal.length)
+        index >= (signal ? signals.length : request.view.legal.length) ||
+        (signal && request.signalMask?.[index] !== true)
       )
         throw new Error('Invalid selection');
       const result: CPUResponse = {

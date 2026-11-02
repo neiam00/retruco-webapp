@@ -28,24 +28,32 @@ interface PolicyExports extends WebAssembly.Exports {
 }
 
 // Use the distribution itself, preserving learned mixtures and bluff rates.
-export function sampleLogits(logits: ArrayLike<number>, entropy: number): number {
+export function sampleLogits(logits: ArrayLike<number>, entropy: number, mask?: boolean[]): number {
   if (!logits.length || !Number.isInteger(entropy) || entropy < 0 || entropy > 0xffffffff) {
     throw new Error('Invalid policy sampling input');
   }
+  if (
+    mask &&
+    (mask.length !== logits.length ||
+      !mask.some(Boolean) ||
+      mask.some((x) => typeof x !== 'boolean'))
+  )
+    throw new Error('Invalid legal policy mask');
   let maximum = -Infinity;
   for (let i = 0; i < logits.length; i++) {
     if (!Number.isFinite(logits[i])) throw new Error('Nonfinite policy output');
-    maximum = Math.max(maximum, logits[i]);
+    if (!mask || mask[i]) maximum = Math.max(maximum, logits[i]);
   }
   let sum = 0;
   const weights = new Float64Array(logits.length);
-  for (let i = 0; i < logits.length; i++) sum += weights[i] = Math.exp(logits[i] - maximum);
+  for (let i = 0; i < logits.length; i++)
+    sum += weights[i] = mask && !mask[i] ? 0 : Math.exp(logits[i] - maximum);
   let threshold = (entropy / 0x100000000) * sum;
   for (let i = 0; i < weights.length; i++) {
     threshold -= weights[i];
     if (threshold < 0) return i;
   }
-  return weights.length - 1;
+  return mask ? mask.lastIndexOf(true) : weights.length - 1;
 }
 
 export class LocalPolicy {
@@ -129,8 +137,18 @@ export class LocalPolicy {
     return this.wasm.memory.buffer.byteLength;
   }
 
-  decide(features: number[], actions: number[][], signal: boolean, entropy: number): number {
-    return sampleLogits(this.logits(features, actions, signal), entropy);
+  decide(
+    features: number[],
+    actions: number[][],
+    signal: boolean,
+    entropy: number,
+    signalMask?: boolean[],
+  ): number {
+    return sampleLogits(
+      this.logits(features, actions, signal),
+      entropy,
+      signal ? signalMask : undefined,
+    );
   }
 
   // The returned view is valid until the next inference. Offline parity checks

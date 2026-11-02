@@ -113,6 +113,7 @@ export class CPUController {
         kind: work.kind,
         token: work.token,
         features: work.features,
+        signalMask: work.signalMask,
         seat: work.seat,
         entropy: crypto.getRandomValues(new Uint32Array(1))[0],
         view: work.view,
