@@ -12,6 +12,8 @@ export interface PolicyManifest {
   wasm_sha256?: string;
   memory_version?: number;
   memory_reset?: string;
+  memory_size?: number;
+  parameters?: number;
 }
 
 interface PolicyExports extends WebAssembly.Exports {
@@ -23,6 +25,7 @@ interface PolicyExports extends WebAssembly.Exports {
   load_model: (length: number) => number;
   infer: (count: number, signal: number) => number;
   memory_ptr: () => number;
+  memory_size: () => number;
   reset_memory: () => void;
   advance_memory: () => number;
 }
@@ -61,6 +64,7 @@ export class LocalPolicy {
   private constructor(
     private readonly wasm: PolicyExports,
     readonly recurrent = false,
+    readonly memorySize = recurrent ? 16 : 0,
   ) {}
 
   static async load(
@@ -69,16 +73,29 @@ export class LocalPolicy {
     manifest: PolicyManifest,
     purpose: 'release' | 'evaluation' = 'release',
   ) {
+    const memorySize =
+      manifest.format === 3 ? manifest.memory_size : manifest.format === 2 ? 16 : 0;
+    const parameters = memorySize
+      ? 85127 + 4 * memorySize * memorySize + 328 * memorySize + 64
+      : 85127;
     if (
+      typeof memorySize !== 'number' ||
+      (manifest.format === 3 && ![32, 64].includes(memorySize)) ||
+      (manifest.format !== 3 &&
+        manifest.memory_size !== undefined &&
+        manifest.memory_size !== memorySize) ||
+      parameters > 150000 ||
+      (manifest.parameters !== undefined && manifest.parameters !== parameters) ||
+      (manifest.format === 3 && manifest.parameters !== parameters) ||
       typeof manifest.approved !== 'boolean' ||
       (manifest.approved !== true && purpose !== 'evaluation') ||
-      ![1, 2].includes(manifest.format) ||
+      ![1, 2, 3].includes(manifest.format) ||
       manifest.encoder !== 2 ||
       manifest.action_encoder !== 1 ||
       manifest.rules !== '2' ||
       manifest.architecture !==
-        `candidate-768-96-64-48-32-32-1-signal6${manifest.format === 2 ? '-lstm16-residual' : ''}` ||
-      (manifest.format === 2 &&
+        `candidate-768-96-64-48-32-32-1-signal6${memorySize ? `-lstm${memorySize}-residual` : ''}` ||
+      (manifest.format !== 1 &&
         (purpose !== 'evaluation' ||
           manifest.memory_version !== 1 ||
           manifest.memory_reset !== 'hand')) ||
@@ -100,7 +117,14 @@ export class LocalPolicy {
     if (wasm.load_model(modelBytes.length) !== 0) throw new Error('Invalid CPU model');
     if (wasm.memory.buffer.byteLength > 4 * 1024 * 1024)
       throw new Error('CPU memory budget exceeded');
-    return new LocalPolicy(wasm, manifest.format === 2);
+    const runtimeMemorySize =
+      typeof wasm.memory_size === 'function' ? wasm.memory_size() : undefined;
+    if (
+      (manifest.format === 3 && runtimeMemorySize === undefined) ||
+      (runtimeMemorySize !== undefined && runtimeMemorySize !== memorySize)
+    )
+      throw new Error('CPU memory architecture mismatch');
+    return new LocalPolicy(wasm, manifest.format !== 1, memorySize);
   }
 
   resetMemory() {
@@ -121,13 +145,23 @@ export class LocalPolicy {
   }
 
   saveMemory(): Float32Array {
-    return new Float32Array(this.wasm.memory.buffer, this.wasm.memory_ptr(), 32).slice();
+    return new Float32Array(
+      this.wasm.memory.buffer,
+      this.wasm.memory_ptr(),
+      2 * this.memorySize,
+    ).slice();
   }
 
   restoreMemory(state: Float32Array) {
-    if (!this.recurrent || state.length !== 32 || state.some((x) => !Number.isFinite(x)))
+    if (
+      !this.recurrent ||
+      state.length !== 2 * this.memorySize ||
+      state.some((x) => !Number.isFinite(x))
+    )
       throw new Error('Invalid memory state');
-    new Float32Array(this.wasm.memory.buffer, this.wasm.memory_ptr(), 32).set(state);
+    new Float32Array(this.wasm.memory.buffer, this.wasm.memory_ptr(), 2 * this.memorySize).set(
+      state,
+    );
     this.memoryReady = true;
   }
 
