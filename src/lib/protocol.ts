@@ -138,6 +138,7 @@ export interface Listing {
 }
 
 export interface CPUFeatures {
+  choicePolicy?: string;
   version: number;
   state: number[];
   actions: number[][];

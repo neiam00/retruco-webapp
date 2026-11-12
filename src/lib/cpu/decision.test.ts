@@ -47,3 +47,14 @@ test('uses the original complete candidate including declaration and mode', () =
     input.view.legal[last],
   );
 });
+
+test('a value-betting model consumes only candidates prepared by the matching host policy', () => {
+  const input = request('game');
+  const decide = vi.fn().mockReturnValue(0);
+  const policy = { decide, choicePolicy: 'value-and-team-v1' as const };
+  expect(new DecisionSession(policy).decide(input)).toEqual(fallback(input));
+  expect(decide).not.toHaveBeenCalled();
+  input.features!.choicePolicy = policy.choicePolicy;
+  expect(new DecisionSession(policy).decide(input).command).toEqual(input.view.legal[0]);
+  expect(decide).toHaveBeenCalledOnce();
+});

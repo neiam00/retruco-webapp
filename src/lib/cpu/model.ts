@@ -18,6 +18,7 @@ export interface PolicyManifest {
   inference_math?: string;
   candidate_features?: number;
   team_play?: 'closing-card-and-flor-v1' | 'closing-card-and-flor-v2';
+  choice_policy?: 'value-and-team-v1';
 }
 
 type PolicyExports = WebAssembly.Exports & {
@@ -73,6 +74,7 @@ export class LocalPolicy {
     readonly memorySize = recurrent ? 16 : 0,
     readonly memoryIdentity = '',
     private readonly adjustTeamAction?: (count: number, sampled: number) => number,
+    readonly choicePolicy?: PolicyManifest['choice_policy'],
   ) {}
 
   static async load(
@@ -99,6 +101,9 @@ export class LocalPolicy {
           manifest.cell !== 'lstm' ||
           manifest.inference_math !== 'centered-f64-heads-f32-state')) ||
       (manifest.candidate_features !== undefined && manifest.candidate_features !== 0) ||
+      (manifest.choice_policy !== undefined &&
+        (manifest.choice_policy !== 'value-and-team-v1' ||
+          manifest.team_play !== 'closing-card-and-flor-v2')) ||
       (manifest.team_play !== undefined &&
         (!['closing-card-and-flor-v1', 'closing-card-and-flor-v2'].includes(manifest.team_play) ||
           manifest.format !== 4)) ||
@@ -111,7 +116,9 @@ export class LocalPolicy {
       manifest.architecture !==
         `candidate-768-96-64-48-32-32-1-signal6${memorySize ? `-lstm${memorySize}-residual` : ''}${manifest.team_play ? '-team-play-' + manifest.team_play.slice(-2) : ''}` ||
       (manifest.format !== 1 &&
-        (purpose !== 'evaluation' || manifest.memory_version !== 1 || manifest.memory_reset !== 'hand')) ||
+        (purpose !== 'evaluation' ||
+          manifest.memory_version !== 1 ||
+          manifest.memory_reset !== 'hand')) ||
       manifest.quantization !== 'symmetric-int8-per-output-f32-execution' ||
       modelBytes.byteLength !== manifest.bytes ||
       manifest.bytes > 128 * 1024
@@ -157,8 +164,10 @@ export class LocalPolicy {
       manifest.format !== 1,
       memorySize,
       `${manifest.sha256}:${manifest.wasm_sha256}:${manifest.encoder}:${manifest.memory_version ?? 0}` +
-        (manifest.team_play ? `:${manifest.team_play}` : ''),
+        (manifest.team_play ? `:${manifest.team_play}` : '') +
+        (manifest.choice_policy ? `:${manifest.choice_policy}` : ''),
       manifest.team_play ? teamAction : undefined,
+      manifest.choice_policy,
     );
   }
 

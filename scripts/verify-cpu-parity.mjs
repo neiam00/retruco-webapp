@@ -18,6 +18,8 @@ const compiled = ts.transpileModule(source, {
 const model = readFileSync(resolve(bundle, 'policy.bin'));
 const wasm = readFileSync(resolve(bundle, 'policy.wasm'));
 const manifest = JSON.parse(readFileSync(resolve(bundle, 'manifest.json'), 'utf8'));
+if ((input.choice_policy ?? null) !== (manifest.choice_policy ?? null))
+  throw Error('Parity cases use different CPU choices');
 const sha = (data) => createHash('sha256').update(data).digest('hex');
 if (sha(model) !== manifest.sha256 || sha(wasm) !== manifest.wasm_sha256)
   throw Error('Candidate checksum mismatch');

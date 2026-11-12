@@ -8,7 +8,7 @@ const signals = ['none', 'perico', 'perica', 'seven_spades', 'seven_coins', 'rec
 // failure. A controller retry creates a fresh session and can reload the model.
 export class DecisionSession {
   source: 'learned' | 'heuristic' | 'random-cut' = 'heuristic';
-  constructor(private policy?: Pick<LocalPolicy, 'decide'>) {}
+  constructor(private policy?: Pick<LocalPolicy, 'decide' | 'choicePolicy'>) {}
 
   decide(request: CPURequest): CPUResponse {
     this.source = request.view.phase === 'cutting' ? 'random-cut' : 'heuristic';
@@ -24,6 +24,12 @@ export class DecisionSession {
       )
         throw new Error('Unsupported model input');
       const signal = request.kind === 'signal';
+      if (
+        !signal &&
+        this.policy.choicePolicy &&
+        this.policy.choicePolicy !== request.features.choicePolicy
+      )
+        throw new Error('Host does not supply the model’s CPU choices');
       if (
         signal &&
         (!request.signalMask ||
