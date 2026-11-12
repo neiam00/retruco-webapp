@@ -242,7 +242,11 @@ try {
   )
     throw Error('CPU_SOAK_MATCHES must be an integer in [2,100]');
   const apiOrigin = `http://127.0.0.1:${await port()}`;
-  const frontendOrigin = `http://127.0.0.1:${await port()}`;
+  const requestedPort = humanReview ? process.env.CPU_REVIEW_PORT : undefined;
+  const frontendPort = requestedPort === undefined ? await port() : Number(requestedPort);
+  if (!Number.isInteger(frontendPort) || frontendPort < 1 || frontendPort > 65535)
+    throw Error('CPU_REVIEW_PORT must identify a valid local port');
+  const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
   const password = randomUUID();
   container = execFileSync(
     'docker',
