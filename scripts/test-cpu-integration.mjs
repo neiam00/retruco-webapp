@@ -286,9 +286,12 @@ try {
   for (let attempt = 0; ; attempt++) {
     if (attempt >= 60 || abort.signal.aborted) throw Error('Disposable database startup failed');
     try {
-      execFileSync('docker', ['exec', container, 'pg_isready', '-U', 'postgres', '-d', 'cpu_e2e'], {
-        stdio: 'ignore',
-      });
+      // The initialization server accepts Unix sockets before the final database starts.
+      execFileSync(
+        'docker',
+        ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'cpu_e2e'],
+        { stdio: 'ignore' },
+      );
       break;
     } catch {
       await delay(500);
