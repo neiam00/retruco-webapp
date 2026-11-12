@@ -14,9 +14,13 @@ export interface PolicyManifest {
   memory_reset?: string;
   memory_size?: number;
   parameters?: number;
+  cell?: string;
+  inference_math?: string;
+  candidate_features?: number;
+  team_play?: 'closing-card-and-flor-v1' | 'closing-card-and-flor-v2';
 }
 
-interface PolicyExports extends WebAssembly.Exports {
+type PolicyExports = WebAssembly.Exports & {
   memory: WebAssembly.Memory;
   model_ptr: () => number;
   state_ptr: () => number;
@@ -28,7 +32,9 @@ interface PolicyExports extends WebAssembly.Exports {
   memory_size: () => number;
   reset_memory: () => void;
   advance_memory: () => number;
-}
+  team_action_v1?: (count: number, sampled: number) => number;
+  team_action_v2?: (count: number, sampled: number) => number;
+};
 
 // Use the distribution itself, preserving learned mixtures and bluff rates.
 export function sampleLogits(logits: ArrayLike<number>, entropy: number, mask?: boolean[]): number {
@@ -65,6 +71,8 @@ export class LocalPolicy {
     private readonly wasm: PolicyExports,
     readonly recurrent = false,
     readonly memorySize = recurrent ? 16 : 0,
+    readonly memoryIdentity = '',
+    private readonly adjustTeamAction?: (count: number, sampled: number) => number,
   ) {}
 
   static async load(
@@ -73,32 +81,37 @@ export class LocalPolicy {
     manifest: PolicyManifest,
     purpose: 'release' | 'evaluation' = 'release',
   ) {
-    const memorySize =
-      manifest.format === 3 ? manifest.memory_size : manifest.format === 2 ? 16 : 0;
+    const memorySize = manifest.format >= 3 ? manifest.memory_size : manifest.format === 2 ? 16 : 0;
     const parameters = memorySize
       ? 85127 + 4 * memorySize * memorySize + 328 * memorySize + 64
       : 85127;
     if (
       typeof memorySize !== 'number' ||
-      (manifest.format === 3 && ![32, 64].includes(memorySize)) ||
-      (manifest.format !== 3 &&
+      (manifest.format >= 3 && ![32, 64].includes(memorySize)) ||
+      (manifest.format < 3 &&
         manifest.memory_size !== undefined &&
         manifest.memory_size !== memorySize) ||
       parameters > 150000 ||
       (manifest.parameters !== undefined && manifest.parameters !== parameters) ||
-      (manifest.format === 3 && manifest.parameters !== parameters) ||
+      (manifest.format >= 3 && manifest.parameters !== parameters) ||
+      (manifest.format >= 4 &&
+        (memorySize !== 64 ||
+          manifest.cell !== 'lstm' ||
+          manifest.inference_math !== 'centered-f64-heads-f32-state')) ||
+      (manifest.candidate_features !== undefined && manifest.candidate_features !== 0) ||
+      (manifest.team_play !== undefined &&
+        (!['closing-card-and-flor-v1', 'closing-card-and-flor-v2'].includes(manifest.team_play) ||
+          manifest.format !== 4)) ||
       typeof manifest.approved !== 'boolean' ||
       (manifest.approved !== true && purpose !== 'evaluation') ||
-      ![1, 2, 3].includes(manifest.format) ||
+      ![1, 2, 3, 4].includes(manifest.format) ||
       manifest.encoder !== 2 ||
       manifest.action_encoder !== 1 ||
       manifest.rules !== '2' ||
       manifest.architecture !==
-        `candidate-768-96-64-48-32-32-1-signal6${memorySize ? `-lstm${memorySize}-residual` : ''}` ||
+        `candidate-768-96-64-48-32-32-1-signal6${memorySize ? `-lstm${memorySize}-residual` : ''}${manifest.team_play ? '-team-play-' + manifest.team_play.slice(-2) : ''}` ||
       (manifest.format !== 1 &&
-        (purpose !== 'evaluation' ||
-          manifest.memory_version !== 1 ||
-          manifest.memory_reset !== 'hand')) ||
+        (purpose !== 'evaluation' || manifest.memory_version !== 1 || manifest.memory_reset !== 'hand')) ||
       manifest.quantization !== 'symmetric-int8-per-output-f32-execution' ||
       modelBytes.byteLength !== manifest.bytes ||
       manifest.bytes > 128 * 1024
@@ -111,6 +124,17 @@ export class LocalPolicy {
     const wasmDigest = new Uint8Array(await crypto.subtle.digest('SHA-256', wasmBytes));
     const wasmHash = Array.from(wasmDigest, (byte) => byte.toString(16).padStart(2, '0')).join('');
     if (wasmHash !== manifest.wasm_sha256) throw new Error('CPU evaluator checksum mismatch');
+    if (manifest.format === 4) {
+      const header = new DataView(modelBytes.buffer, modelBytes.byteOffset, modelBytes.byteLength);
+      if (
+        header.byteLength < 16 ||
+        header.getUint32(0, true) !== 0x4c4d5452 ||
+        header.getUint32(4, true) !== manifest.format ||
+        header.getUint32(8, true) !== manifest.encoder ||
+        header.getUint32(12, true) !== memorySize
+      )
+        throw new Error('CPU artifact metadata mismatch');
+    }
     const { instance } = await WebAssembly.instantiate(wasmBytes, {});
     const wasm = instance.exports as PolicyExports;
     new Uint8Array(wasm.memory.buffer, wasm.model_ptr(), modelBytes.length).set(modelBytes);
@@ -119,12 +143,23 @@ export class LocalPolicy {
       throw new Error('CPU memory budget exceeded');
     const runtimeMemorySize =
       typeof wasm.memory_size === 'function' ? wasm.memory_size() : undefined;
+    const teamAction =
+      manifest.team_play === 'closing-card-and-flor-v2' ? wasm.team_action_v2 : wasm.team_action_v1;
+    if (manifest.team_play && typeof teamAction !== 'function')
+      throw new Error('Missing team decision runtime');
     if (
-      (manifest.format === 3 && runtimeMemorySize === undefined) ||
+      (manifest.format >= 3 && runtimeMemorySize === undefined) ||
       (runtimeMemorySize !== undefined && runtimeMemorySize !== memorySize)
     )
       throw new Error('CPU memory architecture mismatch');
-    return new LocalPolicy(wasm, manifest.format !== 1, memorySize);
+    return new LocalPolicy(
+      wasm,
+      manifest.format !== 1,
+      memorySize,
+      `${manifest.sha256}:${manifest.wasm_sha256}:${manifest.encoder}:${manifest.memory_version ?? 0}` +
+        (manifest.team_play ? `:${manifest.team_play}` : ''),
+      manifest.team_play ? teamAction : undefined,
+    );
   }
 
   resetMemory() {
@@ -178,11 +213,16 @@ export class LocalPolicy {
     entropy: number,
     signalMask?: boolean[],
   ): number {
-    return sampleLogits(
+    const sampled = sampleLogits(
       this.logits(features, actions, signal),
       entropy,
       signal ? signalMask : undefined,
     );
+    if (signal || features[0] !== 1 || !this.adjustTeamAction) return sampled;
+    const index = this.adjustTeamAction(actions.length, sampled);
+    if (!Number.isInteger(index) || index < 0 || index >= actions.length)
+      throw new Error('Invalid adjusted team action');
+    return index;
   }
 
   // The returned view is valid until the next inference. Offline parity checks

@@ -1,6 +1,66 @@
 // Port of backend/cpu/policy.go. Golden native-Go decisions verify parity.
 import type { Card, Command, CPURequest, CPUResponse } from '#lib/protocol.js';
 
+// Same conservative proof as backend/cpu/public_truco.go. No hidden-card
+// estimates or partner claims can turn a merely leading trick into certainty.
+function publicTrucoWinner(view: CPURequest['view']): number | undefined {
+  if (
+    view.phase !== 'playing' ||
+    !view.vira ||
+    ![2, 4].includes(view.config.players) ||
+    view.seats.length !== view.config.players ||
+    view.round < 1 ||
+    view.round > 2
+  )
+    return;
+  const seen = new Set<number>();
+  for (const seat of view.seats) {
+    if (
+      seat.seat < 0 ||
+      seat.seat >= view.config.players ||
+      seen.has(seat.seat) ||
+      seat.team !== seat.seat % 2
+    )
+      return;
+    seen.add(seat.seat);
+  }
+  function completed(round: number): number | undefined {
+    let best = 0,
+      winner = -1;
+    for (const seat of view.seats) {
+      const play = seat.plays[round];
+      if (!play?.present || play.concealed || (!play.burned && !play.card)) return;
+      if (play.burned) continue;
+      const rank = strength(play.card!, view.vira!);
+      if (rank > best) {
+        best = rank;
+        winner = seat.team;
+      } else if (rank === best && (round !== 0 || winner !== seat.team)) {
+        winner = -1;
+      }
+    }
+    return winner;
+  }
+  const first = completed(0);
+  if (first === undefined || first < 0) return;
+  if (view.round === 2) {
+    const second = completed(1);
+    if (second === undefined || second < 0 || second === first) return;
+  }
+  for (const seat of view.seats) {
+    const play = seat.plays[view.round];
+    if (
+      play?.present &&
+      !play.burned &&
+      !play.concealed &&
+      play.card &&
+      strength(play.card, view.vira) === 17 &&
+      (view.round === 2 || seat.team === first)
+    )
+      return seat.team;
+  }
+}
+
 function strength(card: Card, vira: Card): number {
   if (card.suit === vira.suit) {
     if (card.number === (vira.number === 11 ? 12 : 11)) return 17;
@@ -67,6 +127,14 @@ export function fallback(request: CPURequest): CPUResponse {
   }
   function responseScore(command: Command): number {
     const pending = view.pending;
+    if (pending?.kind === 'truco') {
+      const winner = publicTrucoWinner(view);
+      if (winner !== undefined)
+        return (winner === request.seat % 2 && command.kind === 'accept') ||
+          (winner !== request.seat % 2 && command.kind === 'decline')
+          ? 200
+          : -1000;
+    }
     if (pending?.kind === 'privo') {
       if (command.kind === 'present_flor') return 200;
       let announced = 0;
