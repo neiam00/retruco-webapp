@@ -10,6 +10,14 @@ describe('manual canto declarations', () => {
     );
   });
 
+  it('distinguishes a bare ley, a qualified opening, and a previously announced flor', () => {
+    expect(commandLabel({ type: 'call', kind: 'ley_envido' })).toBe('A ley, envido');
+    expect(commandLabel({ type: 'call', kind: 'ley_envido', mode: 'con_ley' })).toBe(
+      'Con ley, envido',
+    );
+    expect(commandLabel({ type: 'call', kind: 'flor' })).toBe('Flor tengo y la mía envida');
+  });
+
   it.each(['ley_envido', 'flor'])('renders the actual reply to %s', (kind) => {
     expect(commandLabel({ type: 'respond', kind: 'decline', mode: 'con_ley' }, kind)).toBe(
       'Con ley, no quiero',

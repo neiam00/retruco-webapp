@@ -29,6 +29,7 @@ export interface Wager {
   previous: number;
   terminal: boolean;
   mode?: string;
+  florOffered?: boolean;
 }
 export interface GameView {
   lastHand?: HandRecap;
