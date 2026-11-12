@@ -60,12 +60,11 @@ function actionLabel(command: Command, pendingKind?: string) {
     return cantoName(command.kind ?? '');
   }
   if (command.kind === 'flowers_no') return 'A las flores no';
-  if (command.kind === 'decline')
-    return pendingKind === 'flor'
-      ? 'Con mi flor me achico'
-      : command.mode === 'sin_ley'
-        ? 'Sin ley, no quiero'
-        : 'No quiero';
+  if (command.kind === 'decline') {
+    if (command.mode === 'con_ley') return 'Con ley, no quiero';
+    if (command.mode === 'sin_ley') return 'Sin ley, no quiero';
+    return 'No quiero';
+  }
   const acceptance =
     command.mode === 'con_ley'
       ? 'Con ley, quiero'

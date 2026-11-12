@@ -64,30 +64,30 @@ export const rulebook = [
   {
     title: 'Flor por derecho y declaraciones',
     paragraphs: [
-      'Hay flor con tres cartas del mismo palo, o dos del mismo palo y perico o perica. Cada flor válida aporta 3 piedras al final de la mano. Dos flores válidas del mismo equipo aportan 6. Si ambos equipos llegan al objetivo con flores no disputadas, tiene prioridad el equipo de mano.',
-      'Con flor por derecho, elige manualmente una declaración de flor al jugar, cantar o responder. «Flor», «Presento flor», «Flor flor» y «Con mi flor…» conservan la flor en cualquier vuelta, incluso con la última carta o jugando pegado. Omitir la declaración quema la flor ordinaria, aunque la hayas declarado antes. La interfaz permite esa omisión.',
+      'La flor se forma con tres cartas del mismo palo, o dos del mismo palo y perico o perica. Cada flor sin disputar vale 3 piedras. Dos flores válidas de compañeros suman 6 si no se disputan. Si ambos equipos alcanzan el objetivo con flores sin disputar, tiene prioridad el equipo de mano.',
+      'Con flor por derecho, di «Flor» al jugar una carta, «Presento flor» en la última y «Flor flor» al jugar las dos pegadas. Para cantar o responder truco se usa «Con mi flor…». Cuando dos flores entran en el envido, siguen válidas sin repetir la declaración.',
       'Si ambos compañeros tienen flor y se juega por derecho, el primero debe decir «A ley» con su primera carta; reemplaza «Flor» para esa carta. El segundo dice «Flor» al mostrar la suya. Sin ese «A ley», conserva la flor quien primero la declara; la otra se quema.',
-      'Sin flor por derecho, las flores permanecen válidas sin esas declaraciones. Las pérdidas por un concurso de flor y la renuncia al cantar envido ordinario sin mencionar la flor o al decir «Sin ley» sí se aplican.',
+      'Sin flor por derecho, las flores conservan su valor aunque el jugador omita la declaración. Una flor ordinaria puede achicarse al rechazar el envido con ley o quemarse al perder la comparación de flores.',
     ],
   },
   {
     title: 'Flor frente a envido',
     paragraphs: [
-      'Una vez que cualquier jugador declara flor, nadie puede iniciar envido ordinario ni envido a ley, con ley o sin ley, aunque la flor sea de su compañero o se queme después. Si también tienes flor ordinaria válida, puedes apostar con «Flor tengo y la mía envida» dentro de su plazo y condiciones.',
-      'Si todavía nadie declaró flor, cantar envido ordinario sin mencionarla cancela la flor ordinaria de quien lo canta, no la de su compañero. «Con mi flor, envido» la conserva. Una flor ordinaria rival que siga válida puede bloquear ese envido con «A las flores no». Una flor quemada o una receta no permiten esa respuesta.',
-      '«A las flores no» cierra el envido ordinario por toda la mano, aunque después se queme la flor que lo bloqueó. Todavía puede iniciarse una flor envidada si se cumplen sus condiciones. En cambio, un envido ya aceptado impide iniciar otra apuesta de flor.',
-      'Con flores rivales y alguna ya declarada, antes de tu primera carta puedes cantar «Flor tengo y la mía envida». Se apuesta con las mismas subidas y límites del envido. Para conservar tu flor se responde «Con flor, quiero…». «Con mi flor me achico» rechaza el envido y quema solo la flor de quien lo dice; la de su compañero se conserva.',
-      'Todo canto que mencione flor la conserva y cuenta como declaración, incluso al aceptar, subir o rechazar un canto. Las excepciones son «Sin ley» en envido y «Con mi flor me achico» al rechazar una flor envidada.',
-      'Cada equipo compara su mejor flor válida: 20 más los valores de las tres cartas. Gana el envido apostado y conserva sus flores; las flores ordinarias del equipo perdedor quedan inválidas. Una receta nunca pierde sus 3 piedras de flor. Empates se resuelven por el orden desde mano.',
-      'Si se rechaza el concurso inicial, el equipo que lo cantó cobra 1 de envido, además de 3 por cada flor válida. Si una flor apostada se quema más tarde, se usa la mejor flor válida que quede en su equipo. Si solo queda flor en un equipo, ese equipo gana; si al finalizar no queda ninguna válida, no se paga el envido del concurso.',
+      'Con flor puedes abrir «A ley, envido». También puedes decir «Flor tengo y la mía envida» si otro jugador ya anunció flor o si el jugador anterior dijo «A ley» al jugar su carta. Ambas aperturas requieren una respuesta.',
+      'Con flor o después de que alguien la anunció, el envido ordinario queda fuera de juego. Si un rival abrió envido ordinario antes del anuncio, quien tenga flor puede decir «A las flores no» para anularlo.',
+      '«A las flores no» cierra el envido ordinario durante toda la mano. La apuesta de ley conserva su ventana hasta la primera carta de quien la abre. Aceptar el envido cierra la negociación.',
+      'Frente a «A ley, envido», quien tiene flor responde «Con ley, quiero» o «Con ley, no quiero». «Flor tengo y la mía envida» también acepta. Sin flor, responde «Sin ley, quiero» o «Sin ley, no quiero». Ante «Flor tengo y la mía envida», un jugador sin flor solo puede decir «Sin ley, no quiero».',
+      '«Sin ley, quiero» enfrenta el envido ordinario del jugador sin flor al valor completo de la flor rival. Un 7 y un 6 de copas con un 5 de oros suman 33 y pierden ante una flor de 36.',
+      'Con ley se compara la mejor flor válida de cada equipo. Gana 3 piedras por la flor más alta más las piedras del envido aceptado, aunque el equipo tenga dos flores. Las flores ordinarias inferiores se queman. Si hay empate, gana quien está antes desde mano. La receta conserva su protección.',
+      'Al rechazar la apertura con «Sin ley, no quiero», la flor válida del que cantó vale 3 y el envido vale 0. Con «Con ley, no quiero», se achica la flor del que responde y el que cantó cobra 3 por su flor válida y 1 por el envido rechazado.',
     ],
   },
   {
     title: 'A ley, con ley y sin ley',
     paragraphs: [
-      '«A ley» no confirma que tengas flor ni impide por sí solo que otro jugador cante envido. Por eso «A ley, envido» no puede combinarse con «Con mi flor» ni otra declaración que confirme flor. Si todavía nadie declaró flor, permite apostar sin renunciar a ella y evita el bloqueo de «A las flores no». El equipo que responde elige con ley o sin ley; esa elección se aplica por igual a ambos equipos.',
-      '«Con ley, envido», «Sin ley, envido» y «Sin ley, no quiero» requieren que alguien haya dicho «A ley» antes en esa mano o que se haya cantado «A ley, envido». La condición también se aplica a los CPU. «Sin ley, no quiero» solo permite rechazar un envido, no un truco ni una flor envidada.',
-      'Con ley, una flor válida compara el valor de sus tres cartas más 20. Sin ley, se usa el envido ordinario de la mejor pareja. Decir «Sin ley» al cantar o responder un envido quema la flor ordinaria de quien lo dice, incluso si añade «Con mi flor». La receta sigue protegida.',
+      'Puedes decir «A ley» con tu primera carta o abrir «A ley, envido» con cualquier mano. La frase no revela si tienes flor.',
+      'Con la primera respuesta se fija la comparación. Las subidas y la falta siguen las reglas del envido. Si se rechaza una subida, se cobra la apuesta anterior.',
+      'En parejas, cada jugador responde según su propia flor. Que el compañero tenga flor no autoriza a decir «Con ley».',
       'La apuesta de ley tiene una prioridad especial: se paga primero el envido, después la flor y después el truco. Si ese envido alcanza el objetivo, termina la partida antes de sumar flores.',
     ],
   },
@@ -102,7 +102,7 @@ export const rulebook = [
   {
     title: 'Empardes y jugar pegado',
     paragraphs: [
-      'Hay emparde cuando varias cartas válidas comparten el valor más alto, incluso si son del mismo equipo. Empates por debajo de una carta ganadora única no cuentan. Una vuelta sin cartas válidas porque todas se quemaron también es emparde.',
+      'En la primera vuelta hay emparde si comparten la carta más alta jugadores de equipos contrarios. Si las más altas son de dos compañeros, su equipo gana y abre la segunda quien jugó antes. En la segunda y tercera vuelta, dos cartas máximas iguales siguen empardando aunque sean del mismo equipo. Las cartas empatadas por debajo de la ganadora no empardan.',
       'Si un equipo gana la primera vuelta y la segunda emparda, gana la mano sin tercera vuelta. Si cada equipo gana una de las dos primeras y la tercera emparda, gana quien ganó la primera.',
       'Solo un emparde en la primera obliga a todos a jugar las dos restantes pegadas; abre mano. La de arriba representa la tercera vuelta y la de abajo la segunda. Primero se comparan las de arriba. Solo si empardan se revelan las de abajo. Si también empardan, gana el equipo de mano.',
       'Puedes jugar pegado voluntariamente en la segunda vuelta sin obligar a los demás. Abajo va la carta para la segunda y arriba la de la tercera. La de abajo queda oculta hasta que los demás jueguen su tercera carta, y solo se revela si hace falta para resolver.',
@@ -110,7 +110,7 @@ export const rulebook = [
       'En pegado voluntario, tu propia carta de abajo debe ganar la segunda para que la de arriba siga válida. Si pierde, se quema la de arriba aunque tu compañero haya ganado. La excepción es que ambas cartas de tu equipo emparden arriba de las dos rivales: entonces tu tercera sigue válida, aunque la segunda sea emparde.',
       'Si solo una persona juega pegado y la segunda está pendiente, abre la tercera quien está a su derecha. Si lo hacen varias, abre la primera persona que aún tenga carta en el orden desde mano. Se omite a quienes ya jugaron las dos. El castigo de quemar la de arriba no se aplica al pegado obligatorio.',
       'En la segunda o tercera vuelta puedes elegir «Quemar carta» y seleccionar una carta para pasar tu turno. Se juega boca abajo, queda inválida y ya no puedes volver a usarla. En pegado obligatorio, «Quemar las dos» descarta ambas cartas restantes. Nunca se puede quemar voluntariamente en la primera vuelta.',
-      'Quemar voluntariamente exige las mismas declaraciones de flor que jugar: «Flor», «Presento flor», «Flor flor» o «Con mi flor…» conservan la flor, también al quemar las dos en pegado obligatorio. La receta sigue protegida y el valor original de envido no cambia.',
+      'Al quemar una carta se usa la declaración correspondiente a esa carta. Al quemar las dos en pegado obligatorio se usa «Flor flor». La receta conserva su protección.',
     ],
   },
   {
@@ -118,7 +118,7 @@ export const rulebook = [
     paragraphs: [
       'Hay 30 segundos para jugar una carta, partir el mazo o responder un canto. La respuesta es un único plazo compartido por el equipo. Un canto suspende las cartas y, al terminar, el jugador recibe 30 segundos nuevos. Si envido interrumpe truco, al volver a truco su equipo también recibe 30 segundos nuevos.',
       'Si se acaba el tiempo en la primera vuelta, se juega una carta al azar boca arriba y válida. Nunca se quema la primera. En otras vueltas se quema una carta restante al azar y se consume esa jugada. En pegado obligatorio se queman las dos restantes.',
-      'Si vence el plazo de respuesta, se aplica «No quiero»; en flor envidada se aplica «Con mi flor me achico». Un plazo de truco o envido ordinario no quema flores por omisión de un integrante. El de flor envidada invalida las flores ordinarias de ambos compañeros. La receta sigue protegida.',
+      'Al vencer el plazo de respuesta se rechaza el canto automáticamente. El reloj no declara flor en nombre de ningún jugador. Un plazo de truco o envido ordinario conserva las flores por omisión. En una flor envidada, el rechazo automático del equipo puede invalidar sus flores ordinarias.',
       'Si queda otro jugador humano conectado, la partida y sus tiempos continúan. Cuando todos los jugadores humanos se desconectan, el juego se pausa y la mesa se conserva durante 2 minutos. Al volver un jugador, la partida se reanuda con un plazo nuevo para jugar o responder. Salir expresamente de una partida hace perder inmediatamente a todo tu equipo.',
       'Una mesa que todavía espera jugadores se elimina inmediatamente cuando sale expresamente su último jugador humano. Cerrar la página o perder conexión deja un plazo de 2 minutos para volver. Otra pestaña de un jugador humano conserva la mesa; los espectadores y las CPU no la mantienen abierta.',
     ],
