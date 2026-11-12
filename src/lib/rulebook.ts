@@ -73,10 +73,10 @@ export const rulebook = [
   {
     title: 'Flor frente a envido',
     paragraphs: [
-      'Con flor puedes abrir «A ley, envido». También puedes decir «Flor tengo y la mía envida» si otro jugador ya anunció flor o si el jugador anterior dijo «A ley» al jugar su carta. Ambas aperturas requieren una respuesta.',
+      'Con flor puedes abrir «A ley, envido». También puedes decir «Flor tengo y la mía envida» solo si otro jugador ya anunció flor. Si alguien dijo «A ley» y nadie ha anunciado flor, quien tiene flor debe abrir «Con ley, envido». Cada apertura requiere una respuesta.',
       'Con flor o después de que alguien la anunció, el envido ordinario queda fuera de juego. Si un rival abrió envido ordinario antes del anuncio, quien tenga flor puede decir «A las flores no» para anularlo.',
       '«A las flores no» cierra el envido ordinario durante toda la mano. La apuesta de ley conserva su ventana hasta la primera carta de quien la abre. Aceptar el envido cierra la negociación.',
-      'Frente a «A ley, envido», quien tiene flor responde «Con ley, quiero» o «Con ley, no quiero». «Flor tengo y la mía envida» también acepta. Sin flor, responde «Sin ley, quiero» o «Sin ley, no quiero». Ante «Flor tengo y la mía envida», un jugador sin flor solo puede decir «Sin ley, no quiero».',
+      'Frente a «A ley, envido», quien tiene flor responde «Con ley, quiero» o «Con ley, no quiero». Si otro jugador ya anunció flor, «Flor tengo y la mía envida» también acepta. Sin flor, responde «Sin ley, quiero» o «Sin ley, no quiero». Ante «Con ley, envido» o «Flor tengo y la mía envida», un jugador sin flor solo puede decir «Sin ley, no quiero».',
       '«Sin ley, quiero» enfrenta el envido ordinario del jugador sin flor al valor completo de la flor rival. Un 7 y un 6 de copas con un 5 de oros suman 33 y pierden ante una flor de 36.',
       'Con ley se compara la mejor flor válida de cada equipo. Gana 3 piedras por la flor más alta más las piedras del envido aceptado, aunque el equipo tenga dos flores. Las flores ordinarias inferiores se queman. Si hay empate, gana quien está antes desde mano. La receta conserva su protección.',
       'Al rechazar la apertura con «Sin ley, no quiero», la flor válida del que cantó vale 3 y el envido vale 0. Con «Con ley, no quiero», se achica la flor del que responde y el que cantó cobra 3 por su flor válida y 1 por el envido rechazado.',
