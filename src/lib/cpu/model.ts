@@ -23,7 +23,8 @@ export interface PolicyManifest {
     | 'value-and-team-v2'
     | 'value-and-team-v3'
     | 'value-and-team-v4'
-    | 'value-and-team-v5';
+    | 'value-and-team-v5'
+    | 'value-and-team-v6';
 }
 
 type PolicyExports = WebAssembly.Exports & {
@@ -113,6 +114,7 @@ export class LocalPolicy {
           'value-and-team-v3',
           'value-and-team-v4',
           'value-and-team-v5',
+          'value-and-team-v6',
         ].includes(manifest.choice_policy) ||
           manifest.team_play !== 'closing-card-and-flor-v2')) ||
       (manifest.team_play !== undefined &&
