@@ -48,7 +48,7 @@ test('uses the original complete candidate including declaration and mode', () =
   );
 });
 
-test.each(['value-and-team-v1', 'value-and-team-v2'] as const)(
+test.each(['value-and-team-v1', 'value-and-team-v2', 'value-and-team-v3'] as const)(
   'only uses candidates prepared for %s',
   (choicePolicy) => {
     const input = request('game');

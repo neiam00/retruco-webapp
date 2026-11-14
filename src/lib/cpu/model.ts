@@ -18,7 +18,7 @@ export interface PolicyManifest {
   inference_math?: string;
   candidate_features?: number;
   team_play?: 'closing-card-and-flor-v1' | 'closing-card-and-flor-v2';
-  choice_policy?: 'value-and-team-v1' | 'value-and-team-v2';
+  choice_policy?: 'value-and-team-v1' | 'value-and-team-v2' | 'value-and-team-v3';
 }
 
 type PolicyExports = WebAssembly.Exports & {
@@ -102,7 +102,9 @@ export class LocalPolicy {
           manifest.inference_math !== 'centered-f64-heads-f32-state')) ||
       (manifest.candidate_features !== undefined && manifest.candidate_features !== 0) ||
       (manifest.choice_policy !== undefined &&
-        (!['value-and-team-v1', 'value-and-team-v2'].includes(manifest.choice_policy) ||
+        (!['value-and-team-v1', 'value-and-team-v2', 'value-and-team-v3'].includes(
+          manifest.choice_policy,
+        ) ||
           manifest.team_play !== 'closing-card-and-flor-v2')) ||
       (manifest.team_play !== undefined &&
         (!['closing-card-and-flor-v1', 'closing-card-and-flor-v2'].includes(manifest.team_play) ||
