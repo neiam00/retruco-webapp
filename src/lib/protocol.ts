@@ -54,6 +54,7 @@ export interface GameView {
     seat: number;
     team: number;
     remaining: number;
+    florDeclared?: boolean;
     plays: { card?: Card; present: boolean; burned: boolean; concealed: boolean }[];
   }[];
   hand: { index: number; card: Card; used: boolean }[];
