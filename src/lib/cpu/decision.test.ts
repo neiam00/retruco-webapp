@@ -48,13 +48,18 @@ test('uses the original complete candidate including declaration and mode', () =
   );
 });
 
-test('a value-betting model consumes only candidates prepared by the matching host policy', () => {
-  const input = request('game');
-  const decide = vi.fn().mockReturnValue(0);
-  const policy = { decide, choicePolicy: 'value-and-team-v1' as const };
-  expect(new DecisionSession(policy).decide(input)).toEqual(fallback(input));
-  expect(decide).not.toHaveBeenCalled();
-  input.features!.choicePolicy = policy.choicePolicy;
-  expect(new DecisionSession(policy).decide(input).command).toEqual(input.view.legal[0]);
-  expect(decide).toHaveBeenCalledOnce();
-});
+test.each(['value-and-team-v1', 'value-and-team-v2'] as const)(
+  'only uses candidates prepared for %s',
+  (choicePolicy) => {
+    const input = request('game');
+    const decide = vi.fn().mockReturnValue(0);
+    const policy = { decide, choicePolicy };
+    input.features!.choicePolicy =
+      choicePolicy === 'value-and-team-v1' ? 'value-and-team-v2' : 'value-and-team-v1';
+    expect(new DecisionSession(policy).decide(input)).toEqual(fallback(input));
+    expect(decide).not.toHaveBeenCalled();
+    input.features!.choicePolicy = policy.choicePolicy;
+    expect(new DecisionSession(policy).decide(input).command).toEqual(input.view.legal[0]);
+    expect(decide).toHaveBeenCalledOnce();
+  },
+);
