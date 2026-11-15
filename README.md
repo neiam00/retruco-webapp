@@ -86,7 +86,7 @@ branch previews use the built-in TypeScript heuristic by default. The [backend M
 trains and exports optional learned policies.
 
 Cloudflare Pages builds of `master` default to the `value-and-team-v9` release
-at `/cpu/value-and-team-v9-9ec77b1e/manifest.json`. The production build
+at `/cpu/value-and-team-v10-9ec77b1e/manifest.json`. The production build
 variables below override those defaults. Set `VITE_CPU_ML_ENABLED=false` and
 rebuild to switch back to the heuristic.
 
