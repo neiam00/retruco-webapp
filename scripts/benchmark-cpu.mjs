@@ -22,8 +22,9 @@ if (!Number.isInteger(samples) || samples < 20)
 const manifest = JSON.parse(readFileSync(resolve(bundle, 'manifest.json'), 'utf8'));
 const caseData = readFileSync(resolve(casesArgument));
 const cases = JSON.parse(caseData);
+const recurrent = cases.format === 3;
 if (
-  cases.format !== 2 ||
+  ![2, 3].includes(cases.format) ||
   cases.encoder !== manifest.encoder ||
   cases.action_encoder !== manifest.action_encoder ||
   cases.cases.some(
@@ -33,7 +34,8 @@ if (
       (!c.signal && c.view.legal.length !== c.actions.length),
   ) ||
   !cases.cases.some((c) => c.signal) ||
-  !cases.cases.some((c) => c.history?.signals === 20 && c.history?.cantos >= 16) ||
+  (!recurrent && !cases.cases.some((c) => c.history?.signals === 20 && c.history?.cantos >= 16)) ||
+  (recurrent && !cases.cases.some((c) => c.events?.length === 2048)) ||
   !cases.cases.some((c) => !c.signal && c.actions.length === 1024)
 ) {
   throw new Error(
@@ -55,7 +57,7 @@ const evaluationEnvironment = {
   VITE_CPU_ML_ENABLED: 'true',
   VITE_CPU_MODEL_MANIFEST: '/manifest.json',
 };
-for (const name of ['model', 'fallback', 'decision', 'load-policy', 'worker']) {
+for (const name of ['model', 'fallback', 'memory', 'decision', 'load-policy', 'worker']) {
   const source = readFileSync(new URL(`../src/lib/cpu/${name}.ts`, import.meta.url), 'utf8');
   moduleSources.set(name, source);
   // Match the documented local-development evaluation configuration. This
@@ -71,7 +73,8 @@ for (const name of ['model', 'fallback', 'decision', 'load-policy', 'worker']) {
     }).outputText,
   );
 }
-function requestFor(input) {
+function requestFor(input, cursor = input.events?.length ?? 0) {
+  const end = Math.min(cursor + 32, input.events?.length ?? 0);
   return {
     version: 2,
     kind: input.signal ? 'signal' : 'game',
@@ -79,6 +82,21 @@ function requestFor(input) {
     seat: input.seat,
     view: input.view,
     entropy: input.entropy ?? 0,
+    signalMask: input.signalMask,
+    ...(input.events
+      ? {
+          memoryKey: input.name,
+          memory: {
+            version: 1,
+            hand: input.hand,
+            start: cursor,
+            end,
+            total: input.events.length,
+            complete: true,
+            events: input.events.slice(cursor, end),
+          },
+        }
+      : {}),
     features: { version: cases.encoder, state: input.features, actions: input.actions },
   };
 }
@@ -106,14 +124,21 @@ export function validate(request,result) {
   } else if(!request.view.legal.some(c=>JSON.stringify(c)===JSON.stringify(result.command))) throw Error('Illegal command');
 }
 export async function run(loaded,input) {
-  const request=requestFor(input);
+  let request=requestFor(input);
   const start=performance.now();
   await Promise.resolve();
-  const result=loaded.session.decide(request);
+  let reply=loaded.session.process(request);
+  let pages=0;
+  while(reply.type==='memory') {
+    if(++pages>66) throw Error('Replay exceeded page bound');
+    request=requestFor(input,reply.request.memoryCursor);
+    reply=loaded.session.process(request);
+  }
+  const result=reply.result;
   const ms=performance.now()-start;
   if(loaded.session.source!=='learned') throw Error('Benchmark silently fell back');
   validate(request,result);
-  return {result,ms,memoryBytes:loaded.policy.memoryBytes};
+  return {result,ms,pages,memoryBytes:loaded.policy.memoryBytes};
 }`;
 const workerCode = `
 ${calibrationCode}
@@ -133,7 +158,7 @@ self.postMessage=(message,...args)=>{
   }
   const id=message.id??lastID;
   const ms=performance.now()-starts.get(id);starts.delete(id);
-  const failed=message.type==='error' || message.source!=='learned' || memory?.buffer.byteLength!==initialMemory;
+  const failed=message.type==='error' || !['learned','replay'].includes(message.source) || memory?.buffer.byteLength!==initialMemory;
   return post({...message,id,ms,memoryBytes:memory?.buffer.byteLength??0,error:failed?(message.error??'Worker fallback or memory growth'):undefined},...args);
 };
 await import('/actual-worker.js');
@@ -148,8 +173,19 @@ let next=0;const pending=new Map();
 window.workerReady=new Promise((resolve,reject)=>{
  const worker=new Worker('/worker.js',{type:'module'});
  worker.onerror=event=>reject(new Error(event.message));
- worker.onmessage=({data})=>{if(data.type==='ready'){window.workerInit=data;resolve();return}const task=pending.get(data.id);pending.delete(data.id);if(data.error)task.reject(new Error(data.error));else {try{validate(task.request,data.result);task.resolve(data)}catch(error){task.reject(error)}}};
- window.ask=input=>new Promise((resolve,reject)=>{const id=++next;const request=requestFor(input);pending.set(id,{resolve,reject,request});worker.postMessage({id,request})});
+ worker.onmessage=({data})=>{
+  if(data.type==='ready'){window.workerInit=data;resolve();return}
+  const task=pending.get(data.id);if(!task)return;
+  task.ms+=data.ms;
+  if(!data.error && data.type==='memory') {
+   if(++task.pages>66){pending.delete(data.id);task.reject(Error('Replay exceeded page bound'));return}
+   task.request=requestFor(task.input,data.request.memoryCursor);worker.postMessage({id:data.id,request:task.request});return;
+  }
+  pending.delete(data.id);
+  if(data.error)task.reject(new Error(data.error));
+  else {try{validate(task.request,data.result);task.resolve({...data,ms:task.ms,pages:task.pages})}catch(error){task.reject(error)}}
+ };
+ window.ask=input=>new Promise((resolve,reject)=>{const id=++next;const request=requestFor(input);pending.set(id,{resolve,reject,request,input,ms:0,pages:0});worker.postMessage({id,request})});
 });
 window.booted=true;
 `;
@@ -189,12 +225,14 @@ window.calibrate=calibrate;
 assets.set('/cold-worker', [
   'text/html',
   `<!doctype html><script type="module">
-const request=await fetch('/cold-request.json').then(r=>r.json());
+const input=await fetch('/cold-input.json').then(r=>r.json());
+const {requestFor}=await import('/helpers.js');let request=requestFor(input);
 const start=performance.now();const worker=new Worker('/worker.js',{type:'module'});let readyMs;
 worker.onerror=e=>{window.coldResult={error:e.message}};
 worker.onmessage=({data})=>{
  if(data.error){window.coldResult={error:data.error};return}
  if(data.type==='ready'){readyMs=performance.now()-start;worker.postMessage({id:1,request});return}
+ if(data.type==='memory'){request=requestFor(input,data.request.memoryCursor);worker.postMessage({id:1,request});return}
  if(data.source!=='learned'){window.coldResult={error:'Cold probe fell back'};return}
  window.coldResult={totalMs:performance.now()-start,readyMs,memoryBytes:data.memoryBytes};
 };
@@ -323,6 +361,9 @@ const report = {
   host: { platform: os.platform(), architecture: os.arch(), cpu: os.cpus()[0]?.model },
   profiles: [],
   note: 'Actual worker requests include the heuristic precheck and message handling. When worker throttling is unavailable, estimatedComplete combines calibrated page DecisionSession time with measured worker round-trip overhead. This is emulation, not a physical-phone measurement.',
+  recurrentScope: recurrent
+    ? 'Warm requests use acknowledged memory; separate replay measurements include all paginated authorized events, including the synthetic 2048-event limit.'
+    : undefined,
   coldScope:
     'Fresh processes; complete initialization and first 1024-candidate decision, including fast loopback network as a conservative upper bound. The page DecisionSession supplies the calibrated slow target when worker throttling is unavailable.',
   networkPreset: { latencyMs: 150, downloadBytesPerSecond: 200000, uploadBytesPerSecond: 75000 },
@@ -387,6 +428,13 @@ try {
         async ({ samples }) => {
           const records = [];
           for (const input of window.inputs) {
+            const reconnectStart = performance.now();
+            const reconnectWorker = await window.ask({ ...input, name: input.name + '-reconnect' });
+            const reconnectRoundTrip = performance.now() - reconnectStart;
+            const reconnectPage = await window.runPage({
+              ...input,
+              name: input.name + '-reconnect',
+            });
             for (let i = 0; i < 25; i++) await window.ask({ ...input, entropy: i });
             const worker = [],
               roundTrip = [],
@@ -418,6 +466,15 @@ try {
               synthetic: input.synthetic,
               actions: input.actions.length,
               history: input.history,
+              events: input.events?.length,
+              reconnect: {
+                workerMs: reconnectWorker.ms,
+                roundTripMs: reconnectRoundTrip,
+                pageMs: reconnectPage.ms,
+                pages: reconnectWorker.pages,
+                estimatedCompleteMs:
+                  reconnectPage.ms + Math.max(0, reconnectRoundTrip - reconnectWorker.ms),
+              },
               worker,
               roundTrip,
               page,
@@ -429,6 +486,14 @@ try {
         },
         { samples, rate },
       );
+      if (recurrent) {
+        // Measure the actual bounded worst case, not just the last active seat.
+        await page.evaluate(async () => {
+          const longest = window.inputs.find((input) => input.events?.length === 2048);
+          for (let seat = 0; seat < 4; seat++)
+            await window.ask({ ...longest, name: `saturated-cache-${seat}` });
+        });
+      }
       await attached.send('HeapProfiler.collectGarbage');
       const memory = await attached.send('Runtime.getHeapUsage');
       const startup = await page.evaluate(() => ({
@@ -450,6 +515,9 @@ try {
         startup,
         cold,
         memory,
+        memoryScope: recurrent
+          ? 'four cached 2048-event histories after garbage collection; excludes page/app and browser-process overhead'
+          : 'worker after garbage collection',
         cases: profiles.map((item) => ({
           ...item,
           worker: summarize(item.worker),
@@ -489,9 +557,20 @@ try {
       return value.p95Ms <= 20 && value.p99Ms <= 50;
     }) &&
     slow.startup.worker.memoryBytes <= 4 * 1024 * 1024 &&
+    slow.memory.usedSize +
+      (slow.memory.backingStorageSize ?? 0) +
+      (slow.memory.embedderHeapUsedSize ?? 0) <=
+      64 * 1024 * 1024 &&
     slow.cold.pageThrottleVerified &&
     slow.cold.page.totalMs <= 500 &&
     slow.cold.worker.totalMs <= 500 &&
+    (!recurrent ||
+      slow.cases.every(
+        (c) =>
+          (slow.workerThrottleVerified
+            ? c.reconnect.roundTripMs
+            : c.reconnect.estimatedCompleteMs) <= 1000,
+      )) &&
     report.assets.totalGzipBytes <= 256 * 1024;
   report.timingScope = slow.workerThrottleVerified
     ? 'throttled-worker'

@@ -107,7 +107,9 @@ export class LocalPolicy {
         (memorySize !== 64 ||
           manifest.cell !== 'lstm' ||
           manifest.inference_math !== 'centered-f64-heads-f32-state')) ||
-      (manifest.candidate_features !== undefined && manifest.candidate_features !== 0) ||
+      (manifest.format === 5
+        ? manifest.candidate_features !== 1
+        : manifest.candidate_features !== undefined && manifest.candidate_features !== 0) ||
       (manifest.choice_policy !== undefined &&
         (![
           'value-and-team-v1',
@@ -124,16 +126,14 @@ export class LocalPolicy {
           manifest.format !== 4)) ||
       typeof manifest.approved !== 'boolean' ||
       (manifest.approved !== true && purpose !== 'evaluation') ||
-      ![1, 2, 3, 4].includes(manifest.format) ||
+      ![1, 2, 3, 4, 5].includes(manifest.format) ||
       manifest.encoder !== 2 ||
       manifest.action_encoder !== 1 ||
       manifest.rules !== '2' ||
       manifest.architecture !==
-        `candidate-768-96-64-48-32-32-1-signal6${memorySize ? `-lstm${memorySize}-residual` : ''}${manifest.team_play ? '-team-play-' + manifest.team_play.slice(-2) : ''}` ||
+        `candidate-768-96-64-48-32-32-1-signal6${memorySize ? `-lstm${memorySize}-residual` : ''}${manifest.format === 5 ? '-public-candidates-v1' : ''}${manifest.team_play ? '-team-play-' + manifest.team_play.slice(-2) : ''}` ||
       (manifest.format !== 1 &&
-        (purpose !== 'evaluation' ||
-          manifest.memory_version !== 1 ||
-          manifest.memory_reset !== 'hand')) ||
+        (manifest.memory_version !== 1 || manifest.memory_reset !== 'hand')) ||
       manifest.quantization !== 'symmetric-int8-per-output-f32-execution' ||
       modelBytes.byteLength !== manifest.bytes ||
       manifest.bytes > 128 * 1024
@@ -146,17 +146,17 @@ export class LocalPolicy {
     const wasmDigest = new Uint8Array(await crypto.subtle.digest('SHA-256', wasmBytes));
     const wasmHash = Array.from(wasmDigest, (byte) => byte.toString(16).padStart(2, '0')).join('');
     if (wasmHash !== manifest.wasm_sha256) throw new Error('CPU evaluator checksum mismatch');
-    if (manifest.format === 4) {
-      const header = new DataView(modelBytes.buffer, modelBytes.byteOffset, modelBytes.byteLength);
-      if (
-        header.byteLength < 16 ||
-        header.getUint32(0, true) !== 0x4c4d5452 ||
-        header.getUint32(4, true) !== manifest.format ||
-        header.getUint32(8, true) !== manifest.encoder ||
-        header.getUint32(12, true) !== memorySize
-      )
-        throw new Error('CPU artifact metadata mismatch');
-    }
+    // Equal hidden widths can use different scoring math or candidate features.
+    // A valid hash alone does not establish agreement with the manifest's ABI.
+    const header = new DataView(modelBytes.buffer, modelBytes.byteOffset, modelBytes.byteLength);
+    if (
+      header.byteLength < (manifest.format >= 3 ? 16 : 12) ||
+      header.getUint32(0, true) !== 0x4c4d5452 ||
+      header.getUint32(4, true) !== manifest.format ||
+      header.getUint32(8, true) !== manifest.encoder ||
+      (manifest.format >= 3 && header.getUint32(12, true) !== memorySize)
+    )
+      throw new Error('CPU artifact metadata mismatch');
     const { instance } = await WebAssembly.instantiate(wasmBytes, {});
     const wasm = instance.exports as PolicyExports;
     new Uint8Array(wasm.memory.buffer, wasm.model_ptr(), modelBytes.length).set(modelBytes);

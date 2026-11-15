@@ -42,13 +42,9 @@ tests, configure the backend with Cloudflare's [Turnstile test keys](https://dev
 
 ## Deployment
 
-Keep unfinished learned-CPU work on `ml-cpu`. Before pushing frontend changes,
-verify in the authenticated Cloudflare Pages project that the production branch
-is `master`; `wrangler.toml` does not establish that remote setting. Any branch
-preview must use an isolated nonproduction backend and its matching proxy secret.
-Do not push work that could create a preview against the production backend.
-Merge into `master` only after the model and integration release gates pass and
-the separate release decision is made. Deploy the compatible backend first.
+Configure separate backend origins and proxy secrets for preview and production
+in Cloudflare Pages. Set your production branch in the Pages project settings.
+Deploy a compatible backend before enabling a new browser CPU protocol.
 
 The Cloudflare Pages build command is `pnpm build`, with output in
 `.svelte-kit/cloudflare`. Leave `API_ORIGIN` empty to use the same-origin
@@ -82,26 +78,67 @@ Edit `artwork/social-preview.html` and run `pnpm social:build` to regenerate the
 social image; this requires Playwright Chromium. See
 [the image license](static/og-image.LICENSE.md).
 
-CPU decisions run in a dedicated browser Worker. The server validates every
-move and authorizes each CPU v2 signal opportunity with a fresh work token.
-Human-only matches do not start the worker. The normal fallback is TypeScript,
-verified against native Go decisions; it does not download the legacy Go WASM.
+## Browser CPU
 
-Learned inference is disabled by default. Set `VITE_CPU_ML_ENABLED=true` and
-`VITE_CPU_MODEL_MANIFEST=/cpu/<release>/manifest.json` at build time only for an
-approved release. The same directory must contain `policy.wasm` and `policy.bin`.
-The manifest must include the model's `sha256` and evaluator's `wasm_sha256`,
-compatible encoder/architecture versions, and `approved: true`. Checksums and
-approval must come from the release evaluation process, not a smoke checkpoint.
-Loading, compatibility or inference errors switch the worker to the heuristic
-for its session; signaling falls back to `none`. Rebuild with the flag false to
-roll back learned inference.
+A dedicated Web Worker selects legal moves and signals for CPU seats. The
+server validates each action against the current game state. The built-in
+TypeScript heuristic plays by default. The [backend ML project](https://github.com/neiam00/retruco-backend/tree/master/ml)
+trains and exports optional learned policies.
 
-The native parity corpus is generated from the backend with
-`go run ./cmd/cpu-fixtures > ../frontend/src/lib/cpu/testdata/native-policy.json`.
-Regenerate it whenever the native heuristic changes, then run `pnpm test`.
-`pnpm update:cpu` remains available for legacy Go artifacts, which are not
-imported by the active worker.
+To serve an approved policy, set `VITE_CPU_ML_ENABLED=true` and point
+`VITE_CPU_MODEL_MANIFEST` at its same-origin manifest when building. The bundle
+contains `manifest.json`, `policy.bin` and `policy.wasm`. The worker checks
+the approval flag, model format, encoder, choice policy and both SHA-256
+digests. A loading or inference failure selects the heuristic for that session.
+
+Recurrent policies keep separate hand memory for each CPU seat. The server
+records the observations each seat was allowed to see, including off-turn
+events. On reconnect or a controller handoff the worker replays that journal
+in pages, then resumes decisions at the acknowledged cursor. The centralized
+training critic stays on the training machine.
+
+When the Go heuristic changes, regenerate the native parity fixture from the
+backend checkout and run the frontend tests:
+
+```sh
+go run ./cmd/cpu-fixtures > ../frontend/src/lib/cpu/testdata/native-policy.json
+```
+
+## Local CPU evaluation
+
+Check out the backend beside this repository as `../backend`. Install Docker,
+Go, the project dependencies and Playwright Chromium. Set `BUNDLE` to an exported
+candidate bundle, then run from the frontend checkout:
+
+```sh
+pnpm exec playwright install chromium
+node scripts/test-cpu-integration.mjs "$BUNDLE" output/cpu-review --human-review
+```
+
+The launcher starts a disposable PostgreSQL database, builds the local API,
+and runs a loopback Vite server with the selected model. It finishes a 1v1 and
+a 2v2 browser match before printing the address for interactive play. Use a
+fresh output directory for each session. Ctrl+C stops its local services.
+
+Omit `--human-review` to run the browser recovery tests, including controller
+handoff, server restart, and fallback for damaged or unavailable assets.
+`CPU_SOAK_MATCHES` sets the number of rematches per mode (default 2).
+The development worker can load an evaluation bundle on loopback. Production
+builds require an approved manifest even if the evaluation flag is set.
+
+To exercise that production check or measure a candidate with its matching
+benchmark cases:
+
+```sh
+VITE_CPU_ML_ENABLED=true VITE_CPU_EVALUATION=true VITE_CPU_MODEL_MANIFEST=/cpu/release/manifest.json pnpm build
+node scripts/check-cpu-production.mjs
+node scripts/benchmark-cpu.mjs "$BUNDLE" "$CASES_JSON" output/cpu-benchmark/report.json 200
+```
+
+The benchmark records startup, inference latency and memory use. Recurrent
+cases include replay of a full hand journal. Device emulation is reported
+separately from direct worker measurements. Build releases from a clean
+checkout so local preview assets in `static/cpu-evaluation/` stay local.
 
 ## License
 
@@ -116,72 +153,3 @@ licensed third-party material retains its own terms and notices:
 - The bundled Go runtime is covered by the [Go license](src/lib/cpu/vendor/LICENSE.GO).
 - Nunito Variable is distributed under the SIL Open Font License. Other
   dependencies are subject to their respective licenses.
-
-## Local model evaluation and performance checks
-
-Unapproved candidates can be exercised locally without changing their manifests:
-set `VITE_CPU_ML_ENABLED=true`, `VITE_CPU_EVALUATION=true`, and a same-origin
-`VITE_CPU_MODEL_MANIFEST` URL when starting Vite on loopback. The evaluation
-exception requires both a development build and a loopback worker hostname.
-Production workers always use release approval checks. Temporary candidate
-assets may go in ignored `static/cpu-evaluation/`; remove them after testing.
-
-The emitted production worker can be checked directly, including a deliberately
-set evaluation flag:
-
-```sh
-VITE_CPU_ML_ENABLED=true VITE_CPU_EVALUATION=true VITE_CPU_MODEL_MANIFEST=/cpu/release/manifest.json pnpm build
-node scripts/check-cpu-production.mjs
-```
-
-The check executes the emitted worker against an unapproved manifest and fails
-if it downloads either binary. It does not rely on searching generated source.
-
-Generate authorized timing inputs with the backend's
-`python -m retruco_ml.benchmark_cases` command, then run:
-
-```sh
-node scripts/benchmark-cpu.mjs /absolute/candidate/bundle /absolute/cases.json output/cpu-benchmark/report.json 200
-```
-
-This isolated benchmark calls the same `LocalPolicy` evaluator using its explicit
-`evaluation` purpose. It never modifies approval, serves only loopback, and
-records artifact/source hashes, per-case latency, worker round trips, startup,
-memory, and total compressed CPU asset size. It requires the production-worker
-approval check to pass first. Network settings are 150 ms latency and 1.6 Mbps
-download; CPU profiles are 1×, 6× and 10× with calibration.
-
-Run candidate recovery tests against a disposable local PostgreSQL database:
-
-```sh
-node scripts/test-cpu-integration.mjs /absolute/candidate/bundle output/cpu-integration
-```
-
-The runner owns its database, API, Vite server, and temporary candidate assets,
-and removes them on completion or interruption. It does not use the development
-database. The restart test restarts only that owned API, verifies the same hand
-and visible signals after reconnection and page reload, and completes the game
-with learned inference. Other tests exercise controller handoff, corrupted or
-incompatible models, unavailable assets, and rematches without accumulated
-workers. The JSON report binds the model/source hashes to the Playwright evidence.
-
-The default two rematches per mode are a smoke check. Set `CPU_SOAK_MATCHES=10`
-for the release soak. This remains local candidate evaluation; the manifest's
-approval flag is never changed. `PLAYWRIGHT_BASE_URL` can override the browser
-test origin; the isolated runner selects loopback ports automatically.
-
-Release approval must be the JSON boolean `true`; strings and other truthy
-values cannot authorize downloads. The production-worker guard checks seven
-unapproved or malformed approval cases against the emitted JavaScript. Offline
-evaluation accepts boolean `false` while retaining compatibility and hash checks.
-
-The current artifact contract requires numeric encoder version 2 and candidate
-action-encoder version 1. Missing or unsupported `action_encoder` values are
-rejected, including during offline evaluation. Existing development bundles
-without this metadata must be regenerated by the backend exporter.
-
-Current Chromium cannot throttle dedicated workers through CDP. The report
-therefore retains unthrottled worker measurements and uses the same evaluator
-on a verified throttled page as a labeled supplement. This approximates older
-hardware; it does not certify a physical device. The 1024-candidate input is a
-labeled capacity stress case, not a claim that normal turns offer that many moves.

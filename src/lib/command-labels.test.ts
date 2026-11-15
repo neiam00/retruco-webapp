@@ -5,9 +5,7 @@ describe('manual canto declarations', () => {
   it('does not claim that an omitted flor declaration was spoken', () => {
     const command = { type: 'respond', kind: 'accept', declaration: '' };
     expect(commandLabel(command, 'flor')).toBe('Quiero');
-    expect(commandLabel({ ...command, declaration: 'con_mi_flor' }, 'flor')).toBe(
-      'Con mi flor, quiero',
-    );
+    expect(commandLabel({ ...command, declaration: 'con_flor' }, 'flor')).toBe('Con flor, quiero');
   });
 
   it('distinguishes a bare ley, a qualified opening, and a previously announced flor', () => {
@@ -28,14 +26,13 @@ describe('manual canto declarations', () => {
     expect(commandLabel({ type: 'respond', kind: 'decline' }, kind)).toBe('No quiero');
   });
 
-  it.each([
-    ['flor', 'Flor'],
-    ['presento_flor', 'Presento flor'],
-    ['flor_flor', 'Flor flor'],
-    ['con_mi_flor', 'Con mi flor'],
-    ['con_flor', 'Con flor'],
-  ])('includes the selected %s wording on a canto', (declaration, label) => {
-    expect(commandLabel({ type: 'call', kind: 'truco', declaration })).toBe(`${label}, truco`);
+  it('distinguishes a truco declaration from a qualified flor raise', () => {
+    expect(commandLabel({ type: 'call', kind: 'truco', declaration: 'con_mi_flor' })).toBe(
+      'Con mi flor, truco',
+    );
+    expect(
+      commandLabel({ type: 'respond', kind: 'raise', amount: 2, mode: 'con_ley' }, 'flor'),
+    ).toBe('Con ley, quiero y envido');
   });
 
   it.each([

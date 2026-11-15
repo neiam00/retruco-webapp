@@ -26,6 +26,9 @@ if (!outputArgument)
     'Usage: node scripts/test-cpu-integration.mjs BUNDLE OUTPUT [--human-review | Playwright arguments]',
   );
 const humanReview = testArguments.includes('--human-review');
+const reviewRestore = process.env.CPU_REVIEW_RESTORE;
+if (reviewRestore && !humanReview)
+  throw Error('Database restore is restricted to local human-review sessions');
 if (humanReview && (testArguments.length !== 1 || testArguments[0] !== '--human-review'))
   throw Error('--human-review cannot be combined with Playwright arguments');
 const bundle = resolve(bundleArgument);
@@ -296,6 +299,28 @@ try {
     } catch {
       await delay(500);
     }
+  }
+  if (reviewRestore) {
+    const archive = readFileSync(resolve(reviewRestore));
+    execFileSync(
+      'docker',
+      [
+        'exec',
+        '-i',
+        container,
+        'pg_restore',
+        '--exit-on-error',
+        '--no-owner',
+        '--no-privileges',
+        '-U',
+        'postgres',
+        '-d',
+        'cpu_e2e',
+      ],
+      { input: archive, stdio: ['pipe', 'ignore', 'pipe'] },
+    );
+    report.restored_preview_sha256 = sha(archive);
+    console.log('Restored saved local preview data into the new disposable database.');
   }
   console.log('Building isolated API and migration binaries.');
   await run(

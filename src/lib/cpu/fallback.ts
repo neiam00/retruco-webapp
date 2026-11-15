@@ -196,12 +196,15 @@ export function fallback(request: CPURequest): CPUResponse {
     if (ordinaryFlor) {
       switch (command.type) {
         case 'play':
+        case 'burn':
           expected =
-            remaining === 1
-              ? 'presento_flor'
-              : view.round === 0 && view.config.players === 4
-                ? 'a_ley'
-                : 'flor';
+            command.type === 'burn' && view.mandatoryStack
+              ? 'flor_flor'
+              : remaining === 1
+                ? 'presento_flor'
+                : command.type === 'play' && view.round === 0 && view.config.players === 4
+                  ? 'a_ley'
+                  : 'flor';
           break;
         case 'stack':
           expected = 'flor_flor';
@@ -209,6 +212,9 @@ export function fallback(request: CPURequest): CPUResponse {
         case 'call':
         case 'respond':
           expected = command.type === 'call' && command.kind === 'ley_envido' ? '' : 'con_mi_flor';
+          if (command.type === 'respond' && view.pending?.kind === 'flor')
+            expected = command.kind === 'decline' ? '' : 'con_flor';
+          if (command.kind === 'flor' || command.kind === 'flowers_no') expected = '';
           break;
       }
     }

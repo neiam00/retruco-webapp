@@ -1,21 +1,18 @@
 import type { LocalPolicy } from './model.js';
+import type { CPUMemoryPage } from '#lib/protocol.js';
 
-export interface MemoryPage {
-  version: number;
-  hand: number;
-  start: number;
-  end: number;
-  total: number;
-  complete: boolean;
-  events: number[][];
-}
+export type MemoryPage = CPUMemoryPage;
 
-// Experimental evaluation adapter. Production still rejects recurrent manifests
-// until negotiated journal transport and the release gates are connected.
+export class MemoryReplayRequired extends Error {}
+
+const MAX_KEYS = 4;
+
+// Each key binds the server's match/seat/lease identity to the loaded model and
+// encoder. Only a committed cursor can be acknowledged to the server.
 export class HandMemory {
   private states = new Map<
     string,
-    { hand: number; cursor: number; state: Float32Array; hashes: number[] }
+    { hand: number; cursor: number; state: Float32Array; events: Uint32Array[] }
   >();
   constructor(
     private readonly policy: Pick<
@@ -24,9 +21,11 @@ export class HandMemory {
     >,
   ) {}
 
-  // key must bind match identity, seat, model hash and memory/encoder versions.
   advance(key: string, page: MemoryPage): boolean {
     if (
+      typeof key !== 'string' ||
+      key.length === 0 ||
+      key.length > 512 ||
       page.version !== 1 ||
       page.complete !== true ||
       !Number.isSafeInteger(page.hand) ||
@@ -36,39 +35,61 @@ export class HandMemory {
       page.start > page.end ||
       page.end > page.total ||
       page.total > 2048 ||
+      (page.end < page.total && page.end === page.start) ||
+      !Array.isArray(page.events) ||
       page.events.length !== page.end - page.start ||
       page.events.length > 32 ||
-      page.events.some((row) => row.length !== 768 || row.some((x) => !Number.isFinite(x)))
+      page.events.some(
+        (row) =>
+          !Array.isArray(row) ||
+          row.length !== 768 ||
+          row.some((x) => !Number.isFinite(x) || !Number.isFinite(Math.fround(x))),
+      )
     )
       throw new Error('Incomplete or invalid authorized memory');
     let previous = this.states.get(key);
     if (previous && page.hand < previous.hand) throw new Error('Obsolete memory hand');
     if (!previous || previous.hand !== page.hand) {
-      if (page.start !== 0) throw new Error('Full hand replay required');
+      if (page.start !== 0) throw new MemoryReplayRequired('Full hand replay required');
       this.policy.resetMemory();
-      previous = { hand: page.hand, cursor: 0, state: this.policy.saveMemory(), hashes: [] };
-    } else this.policy.restoreMemory(previous.state);
-    const hashes = page.events.map((event) => {
-      let hash = 2166136261;
-      for (const word of new Uint32Array(Float32Array.from(event).buffer))
-        hash = Math.imul(hash ^ word, 16777619);
-      return hash;
-    });
+      previous = { hand: page.hand, cursor: 0, state: this.policy.saveMemory(), events: [] };
+    }
+    // Retain the exact runtime representation: a short fingerprint can collide
+    // and incorrectly accept an altered prefix. These snapshots are bounded by
+    // MAX_KEYS and the maximum authorized events per hand above.
+    const events = page.events.map((event) => new Uint32Array(Float32Array.from(event).buffer));
     if (page.total < previous.cursor) throw new Error('Obsolete memory cursor');
-    if (page.end <= previous.cursor) {
-      if (hashes.some((hash, index) => hash !== previous.hashes[page.start + index]))
+    if (page.start > previous.cursor) throw new MemoryReplayRequired('Memory cursor gap');
+    const overlap = Math.min(previous.cursor, page.end) - page.start;
+    for (let index = 0; index < overlap; index++) {
+      if (
+        events[index].some((word, feature) => word !== previous.events[page.start + index][feature])
+      )
         throw new Error('Conflicting memory replay');
+    }
+    this.policy.restoreMemory(previous.state);
+    if (page.end <= previous.cursor) {
       return previous.cursor === page.total;
     }
-    if (page.start !== previous.cursor) throw new Error('Memory cursor gap');
-    // Commit only after every row succeeds. A later attempt restores the last
-    // committed state, so partial computation never advances a cursor twice.
-    for (const event of page.events) this.policy.advanceMemory(event);
+    // A retransmission can overlap already consumed events and include a new
+    // suffix. Verify its prefix, then advance only that suffix exactly once.
+    let state: Float32Array;
+    try {
+      for (const event of page.events.slice(overlap)) this.policy.advanceMemory(event);
+      state = this.policy.saveMemory();
+    } catch (error) {
+      this.policy.restoreMemory(previous.state);
+      throw error;
+    }
+    // Bound memory even across rematches/model changes. An evicted key requests
+    // a complete authorized replay instead of borrowing another seat's state.
+    this.states.delete(key);
+    if (this.states.size >= MAX_KEYS) this.states.delete(this.states.keys().next().value!);
     this.states.set(key, {
       hand: page.hand,
       cursor: page.end,
-      state: this.policy.saveMemory(),
-      hashes: previous.hashes.concat(hashes),
+      state,
+      events: previous.events.concat(events.slice(overlap)),
     });
     return page.end === page.total;
   }

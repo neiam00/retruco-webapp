@@ -3,6 +3,78 @@ import { showTable, tableSnapshot } from './fixtures/table.js';
 import type { Command } from '../src/lib/protocol.js';
 import { expectClearTableCards } from './table-layout.js';
 
+test('teammate signals are offered only in 2v2', async ({ page }) => {
+  const snapshot = tableSnapshot(2, 0, false);
+  const update = await showTable(page, snapshot);
+  await expect(page.getByRole('button', { name: 'Hacer una seña', exact: true })).toHaveCount(0);
+  await update(tableSnapshot(4, 0, false));
+  await expect(page.getByRole('button', { name: 'Hacer una seña', exact: true })).toBeEnabled();
+});
+
+test('flor declarations require a valid ordinary flor and clear after it burns', async ({
+  page,
+}) => {
+  const snapshot = tableSnapshot(4, 0, false);
+  snapshot.state!.florValid = false;
+  snapshot.state!.holding = { envido: 7, flor: 0, receta: false };
+  snapshot.state!.legal = [{ type: 'play', card: 1 }];
+  const sent: Command[] = [];
+  const update = await showTable(page, snapshot, (command) => sent.push(command));
+  await page.getByRole('button', { name: 'Decir…', exact: true }).click();
+  for (const name of ['Flor', 'Presento flor', 'Flor flor', 'Con mi flor…', 'Con flor…'])
+    await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Sin declaración', exact: true }).click();
+  const valid = structuredClone(snapshot);
+  valid.state!.revision++;
+  valid.state!.florValid = true;
+  valid.state!.holding = { envido: 25, flor: 26, receta: false };
+  valid.state!.hand.forEach((card, index) => (card.card = { suit: 'coins', number: index + 1 }));
+  valid.state!.legal = [
+    { type: 'play', card: 1 },
+    { type: 'play', card: 1, declaration: 'flor' },
+  ];
+  await update(valid);
+  await page.getByRole('button', { name: 'Decir…', exact: true }).click();
+  await page.getByRole('button', { name: 'Flor', exact: true }).click();
+  const burned = structuredClone(valid);
+  burned.state!.revision++;
+  burned.state!.florValid = false;
+  burned.state!.legal = [{ type: 'play', card: 1 }];
+  await update(burned);
+  await expect(page.getByRole('button', { name: 'Decir…', exact: true })).toBeVisible();
+  await page.locator('[data-hand-card="1"]').click();
+  await expect.poll(() => sent).toEqual([{ type: 'play', card: 1, declaration: '' }]);
+});
+
+test('canto declarations follow server action contexts and clear a card declaration', async ({
+  page,
+}) => {
+  const snapshot = tableSnapshot(4, 0, false);
+  snapshot.state!.florValid = true;
+  snapshot.state!.holding = { envido: 33, flor: 38, receta: false };
+  snapshot.state!.legal = [{ type: 'play', card: 1, declaration: 'flor' }];
+  const sent: Command[] = [];
+  const update = await showTable(page, snapshot, (command) => sent.push(command));
+  await page.getByRole('button', { name: 'Decir…', exact: true }).click();
+  await page.getByRole('button', { name: 'Flor', exact: true }).click();
+  const pending = structuredClone(snapshot);
+  pending.state!.revision++;
+  pending.state!.pending = { kind: 'truco', caller: 1, value: 3, previous: 1, terminal: false };
+  pending.state!.legal = [
+    { type: 'respond', kind: 'accept' },
+    { type: 'respond', kind: 'accept', declaration: 'con_mi_flor' },
+  ];
+  await update(pending);
+  await page.getByRole('button', { name: 'Decir…', exact: true }).click();
+  for (const name of ['Flor', 'Presento flor', 'Flor flor', 'Con flor…'])
+    await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Con mi flor…', exact: true }).click();
+  await page.getByRole('button', { name: 'Con mi flor, quiero', exact: true }).click();
+  await expect
+    .poll(() => sent)
+    .toEqual([{ type: 'respond', kind: 'accept', declaration: 'con_mi_flor' }]);
+});
+
 test('card hover labels show suit and value without exposing backs or blocking plays', async ({
   page,
 }, testInfo) => {
@@ -388,6 +460,8 @@ for (const viewport of [
 test('Con mi flor blocks A ley until the declaration changes', async ({ page }) => {
   const snapshot = tableSnapshot(4, 0, false);
   snapshot.state!.round = 0;
+  snapshot.state!.florValid = true;
+  snapshot.state!.holding = { envido: 33, flor: 38, receta: false };
   snapshot.state!.legal = ['', 'con_mi_flor'].flatMap((declaration) => [
     { type: 'call', kind: 'truco', amount: 3, declaration },
     { type: 'call', kind: 'envido', declaration },
@@ -414,10 +488,10 @@ for (const variant of [
   { name: 'older server', declarations: ['', 'con_mi_flor'] },
   {
     name: 'current server',
-    declarations: ['', 'flor', 'presento_flor', 'flor_flor', 'con_mi_flor'],
+    declarations: [''],
   },
 ]) {
-  test(`Flor keeps one A las flores no reply available from the ${variant.name}`, async ({
+  test(`Con mi flor keeps one A las flores no reply available from the ${variant.name}`, async ({
     page,
   }) => {
     const snapshot = tableSnapshot(4, 0, false);
@@ -430,10 +504,11 @@ for (const variant of [
       kind: 'flowers_no',
       declaration,
     }));
+    snapshot.state!.legal.push({ type: 'respond', kind: 'accept', declaration: 'con_mi_flor' });
     const sent: Command[] = [];
     await showTable(page, snapshot, (command) => sent.push(command));
     await page.getByRole('button', { name: 'Decir…', exact: true }).click();
-    await page.getByRole('button', { name: 'Flor', exact: true }).click();
+    await page.getByRole('button', { name: 'Con mi flor…', exact: true }).click();
     const reply = page.getByRole('button', { name: 'A las flores no', exact: true });
     await expect(reply).toHaveCount(1);
     await expect(reply).toBeEnabled();
@@ -618,27 +693,36 @@ test('secondary raises remain reachable and send the selected command', async ({
   await expect(page.getByRole('region', { name: 'Historial de cantos' })).toHaveCount(0);
 });
 
-test('ley acceptance and Sin ley refusal options remain primary replies', async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 568 });
-  const snapshot = tableSnapshot(4, 0, false);
-  snapshot.state!.pending = {
-    kind: 'ley_envido',
-    caller: 1,
-    value: 2,
-    previous: 1,
-    terminal: false,
-  };
-  snapshot.state!.legal = [
-    { type: 'respond', kind: 'accept', mode: 'con_ley' },
-    { type: 'respond', kind: 'accept', mode: 'sin_ley' },
-    { type: 'respond', kind: 'decline' },
-    { type: 'respond', kind: 'decline', mode: 'sin_ley' },
-  ];
-  await showTable(page, snapshot);
-  for (const name of ['Con ley, quiero', 'Sin ley, quiero', 'No quiero', 'Sin ley, no quiero']) {
-    await expect(page.getByRole('button', { name, exact: true })).toBeInViewport({ ratio: 1 });
-  }
-});
+for (const [mode, spoken] of [
+  ['con_ley', 'Con ley'],
+  ['sin_ley', 'Sin ley'],
+]) {
+  test(`ley replies show only the responder's eligible wording: ${spoken}`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    const snapshot = tableSnapshot(4, 0, false);
+    snapshot.state!.pending = {
+      kind: 'ley_envido',
+      caller: 1,
+      value: 2,
+      previous: 1,
+      terminal: false,
+    };
+    snapshot.state!.legal = [
+      { type: 'respond', kind: 'accept', mode },
+      { type: 'respond', kind: 'decline', mode },
+    ];
+    await showTable(page, snapshot);
+    for (const reply of ['quiero', 'no quiero']) {
+      await expect(
+        page.getByRole('button', { name: `${spoken}, ${reply}`, exact: true }),
+      ).toBeInViewport({ ratio: 1 });
+    }
+    const other = mode === 'sin_ley' ? 'Con ley' : 'Sin ley';
+    await expect(page.getByRole('button', { name: `${other}, quiero`, exact: true })).toHaveCount(
+      0,
+    );
+  });
+}
 
 for (const viewport of [
   { width: 320, height: 568 },

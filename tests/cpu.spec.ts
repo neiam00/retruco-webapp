@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
-import type { Snapshot, CPUWork } from '../src/lib/protocol.js';
+import type { Snapshot, CPUWork, Command } from '../src/lib/protocol.js';
 
 declare global {
   interface Window {
@@ -7,7 +7,21 @@ declare global {
     gameSocket?: WebSocket;
     cpuMoves: number;
     cpuSocketOpens: number;
+    cpuSocketURLs: string[];
+    cpuMemoryObservations: {
+      requests: { hand: number; start: number; end: number; total: number; key: string }[];
+      decisions: { hand: number; cursor: number; pageHand: number; pageTotal: number }[];
+      pageRequests: number;
+    };
     cpuPerformance: { startupMs: number[]; decisionMs: number[]; sources: string[] };
+    cpuFlorAudit: {
+      headsUpSignalRequests: number;
+      teamSignalRequests: number;
+      noOrdinaryFlorRequests: number;
+      ordinaryFlorRequests: number;
+      invalidCandidates: number;
+      invalidDecisions: number;
+    };
   }
 }
 
@@ -15,10 +29,67 @@ async function observeGame(context: BrowserContext) {
   await context.addInitScript(() => {
     window.cpuMoves = 0;
     window.cpuSocketOpens = 0;
+    window.cpuSocketURLs = [];
+    window.cpuMemoryObservations = { requests: [], decisions: [], pageRequests: 0 };
     window.cpuPerformance = { startupMs: [], decisionMs: [], sources: [] };
+    window.cpuFlorAudit = {
+      headsUpSignalRequests: 0,
+      teamSignalRequests: 0,
+      noOrdinaryFlorRequests: 0,
+      ordinaryFlorRequests: 0,
+      invalidCandidates: 0,
+      invalidDecisions: 0,
+    };
+    const claimsFlor = (value?: string) =>
+      ['flor', 'presento_flor', 'flor_flor', 'con_mi_flor', 'con_flor'].includes(value ?? '');
+    const validDeclaration = (view: NonNullable<Snapshot['state']>, command: Command) => {
+      const declaration = command.declaration ?? '';
+      const hasFlor = Boolean(view.florValid && view.holding?.flor && !view.holding.receta);
+      if (command.type === 'call' && command.kind === 'envido' && hasFlor) return false;
+      if (command.type === 'call' && command.kind === 'flor' && !hasFlor) return false;
+      if (
+        command.type === 'respond' &&
+        (view.pending?.kind === 'ley_envido' || view.pending?.kind === 'flor')
+      ) {
+        if (declaration) return false;
+        if (view.pending.mode) return !command.mode;
+        if (command.mode !== (hasFlor ? 'con_ley' : 'sin_ley')) return false;
+        return (
+          (view.pending.kind !== 'flor' && !view.pending.florOffered) ||
+          hasFlor ||
+          command.kind === 'decline'
+        );
+      }
+      if (!claimsFlor(declaration)) return true;
+      if (!view.florValid || !view.holding?.flor || view.holding.receta) return false;
+      const remaining = view.hand.filter((card) => !card.used).length;
+      switch (command.type) {
+        case 'play':
+        case 'burn':
+          return (
+            declaration ===
+            (command.type === 'burn' && view.mandatoryStack
+              ? 'flor_flor'
+              : remaining === 1
+                ? 'presento_flor'
+                : 'flor')
+          );
+        case 'stack':
+          return declaration === 'flor_flor';
+        case 'call':
+          return command.kind === 'truco' && declaration === 'con_mi_flor';
+        case 'respond':
+          if (command.kind === 'flowers_no' || view.pending?.kind === 'privo') return false;
+          return declaration === 'con_mi_flor';
+        default:
+          return false;
+      }
+    };
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       private sent = new Map<string, number>();
+      private pages = new Map<string, { hand: number; total: number }>();
+      private positions = new Map<string, NonNullable<Snapshot['state']>>();
       constructor(url: string | URL, options?: WorkerOptions) {
         const started = performance.now();
         super(url, options);
@@ -26,15 +97,71 @@ async function observeGame(context: BrowserContext) {
           if (data.type === 'ready')
             window.cpuPerformance.startupMs.push(performance.now() - started);
           if (data.type === 'decision' && this.sent.has(data.id)) {
+            const position = this.positions.get(data.id);
+            if (
+              position &&
+              data.result?.command &&
+              !validDeclaration(position, data.result.command)
+            )
+              window.cpuFlorAudit.invalidDecisions++;
+            this.positions.delete(data.id);
             window.cpuPerformance.sources.push(data.source ?? 'unknown');
             window.cpuPerformance.decisionMs.push(performance.now() - this.sent.get(data.id)!);
             this.sent.delete(data.id);
+            const memory = this.pages.get(data.id);
+            if (data.source === 'learned' && memory)
+              window.cpuMemoryObservations.decisions.push({
+                hand: data.result.memoryHand,
+                cursor: data.result.memoryCursor,
+                pageHand: memory.hand,
+                pageTotal: memory.total,
+              });
+            this.pages.delete(data.id);
+          } else if (data.type === 'memory') {
+            this.positions.delete(data.id);
+            this.sent.delete(data.id);
+            this.pages.delete(data.id);
           }
         });
       }
       postMessage(message: unknown, options: Transferable[] | StructuredSerializeOptions = []) {
         const id = (message as { id?: string }).id;
         if (id) this.sent.set(id, performance.now());
+        const request = (
+          message as {
+            request?: {
+              kind?: string;
+              view?: NonNullable<Snapshot['state']>;
+              memoryKey?: string;
+              memory?: { hand: number; start: number; end: number; total: number };
+            };
+          }
+        ).request;
+        if (request?.kind === 'signal') {
+          if (request.view?.config.players === 2) window.cpuFlorAudit.headsUpSignalRequests++;
+          if (request.view?.config.players === 4) window.cpuFlorAudit.teamSignalRequests++;
+        }
+        if (id && request?.view?.phase === 'playing') {
+          const view = request.view;
+          const ordinary = !!(view.florValid && view.holding?.flor && !view.holding.receta);
+          this.positions.set(id, view);
+          if (ordinary) window.cpuFlorAudit.ordinaryFlorRequests++;
+          else window.cpuFlorAudit.noOrdinaryFlorRequests++;
+          window.cpuFlorAudit.invalidCandidates += view.legal.filter(
+            (command) => !validDeclaration(view, command),
+          ).length;
+        }
+        if (id && request?.memory) {
+          const { hand, start, end, total } = request.memory;
+          this.pages.set(id, { hand, total });
+          window.cpuMemoryObservations.requests.push({
+            hand,
+            start,
+            end,
+            total,
+            key: request.memoryKey ?? '',
+          });
+        }
         if (Array.isArray(options)) super.postMessage(message, options);
         else super.postMessage(message, options);
       }
@@ -44,6 +171,7 @@ async function observeGame(context: BrowserContext) {
       constructor(url: string | URL, protocols?: string | string[]) {
         super(url, protocols);
         if (new URL(url).pathname.endsWith('/ws')) {
+          window.cpuSocketURLs.push(String(url));
           window.gameSocket = this;
           this.addEventListener('open', () => window.cpuSocketOpens++);
           this.addEventListener('message', (event) => {
@@ -54,8 +182,11 @@ async function observeGame(context: BrowserContext) {
         }
       }
       send(data: string | Blob | BufferSource) {
-        if (typeof data === 'string' && JSON.parse(data).input?.cpuSeat !== undefined)
-          window.cpuMoves++;
+        if (typeof data === 'string') {
+          const input = JSON.parse(data).input;
+          if (input?.cpuKind === 'memory') window.cpuMemoryObservations.pageRequests++;
+          else if (input?.cpuSeat !== undefined) window.cpuMoves++;
+        }
         super.send(data);
       }
     };
@@ -266,6 +397,12 @@ for (const players of [2, 4]) {
         .poll(() => page.evaluate(() => window.cpuGame?.data.state?.phase))
         .toBe('match_over');
       expect(await page.evaluate(() => window.cpuMoves)).toBeGreaterThan(0);
+      const florAudit = await page.evaluate(() => window.cpuFlorAudit);
+      expect(florAudit.headsUpSignalRequests).toBe(0);
+      if (players === 4) expect(florAudit.teamSignalRequests).toBeGreaterThan(0);
+      expect(florAudit.invalidCandidates).toBe(0);
+      expect(florAudit.invalidDecisions).toBe(0);
+      console.log('CPU flor legality:', JSON.stringify({ players, ...florAudit }));
       expect(workers).toHaveLength(1);
       const timings = await page.evaluate(() => window.cpuPerformance);
       if (process.env.VITE_CPU_ML_ENABLED === 'true') {
@@ -471,7 +608,11 @@ test('learned CPU reconnects after server and browser worker restart', async ({
     await createFromUI(page, baseURL!, 4, [1, 2, 3]);
     for (let step = 0; step < 100; step++) {
       if (
-        await page.evaluate(() => window.cpuGame!.data.state!.legal.some((c) => c.type === 'play'))
+        await page.evaluate(
+          () =>
+            window.cpuGame!.data.state!.legal.some((c) => c.type === 'play') &&
+            window.cpuMemoryObservations.decisions.length > 0,
+        )
       )
         break;
       expect(await advance(page)).toBe(true);
@@ -479,6 +620,8 @@ test('learned CPU reconnects after server and browser worker restart', async ({
     expect(
       await page.evaluate(() => window.cpuGame!.data.state!.legal.some((c) => c.type === 'play')),
     ).toBe(true);
+    const journalsBeforeRestart = await page.evaluate(() => window.cpuMemoryObservations);
+    expect(journalsBeforeRestart.decisions.length).toBeGreaterThan(0);
     await page.evaluate(() =>
       window.gameSocket!.send(
         JSON.stringify({ input: { id: crypto.randomUUID(), signal: 'perico' } }),
@@ -510,6 +653,13 @@ test('learned CPU reconnects after server and browser worker restart', async ({
     expect(await page.evaluate(() => window.cpuGame!.data.state!.revision)).toBe(
       before.data.state!.revision,
     );
+    await expect
+      .poll(() => page.evaluate(() => window.cpuPerformance.startupMs.length))
+      .toBeGreaterThan(1);
+    for (const socketURL of await page.evaluate(() => window.cpuSocketURLs)) {
+      expect(new URL(socketURL).searchParams.get('cpuProtocol')).toBe('2');
+      expect(new URL(socketURL).searchParams.get('cpuMemory')).toBe('1');
+    }
     await page.reload();
     await expect
       .poll(() => page.evaluate(() => window.cpuGame?.data.state?.hand))
@@ -524,6 +674,16 @@ test('learned CPU reconnects after server and browser worker restart', async ({
     const sources = await page.evaluate(() => window.cpuPerformance.sources);
     expect(sources).toContain('learned');
     expect(sources).not.toContain('heuristic');
+    const replay = await page.evaluate(() => window.cpuMemoryObservations);
+    expect(replay.requests.length).toBeGreaterThan(0);
+    expect(replay.requests[0].start).toBe(0);
+    expect(replay.requests[0].key).not.toBe('');
+    expect(replay.decisions.length).toBeGreaterThan(0);
+    for (const decision of replay.decisions) {
+      expect(decision.hand).toBe(decision.pageHand);
+      expect(decision.cursor).toBe(decision.pageTotal);
+      expect(decision.cursor).toBeGreaterThan(0);
+    }
     await expect.poll(() => page.workers().length).toBe(0);
   } finally {
     await context.close();

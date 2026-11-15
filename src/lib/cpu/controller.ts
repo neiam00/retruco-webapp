@@ -1,4 +1,4 @@
-import type { Command, CPUResponse, CPUWork } from '#lib/protocol.js';
+import type { Command, CPUMemoryRequest, CPUResponse, CPUWork } from '#lib/protocol.js';
 
 export type CPUStatus = 'idle' | 'loading' | 'ready' | 'thinking' | 'error';
 
@@ -9,6 +9,7 @@ export class CPUController {
   private work?: CPUWork;
   private pending?: string;
   private lastSubmitted?: string;
+  private lastMemoryRequest?: string;
   private ready = false;
   private failed = false;
   private watchdog?: ReturnType<typeof setTimeout>;
@@ -23,6 +24,7 @@ export class CPUController {
     ) => void,
     private readonly changed: (status: CPUStatus, error?: string) => void,
     private readonly presentationBusy: () => boolean = () => false,
+    private readonly requestMemory?: (request: CPUMemoryRequest) => void,
   ) {}
 
   update(work?: CPUWork) {
@@ -35,6 +37,7 @@ export class CPUController {
     if (previousKey !== this.key(work)) {
       this.pending = undefined;
       this.lastSubmitted = undefined;
+      this.lastMemoryRequest = undefined;
       clearTimeout(this.delay);
       if (this.ready) clearTimeout(this.watchdog);
     }
@@ -85,7 +88,11 @@ export class CPUController {
         this.changed('ready');
         this.decide();
       } else if (data.type === 'error') {
+        if (data.id !== undefined && (data.id !== this.pending || data.id !== this.key(this.work)))
+          return;
         this.fail(data.error);
+      } else if (data.type === 'memory') {
+        this.acceptMemory(data.id, data.request as CPUMemoryRequest);
       } else if (data.type === 'decision') {
         this.accept(data.id, data.result as CPUResponse);
       }
@@ -114,11 +121,39 @@ export class CPUController {
         token: work.token,
         features: work.features,
         signalMask: work.signalMask,
+        memoryKey: work.memoryKey,
+        memory: work.memory,
         seat: work.seat,
         entropy: crypto.getRandomValues(new Uint32Array(1))[0],
         view: work.view,
       },
     });
+  }
+
+  private acceptMemory(key: string, request: CPUMemoryRequest) {
+    const work = this.work;
+    if (!work?.view || key !== this.pending || key !== this.key(work)) return;
+    const page = work.memory;
+    if (
+      !this.requestMemory ||
+      !page ||
+      page.version !== 1 ||
+      page.complete !== true ||
+      request.seat !== work.seat ||
+      request.token !== work.token ||
+      request.memoryHand !== page.hand ||
+      !Number.isSafeInteger(request.memoryCursor) ||
+      !(request.memoryCursor === page.end || (request.memoryCursor === 0 && page.start > 0))
+    ) {
+      this.fail('El motor CPU no pudo sincronizar esta mano. Inténtalo de nuevo.');
+      return;
+    }
+    const identity = `${key}:${request.memoryHand}:${request.memoryCursor}`;
+    if (this.lastMemoryRequest === identity) return;
+    this.lastMemoryRequest = identity;
+    // Keep the pending token until the server publishes the next page. Duplicate
+    // snapshots cannot repeatedly acknowledge a page or rewind a fresh worker.
+    this.requestMemory(request);
   }
 
   private accept(key: string, result: CPUResponse) {
@@ -131,6 +166,12 @@ export class CPUController {
       result.seat !== this.work.seat ||
       (this.work.version === 2 &&
         (result.token !== this.work.token || result.kind !== this.work.kind)) ||
+      ((result.memoryHand !== undefined || result.memoryCursor !== undefined) &&
+        (!this.work.memory ||
+          this.work.memory.complete !== true ||
+          result.memoryHand !== this.work.memory.hand ||
+          result.memoryCursor !== this.work.memory.total ||
+          this.work.memory.end !== this.work.memory.total)) ||
       (this.work.kind === 'signal'
         ? !result.signal ||
           !['none', 'perico', 'perica', 'seven_spades', 'seven_coins', 'receta'].includes(
@@ -177,6 +218,7 @@ export class CPUController {
     this.work = undefined;
     this.pending = undefined;
     this.lastSubmitted = undefined;
+    this.lastMemoryRequest = undefined;
     this.ready = false;
     this.failed = false;
     this.changed('idle');

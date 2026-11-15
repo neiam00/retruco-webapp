@@ -25,9 +25,9 @@ const ready = loadPolicy(
 self.onmessage = async ({ data }: MessageEvent<{ id: string; request: CPURequest }>) => {
   try {
     const session = await ready;
-    const result = session.decide(data.request);
-    self.postMessage({ type: 'decision', id: data.id, result, source: session.source });
+    const reply = session.process(data.request);
+    self.postMessage({ ...reply, id: data.id, source: session.source });
   } catch {
-    self.postMessage({ type: 'error', error: 'No pudimos calcular la jugada CPU.' });
+    self.postMessage({ type: 'error', id: data.id, error: 'No pudimos calcular la jugada CPU.' });
   }
 };

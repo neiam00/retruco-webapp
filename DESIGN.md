@@ -4,19 +4,12 @@ Retruco is a place to play Venezuelan truco. The lobby should look like a card
 room: a name, a way to sit down, and tables to join. Spanish cards provide the
 personality. Keep the interface direct, familiar, and useful.
 
-## Direction and references
+## Lobby layout
 
-The October 2026 redesign takes two concrete cues from the supplied references:
-
-- Yuno puts a compact entry panel beside a generous public-table browser. Its
-  background cards fall slowly, behind the controls.
-- Naipia uses the Spanish deck as its illustration. Individual cards drift around
-  a stable fan, and a small developer credit sits at the bottom.
-
-Use a restrained version of these patterns, with Retruco's own identity. Do not
-copy their logos, authentication providers, or features we do not support. Avoid
-large marketing heroes, ornamental stamps, sparkles, oversized slogans, gradient
-text, frosted panels, and decorative badges with no useful meaning.
+Place the table-creation form beside the public-table browser on desktop and
+above it on mobile. Use the Spanish deck for the card fan and background motion.
+Keep the controls stable while cards move, and keep the footer credit readable
+at both sizes.
 
 ## Typography and copy
 
