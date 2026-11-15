@@ -744,7 +744,7 @@ for (const viewport of [
     snapshot.state!.legal = [
       { type: 'respond', kind: 'accept' },
       { type: 'respond', kind: 'decline' },
-      ...[6, 9, 100].map((amount) => ({ type: 'respond', kind: 'raise', amount })),
+      ...[6, 100].map((amount) => ({ type: 'respond', kind: 'raise', amount })),
       { type: 'call', kind: 'envido' },
       { type: 'call', kind: 'ley_envido' },
     ];

@@ -209,7 +209,10 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       'Subir / otros',
     ]);
     await responder.getByRole('button', { name: 'Subir / otros', exact: true }).click();
-    for (const name of ['Quiero y retruco', 'Quiero y vale 9', 'Quiero y vale partida']) {
+    await expect(
+      responder.getByRole('dialog').getByRole('button', { name: 'Quiero y vale 9', exact: true }),
+    ).toHaveCount(0);
+    for (const name of ['Quiero y retruco', 'Quiero y vale partida']) {
       await expect(
         responder.getByRole('dialog').getByRole('button', { name, exact: true }),
       ).toBeVisible();
@@ -219,7 +222,14 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
       path: `output/playwright/truco-replies-${testInfo.project.name}.png`,
       fullPage: true,
     });
-    await responder.getByRole('button', { name: 'Quiero', exact: true }).click();
+    await responder.getByRole('button', { name: 'Subir / otros', exact: true }).click();
+    await responder.getByRole('button', { name: 'Quiero y retruco', exact: true }).click();
+    await caller.getByRole('button', { name: 'Subir / otros', exact: true }).click();
+    await expect(
+      caller.getByRole('button', { name: 'Quiero y vale 9', exact: true }),
+    ).toBeVisible();
+    await caller.keyboard.press('Escape');
+    await caller.getByRole('button', { name: 'Quiero', exact: true }).click();
     expect(await first.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

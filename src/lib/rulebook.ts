@@ -56,7 +56,8 @@ export const rulebook = [
     title: 'Truco, retruco y vale partida',
     paragraphs: [
       'Una mano sin apuesta de truco vale 1 piedra. Truco vale 3, retruco 6, vale 9 vale 9 y vale partida puede decidir la partida completa. Se puede cantar en cualquiera de las vueltas mientras corresponda el turno y la voz.',
-      'Las subidas pueden saltar niveles: a truco se puede responder directamente «Quiero y vale 9». Si se rechaza una subida, quien la propuso gana la apuesta inmediatamente anterior, no un nivel intermedio que nadie aceptó. Rechazar truco inicial entrega 1 piedra.',
+      'Para cantar vale 9, primero hay que cantar retruco. Se puede responder al retruco con «Quiero y vale 9» o subir a vale 9 en un turno posterior si el retruco ya fue aceptado y se tiene la voz. Si se rechaza vale 9, quien lo cantó gana las 6 piedras del retruco.',
+      'Al truco también se puede responder «Quiero y vale partida». Rechazar esa subida entrega las 3 piedras del truco. Rechazar el truco inicial entrega 1 piedra.',
       'El equipo que acepta queda con la voz para volver a subir, en esa vuelta o en otra. Por ejemplo, si Nosotros cantamos truco, solo Ellos pueden subir a retruco. Si Ellos cantan retruco, solo Nosotros podemos subir a vale 9 o vale partida. La mano la sigue decidiendo el resultado de las cartas y los empardes.',
       'Vale partida no evita los pagos anteriores: si flor o envido ya decidieron la partida, no se aplica. Solo decide el ganador del truco cuando esos pagos dejaron la partida abierta.',
     ],

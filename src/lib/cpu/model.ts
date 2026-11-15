@@ -26,7 +26,8 @@ export interface PolicyManifest {
     | 'value-and-team-v5'
     | 'value-and-team-v6'
     | 'value-and-team-v7'
-    | 'value-and-team-v8';
+    | 'value-and-team-v8'
+    | 'value-and-team-v9';
 }
 
 type PolicyExports = WebAssembly.Exports & {
@@ -122,6 +123,7 @@ export class LocalPolicy {
           'value-and-team-v6',
           'value-and-team-v7',
           'value-and-team-v8',
+          'value-and-team-v9',
         ].includes(manifest.choice_policy) ||
           manifest.team_play !== 'closing-card-and-flor-v2')) ||
       (manifest.team_play !== undefined &&
@@ -162,7 +164,11 @@ export class LocalPolicy {
       throw new Error('CPU artifact metadata mismatch');
     const { instance } = await WebAssembly.instantiate(wasmBytes, {});
     const wasm = instance.exports as PolicyExports;
-    if (manifest.choice_policy === 'value-and-team-v8' && wasm.opening_bluff_version?.() !== 1)
+    if (
+      (manifest.choice_policy === 'value-and-team-v8' ||
+        manifest.choice_policy === 'value-and-team-v9') &&
+      wasm.opening_bluff_version?.() !== 1
+    )
       throw new Error('Missing bounded opening-bluff runtime');
     new Uint8Array(wasm.memory.buffer, wasm.model_ptr(), modelBytes.length).set(modelBytes);
     if (wasm.load_model(modelBytes.length) !== 0) throw new Error('Invalid CPU model');
