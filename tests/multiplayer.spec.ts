@@ -3,6 +3,7 @@ import { expectClearResults, expectClearTableCards } from './table-layout.js';
 
 test('four players surround the central cards and can choose a declaration', async ({
   browser,
+  baseURL,
 }, testInfo) => {
   const contexts = await Promise.all(
     Array.from({ length: 4 }, () =>
@@ -11,18 +12,13 @@ test('four players surround the central cards and can choose a declaration', asy
   );
   try {
     const api = process.env.TEST_API_ORIGIN ?? 'http://127.0.0.1:8080';
-    const headers = { Origin: 'http://127.0.0.1:5173' };
-    const runID = Date.now().toString(36);
+    const headers = { Origin: baseURL! };
     for (const [index, context] of contexts.entries()) {
-      const response = await context.request.post(`${api}/api/register`, {
+      const response = await context.request.post(`${api}/api/guest`, {
         headers,
-        data: {
-          username: `${['ana', 'beto', 'carla', 'diego'][index]}_${runID}`,
-          password: `local-test-${runID}`,
-          turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX',
-        },
+        data: { name: ['Ana', 'Beto', 'Carla', 'Diego'][index] },
       });
-      expect(response.ok()).toBe(true);
+      await expect(response).toBeOK();
     }
     const created = await contexts[0].request.post(`${api}/api/matches`, {
       headers,
