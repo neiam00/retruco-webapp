@@ -104,6 +104,11 @@ backend checkout and run the frontend tests:
 go run ./cmd/cpu-fixtures > ../frontend/src/lib/cpu/testdata/native-policy.json
 ```
 
+The legacy Go WebAssembly build has its own
+[manifest](src/lib/cpu/vendor/manifest.json) with the backend revision, Go version
+and file hashes. Run `pnpm update:cpu ../backend` from the frontend checkout
+to regenerate that build.
+
 ## Local CPU evaluation
 
 Check out the backend beside this repository as `../backend`. Install Docker,
