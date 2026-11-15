@@ -30,7 +30,29 @@ class TestWorker {
           version: request.version,
           seat: request.seat,
           revision: request.view.revision,
-          command: { type: 'play', card: 0 },
+          kind: request.kind,
+          token: request.token,
+          ...(request.memory
+            ? { memoryHand: request.memory.hand, memoryCursor: request.memory.total }
+            : {}),
+          ...(request.kind === 'signal'
+            ? { signal: 'none' }
+            : { command: { type: 'play', card: 0 } }),
+        },
+      },
+    });
+  }
+  memory(index: number, cursor: number) {
+    const { id, request } = this.messages[index];
+    this.onmessage?.({
+      data: {
+        type: 'memory',
+        id,
+        request: {
+          seat: request.seat,
+          token: request.token,
+          memoryHand: request.memory?.hand,
+          memoryCursor: cursor,
         },
       },
     });
@@ -136,4 +158,181 @@ test('loading timeout survives revision updates and a retry replaces the failed 
   TestWorker.instances[1].ready();
   expect(TestWorker.instances[1].messages[0].request.view.revision).toBe(2);
   controller.stop();
+});
+
+test('v2 tokens invalidate decisions even when rules revision is unchanged', () => {
+  const send = vi.fn();
+  const controller = new CPUController(send, vi.fn());
+  const first: CPUWork = { ...work(7), version: 2, kind: 'game', token: 'old' };
+  controller.update(first);
+  const worker = TestWorker.instances[0];
+  worker.ready();
+  controller.update({ ...first, token: 'new' });
+  worker.answer(0);
+  vi.advanceTimersByTime(1000);
+  expect(send).not.toHaveBeenCalled();
+  worker.answer(1);
+  vi.advanceTimersByTime(650);
+  expect(send).toHaveBeenCalledExactlyOnceWith(
+    1,
+    7,
+    { type: 'play', card: 0 },
+    expect.objectContaining({ token: 'new', kind: 'game' }),
+  );
+  controller.stop();
+});
+
+test('signal none is acknowledged once without delaying for card animation', () => {
+  const send = vi.fn();
+  const controller = new CPUController(send, vi.fn(), () => true);
+  const input: CPUWork = { ...work(7), version: 2, kind: 'signal', token: 'signal-work' };
+  controller.update(input);
+  const worker = TestWorker.instances[0];
+  worker.ready();
+  worker.answer(0);
+  vi.advanceTimersByTime(1);
+  expect(send).toHaveBeenCalledExactlyOnceWith(
+    1,
+    7,
+    undefined,
+    expect.objectContaining({ signal: 'none', token: 'signal-work' }),
+  );
+  controller.update(input);
+  expect(worker.messages).toHaveLength(1);
+  controller.stop();
+});
+
+function recurrentWork(token: string, start: number, end: number, total = 64): CPUWork {
+  return {
+    ...work(7),
+    version: 2,
+    kind: 'game',
+    token,
+    memoryKey: 'match-seat-lease',
+    memory: {
+      version: 1,
+      hand: 1,
+      start,
+      end,
+      total,
+      complete: true,
+      events: Array.from({ length: end - start }, () => Array(768).fill(0)),
+    },
+  };
+}
+
+test('pages memory without submitting actions and ignores duplicate or stale replay replies', () => {
+  const send = vi.fn();
+  const requestMemory = vi.fn();
+  const changed = vi.fn();
+  const controller = new CPUController(send, changed, () => false, requestMemory);
+  const first = recurrentWork('page-one', 0, 32);
+  controller.update(first);
+  const worker = TestWorker.instances[0];
+  worker.ready();
+  expect(worker.messages[0].request).toMatchObject({
+    memoryKey: first.memoryKey,
+    memory: first.memory,
+  });
+  worker.memory(0, 32);
+  worker.memory(0, 32);
+  controller.update(first);
+  expect(requestMemory).toHaveBeenCalledExactlyOnceWith({
+    seat: 1,
+    token: 'page-one',
+    memoryHand: 1,
+    memoryCursor: 32,
+  });
+  expect(send).not.toHaveBeenCalled();
+  expect(worker.messages).toHaveLength(1);
+  controller.update(recurrentWork('page-two', 32, 64));
+  worker.memory(0, 0);
+  worker.onmessage?.({ data: { type: 'error', id: 'page-one', error: 'obsolete failure' } });
+  expect(worker.terminated).toBe(false);
+  expect(requestMemory).toHaveBeenCalledTimes(1);
+  worker.answer(1);
+  vi.advanceTimersByTime(650);
+  expect(send).toHaveBeenCalledExactlyOnceWith(
+    1,
+    7,
+    { type: 'play', card: 0 },
+    expect.objectContaining({ token: 'page-two', memoryHand: 1, memoryCursor: 64 }),
+  );
+  controller.stop();
+});
+
+test('worker retry can reset the server cursor and catches up before committing a move', () => {
+  const send = vi.fn();
+  const requestMemory = vi.fn();
+  const controller = new CPUController(send, vi.fn(), () => false, requestMemory);
+  controller.update(recurrentWork('old-worker-page', 32, 64));
+  const previous = TestWorker.instances[0];
+  previous.ready();
+  controller.retry();
+  const worker = TestWorker.instances[1];
+  worker.ready();
+  previous.memory(0, 0);
+  expect(requestMemory).not.toHaveBeenCalled();
+  worker.memory(0, 0);
+  expect(requestMemory).toHaveBeenLastCalledWith({
+    seat: 1,
+    token: 'old-worker-page',
+    memoryHand: 1,
+    memoryCursor: 0,
+  });
+  controller.update(recurrentWork('reset-page', 0, 32));
+  worker.memory(1, 32);
+  controller.update(recurrentWork('caught-up-page', 32, 64));
+  worker.answer(2);
+  vi.advanceTimersByTime(650);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send.mock.calls[0][3]).toMatchObject({ token: 'caught-up-page', memoryCursor: 64 });
+  controller.stop();
+});
+
+test('losing the lease cancels replay and a stalled page request still times out', () => {
+  const requestMemory = vi.fn();
+  const changed = vi.fn();
+  const controller = new CPUController(vi.fn(), changed, () => false, requestMemory);
+  controller.update(recurrentWork('page', 0, 32));
+  const previous = TestWorker.instances[0];
+  previous.ready();
+  controller.update({ version: 2, controlled: false, seat: -1 });
+  previous.memory(0, 32);
+  expect(requestMemory).not.toHaveBeenCalled();
+  controller.update(recurrentWork('fresh-page', 0, 32));
+  const current = TestWorker.instances[1];
+  current.ready();
+  current.memory(0, 32);
+  vi.advanceTimersByTime(5000);
+  expect(current.terminated).toBe(true);
+  expect(changed).toHaveBeenLastCalledWith('error', expect.stringContaining('responder'));
+});
+
+test.each([0, 31, 33, 65, -1, NaN])(
+  'rejects a replay cursor not acknowledged by its current page: %s',
+  (cursor) => {
+    const requestMemory = vi.fn();
+    const changed = vi.fn();
+    const controller = new CPUController(vi.fn(), changed, () => false, requestMemory);
+    controller.update(recurrentWork('page', 0, 32));
+    const worker = TestWorker.instances[0];
+    worker.ready();
+    worker.memory(0, cursor);
+    expect(requestMemory).not.toHaveBeenCalled();
+    expect(worker.terminated).toBe(true);
+    expect(changed).toHaveBeenLastCalledWith('error', expect.stringContaining('sincronizar'));
+  },
+);
+
+test('rejects action acknowledgement before its last journal page arrives', () => {
+  const send = vi.fn();
+  const controller = new CPUController(send, vi.fn(), () => false, vi.fn());
+  controller.update(recurrentWork('incomplete-page', 0, 32));
+  const worker = TestWorker.instances[0];
+  worker.ready();
+  worker.answer(0);
+  vi.advanceTimersByTime(650);
+  expect(send).not.toHaveBeenCalled();
+  expect(worker.terminated).toBe(true);
 });

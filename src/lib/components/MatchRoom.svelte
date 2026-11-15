@@ -176,11 +176,21 @@
     }
   }
   const cpu = new CPUController(
-    (seat, revision, command) => {
+    (seat, revision, command, decision) => {
       if (!disposed && !suspended && socket?.readyState === WebSocket.OPEN) {
         socket.send(
           JSON.stringify({
-            input: { id: crypto.randomUUID(), cpuSeat: seat, revision, command },
+            input: {
+              id: crypto.randomUUID(),
+              cpuSeat: seat,
+              revision,
+              command,
+              cpuKind: decision?.kind,
+              cpuToken: decision?.token,
+              signal: decision?.signal,
+              memoryHand: decision?.memoryHand,
+              memoryCursor: decision?.memoryCursor,
+            },
           }),
         );
       }
@@ -190,8 +200,29 @@
       cpuError = message ?? '';
     },
     () => cardMotion.moving,
+    (request) => {
+      if (!disposed && !suspended && socket?.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            input: {
+              id: crypto.randomUUID(),
+              cpuSeat: request.seat,
+              cpuKind: 'memory',
+              cpuToken: request.token,
+              memoryHand: request.memoryHand,
+              memoryCursor: request.memoryCursor,
+            },
+          }),
+        );
+      }
+    },
   );
   let game = $derived(snapshot?.state);
+  function declarationAvailable(value: string, state: Snapshot['state'] | undefined) {
+    if (!value) return true;
+    if (!state || state.phase !== 'playing') return false;
+    return state.legal.some((command) => command.declaration === value);
+  }
   let spectator = $derived((snapshot?.seat ?? -1) < 0);
   let myTurn = $derived(
     connected &&
@@ -211,7 +242,9 @@
   let canBurn = $derived(game?.legal.some((command) => command.type === 'burn') ?? false);
   let callActions = $derived(
     game?.legal.filter(
-      (command) => command.type === 'call' && (command.declaration ?? '') === declaration,
+      (command) =>
+        command.type === 'call' &&
+        (command.kind === 'flor' || (command.declaration ?? '') === declaration),
     ) ?? [],
   );
   // This reply declares flor itself. Use one legal variant regardless of the
@@ -225,7 +258,9 @@
         command.type === 'respond' &&
         (command.kind === 'flowers_no'
           ? command === florBlockAction
-          : game.pending?.kind === 'privo' || (command.declaration ?? '') === declaration) &&
+          : game.pending?.kind === 'privo' ||
+            (game.pending?.kind === 'flor' && command.kind === 'decline') ||
+            (command.declaration ?? '') === declaration) &&
         (command.kind !== 'raise' || command.amount === raise || game?.pending?.kind === 'truco'),
     ) ?? [],
   );
@@ -339,6 +374,8 @@
     const generation = ++connectionGeneration;
     const url = new URL(socketURL(code));
     url.searchParams.set('transport', '2');
+    url.searchParams.set('cpuProtocol', '2');
+    if (import.meta.env.VITE_CPU_ML_ENABLED === 'true') url.searchParams.set('cpuMemory', '1');
     const current = new WebSocket(url);
     socket = current;
     const stream = new MatchStream();
@@ -395,6 +432,7 @@
             : undefined;
           cardSounds.update(connected ? snapshot : null, incoming);
           snapshot = incoming;
+          if (incoming.config.players !== 4) signalsOpen = false;
           void tick().then(() => {
             if (
               active() &&
@@ -404,7 +442,7 @@
             )
               animateCards?.();
           });
-          if (declaration === 'a_ley' && incoming.state?.round !== 0) {
+          if (!declarationAvailable(declaration, incoming.state)) {
             declaration = '';
           }
           const receivedAt = Date.now();
@@ -562,7 +600,7 @@
     );
   }
   function signal(kind: string) {
-    if (connected && socket)
+    if (connected && socket && game?.config.players === 4 && game.phase === 'playing' && !spectator)
       socket.send(
         JSON.stringify({ input: { id: crypto.randomUUID(), signal: kind, command: { type: '' } } }),
       );
@@ -957,7 +995,7 @@
                         <Button
                           variant={declaration === option.value ? 'secondary' : 'ghost'}
                           aria-pressed={declaration === option.value}
-                          disabled={option.value === 'a_ley' && game.round !== 0}
+                          disabled={!declarationAvailable(option.value, game)}
                           onclick={() => {
                             declaration = option.value;
                             declarationOpen = false;
@@ -1120,7 +1158,7 @@
           >
             {#if cardsMuted}<VolumeX size={18} />{:else}<Volume2 size={18} />{/if}
           </Button>
-          {#if game?.phase === 'playing' && !spectator}
+          {#if game?.phase === 'playing' && game.config.players === 4 && !spectator}
             <Button
               variant="outline"
               size="icon"

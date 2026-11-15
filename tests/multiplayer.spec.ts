@@ -77,9 +77,9 @@ test('four players surround the central cards and can choose a declaration', asy
     }
     await page.getByRole('button', { name: 'Decir…', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
-    await page.getByRole('button', { name: 'Flor flor', exact: true }).click();
+    await page.getByRole('button', { name: 'Sin declaración', exact: true }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
-    await expect(page.getByRole('button', { name: 'Flor flor', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Decir…', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
@@ -276,12 +276,12 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
           ).toBeEnabled();
           await active
             .getByRole('dialog')
-            .getByRole('button', { name: 'Flor', exact: true })
+            .getByRole('button', { name: 'A ley', exact: true })
             .click();
           await available.first().press('Enter');
           const other = active === first ? second : first;
-          await expect(other.locator('.canto-history')).toContainText('Flor');
-          await expect(other.locator('.speech-bubble').filter({ hasText: /^Flor$/ })).toHaveCount(
+          await expect(other.locator('.canto-history')).toContainText('A ley');
+          await expect(other.locator('.speech-bubble').filter({ hasText: /^A ley$/ })).toHaveCount(
             0,
           );
         } else {

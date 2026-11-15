@@ -54,6 +54,7 @@ export interface GameView {
     seat: number;
     team: number;
     remaining: number;
+    florDeclared?: boolean;
     plays: { card?: Card; present: boolean; burned: boolean; concealed: boolean }[];
   }[];
   hand: { index: number; card: Card; used: boolean }[];
@@ -137,19 +138,57 @@ export interface Listing {
   host: string;
 }
 
+export interface CPUFeatures {
+  choicePolicy?: string;
+  version: number;
+  state: number[];
+  actions: number[][];
+}
+export interface CPUMemoryPage {
+  version: number;
+  hand: number;
+  start: number;
+  end: number;
+  total: number;
+  complete: boolean;
+  events: number[][];
+}
+export interface CPUMemoryRequest {
+  seat: number;
+  token: string;
+  memoryHand: number;
+  memoryCursor: number;
+}
 export interface CPUWork {
+  memoryKey?: string;
+  memory?: CPUMemoryPage;
+  signalMask?: boolean[];
+  kind?: 'game' | 'signal';
+  token?: string;
+  features?: CPUFeatures;
   version: number;
   controlled: boolean;
   seat: number;
   view?: GameView;
 }
 export interface CPURequest {
+  memoryKey?: string;
+  memory?: CPUMemoryPage;
+  signalMask?: boolean[];
+  kind?: 'game' | 'signal';
+  token?: string;
+  features?: CPUFeatures;
   version: number;
   seat: number;
   entropy: number;
   view: GameView;
 }
 export interface CPUResponse {
+  memoryHand?: number;
+  memoryCursor?: number;
+  kind?: 'game' | 'signal';
+  token?: string;
+  signal?: string;
   version: number;
   revision: number;
   seat: number;

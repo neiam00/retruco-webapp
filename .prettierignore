@@ -9,3 +9,6 @@ test-results
 .agent
 .agents
 AGENTS.md
+
+# Generated native Go parity corpus; regenerate with cmd/cpu-fixtures.
+src/lib/cpu/testdata/native-policy.json

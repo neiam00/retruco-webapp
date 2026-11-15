@@ -7,6 +7,7 @@ export const declarations = [
   { value: 'presento_flor', label: 'Presento flor' },
   { value: 'flor_flor', label: 'Flor flor' },
   { value: 'con_mi_flor', label: 'Con mi flor…' },
+  { value: 'con_flor', label: 'Con flor…' },
 ];
 export function cantoName(kind: string) {
   return (

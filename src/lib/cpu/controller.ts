@@ -1,4 +1,4 @@
-import type { Command, CPUResponse, CPUWork } from '#lib/protocol.js';
+import type { Command, CPUMemoryRequest, CPUResponse, CPUWork } from '#lib/protocol.js';
 
 export type CPUStatus = 'idle' | 'loading' | 'ready' | 'thinking' | 'error';
 
@@ -9,15 +9,22 @@ export class CPUController {
   private work?: CPUWork;
   private pending?: string;
   private lastSubmitted?: string;
+  private lastMemoryRequest?: string;
   private ready = false;
   private failed = false;
   private watchdog?: ReturnType<typeof setTimeout>;
   private delay?: ReturnType<typeof setTimeout>;
 
   constructor(
-    private readonly send: (seat: number, revision: number, command: Command) => void,
+    private readonly send: (
+      seat: number,
+      revision: number,
+      command: Command | undefined,
+      decision?: CPUResponse,
+    ) => void,
     private readonly changed: (status: CPUStatus, error?: string) => void,
     private readonly presentationBusy: () => boolean = () => false,
+    private readonly requestMemory?: (request: CPUMemoryRequest) => void,
   ) {}
 
   update(work?: CPUWork) {
@@ -30,6 +37,7 @@ export class CPUController {
     if (previousKey !== this.key(work)) {
       this.pending = undefined;
       this.lastSubmitted = undefined;
+      this.lastMemoryRequest = undefined;
       clearTimeout(this.delay);
       if (this.ready) clearTimeout(this.watchdog);
     }
@@ -52,7 +60,8 @@ export class CPUController {
   }
 
   private key(work?: CPUWork) {
-    return work?.view ? `${work.seat}:${work.view.revision}` : undefined;
+    if (!work?.view) return undefined;
+    return work.version === 2 ? work.token : `${work.seat}:${work.view.revision}`;
   }
 
   private start() {
@@ -79,7 +88,11 @@ export class CPUController {
         this.changed('ready');
         this.decide();
       } else if (data.type === 'error') {
+        if (data.id !== undefined && (data.id !== this.pending || data.id !== this.key(this.work)))
+          return;
         this.fail(data.error);
+      } else if (data.type === 'memory') {
+        this.acceptMemory(data.id, data.request as CPUMemoryRequest);
       } else if (data.type === 'decision') {
         this.accept(data.id, data.result as CPUResponse);
       }
@@ -104,11 +117,43 @@ export class CPUController {
       id: key,
       request: {
         version: work.version,
+        kind: work.kind,
+        token: work.token,
+        features: work.features,
+        signalMask: work.signalMask,
+        memoryKey: work.memoryKey,
+        memory: work.memory,
         seat: work.seat,
         entropy: crypto.getRandomValues(new Uint32Array(1))[0],
         view: work.view,
       },
     });
+  }
+
+  private acceptMemory(key: string, request: CPUMemoryRequest) {
+    const work = this.work;
+    if (!work?.view || key !== this.pending || key !== this.key(work)) return;
+    const page = work.memory;
+    if (
+      !this.requestMemory ||
+      !page ||
+      page.version !== 1 ||
+      page.complete !== true ||
+      request.seat !== work.seat ||
+      request.token !== work.token ||
+      request.memoryHand !== page.hand ||
+      !Number.isSafeInteger(request.memoryCursor) ||
+      !(request.memoryCursor === page.end || (request.memoryCursor === 0 && page.start > 0))
+    ) {
+      this.fail('El motor CPU no pudo sincronizar esta mano. Inténtalo de nuevo.');
+      return;
+    }
+    const identity = `${key}:${request.memoryHand}:${request.memoryCursor}`;
+    if (this.lastMemoryRequest === identity) return;
+    this.lastMemoryRequest = identity;
+    // Keep the pending token until the server publishes the next page. Duplicate
+    // snapshots cannot repeatedly acknowledge a page or rewind a fresh worker.
+    this.requestMemory(request);
   }
 
   private accept(key: string, result: CPUResponse) {
@@ -119,7 +164,21 @@ export class CPUController {
       result.version !== this.work.version ||
       result.revision !== this.work.view.revision ||
       result.seat !== this.work.seat ||
-      !result.command
+      (this.work.version === 2 &&
+        (result.token !== this.work.token || result.kind !== this.work.kind)) ||
+      ((result.memoryHand !== undefined || result.memoryCursor !== undefined) &&
+        (!this.work.memory ||
+          this.work.memory.complete !== true ||
+          result.memoryHand !== this.work.memory.hand ||
+          result.memoryCursor !== this.work.memory.total ||
+          this.work.memory.end !== this.work.memory.total)) ||
+      (this.work.kind === 'signal'
+        ? !result.signal ||
+          !['none', 'perico', 'perica', 'seven_spades', 'seven_coins', 'receta'].includes(
+            result.signal,
+          ) ||
+          !!result.command
+        : !result.command)
     ) {
       this.fail(result.error ?? 'La respuesta del motor CPU no coincide con esta mano.');
       return;
@@ -130,16 +189,17 @@ export class CPUController {
       if (this.pending !== key || this.key(this.work) !== key) return;
       // Let dealt cards arrive before a CPU plays one. Decisions are still
       // computed immediately; only the existing presentation pause is extended.
-      if (this.presentationBusy()) {
+      if (result.kind !== 'signal' && this.presentationBusy()) {
         this.delay = setTimeout(submit, 50);
         return;
       }
       this.lastSubmitted = key;
       this.pending = undefined;
-      this.send(result.seat, result.revision, result.command!);
+      if (result.version === 2) this.send(result.seat, result.revision, result.command, result);
+      else this.send(result.seat, result.revision, result.command!);
       this.changed('ready');
     };
-    this.delay = setTimeout(submit, 650);
+    this.delay = setTimeout(submit, result.kind === 'signal' ? 0 : 650);
   }
 
   private fail(error: string) {
@@ -158,6 +218,7 @@ export class CPUController {
     this.work = undefined;
     this.pending = undefined;
     this.lastSubmitted = undefined;
+    this.lastMemoryRequest = undefined;
     this.ready = false;
     this.failed = false;
     this.changed('idle');

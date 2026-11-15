@@ -65,7 +65,7 @@ export const rulebook = [
     title: 'Flor por derecho y declaraciones',
     paragraphs: [
       'La flor se forma con tres cartas del mismo palo, o dos del mismo palo y perico o perica. Cada flor sin disputar vale 3 piedras. Dos flores válidas de compañeros suman 6 si no se disputan. Si ambos equipos alcanzan el objetivo con flores sin disputar, tiene prioridad el equipo de mano.',
-      'Con flor por derecho, di «Flor» al jugar una carta, «Presento flor» en la última y «Flor flor» al jugar las dos pegadas. Para cantar o responder truco se usa «Con mi flor…». Cuando dos flores entran en el envido, siguen válidas sin repetir la declaración.',
+      'Con flor por derecho, di «Flor» al jugar una carta, «Presento flor» en la última y «Flor flor» al jugar las dos pegadas. Para cantar o responder truco se usa «Con mi flor…». Cuando dos flores entran en el envido, siguen válidas sin repetir la declaración. En los demás casos, omitir una declaración obligatoria quema la flor ordinaria.',
       'Si ambos compañeros tienen flor y se juega por derecho, el primero debe decir «A ley» con su primera carta; reemplaza «Flor» para esa carta. El segundo dice «Flor» al mostrar la suya. Sin ese «A ley», conserva la flor quien primero la declara; la otra se quema.',
       'Sin flor por derecho, las flores conservan su valor aunque el jugador omita la declaración. Una flor ordinaria puede achicarse al rechazar el envido con ley o quemarse al perder la comparación de flores.',
     ],
@@ -110,7 +110,7 @@ export const rulebook = [
       'En pegado voluntario, tu propia carta de abajo debe ganar la segunda para que la de arriba siga válida. Si pierde, se quema la de arriba aunque tu compañero haya ganado. La excepción es que ambas cartas de tu equipo emparden arriba de las dos rivales: entonces tu tercera sigue válida, aunque la segunda sea emparde.',
       'Si solo una persona juega pegado y la segunda está pendiente, abre la tercera quien está a su derecha. Si lo hacen varias, abre la primera persona que aún tenga carta en el orden desde mano. Se omite a quienes ya jugaron las dos. El castigo de quemar la de arriba no se aplica al pegado obligatorio.',
       'En la segunda o tercera vuelta puedes elegir «Quemar carta» y seleccionar una carta para pasar tu turno. Se juega boca abajo, queda inválida y ya no puedes volver a usarla. En pegado obligatorio, «Quemar las dos» descarta ambas cartas restantes. Nunca se puede quemar voluntariamente en la primera vuelta.',
-      'Al quemar una carta se usa la declaración correspondiente a esa carta. Al quemar las dos en pegado obligatorio se usa «Flor flor». La receta conserva su protección.',
+      'Quemar voluntariamente exige las mismas declaraciones de flor que jugar: «Flor» con una carta no final, «Presento flor» con la última y «Flor flor» al quemar las dos en pegado obligatorio. La receta sigue protegida y el valor original de envido no cambia.',
     ],
   },
   {
@@ -126,7 +126,7 @@ export const rulebook = [
   {
     title: 'Señas, espectadores y orden de pago',
     paragraphs: [
-      'Guiño derecho: perico. Guiño izquierdo: perica. Lengua a la derecha: 7 de espadas. Lengua a la izquierda: 7 de oros. Ambos ojos: receta. Puedes mentir con cualquier seña. Tu compañero siempre la ve; cada rival tiene una probabilidad independiente del 10% de verla, decidida de nuevo para cada seña.',
+      'Las señas son solo para partidas 2v2: no se ofrecen en 1v1 porque no hay compañero. Guiño derecho: perico. Guiño izquierdo: perica. Lengua a la derecha: 7 de espadas. Lengua a la izquierda: 7 de oros. Ambos ojos: receta. Puedes mentir con cualquier seña. Tu compañero siempre la ve; cada rival tiene una probabilidad independiente del 10% de verla, decidida de nuevo para cada seña.',
       'Los espectadores pueden cambiar de perspectiva en cualquier momento. Ven la mano de esa persona, la mesa pública y exactamente las señas que ella pudo ver. No reciben las otras manos ni una nueva oportunidad de descubrir una seña.',
       'Al terminar una mano se paga flor, envido y truco, en ese orden. Al alcanzar el objetivo se detienen los pagos siguientes. La excepción acordada para envido de ley es envido, flor y truco. Un vale partida solo decide la partida si los pagos anteriores no la decidieron.',
     ],
