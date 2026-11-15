@@ -133,12 +133,15 @@ async function port() {
   return value;
 }
 async function ready(url, child) {
-  for (let retry = 0; retry < 120; retry++) {
+  // A fresh Vite checkout can be listening while its first SSR request still
+  // compiles dependencies. This deadline covers local service startup only.
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
     if (abort.signal.aborted) throw Error('Integration interrupted');
     if (child.exitCode !== null || child.signalCode !== null)
       throw Error(`Local process stopped before ${url} was ready`);
     try {
-      if ((await fetch(url, { signal: AbortSignal.timeout(1000) })).ok) return;
+      if ((await fetch(url, { signal: AbortSignal.timeout(8000) })).ok) return;
     } catch {
       /* startup */
     }
