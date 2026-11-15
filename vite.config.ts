@@ -20,6 +20,10 @@ export default defineConfig(({ mode }) => {
   const apiOrigin = environment.API_ORIGIN;
   const assetOrigin = environment.CARD_ASSET_ORIGIN;
   const siteOrigin = environment.SITE_ORIGIN;
+  const productionPages =
+    mode === 'production' &&
+    environment.CF_PAGES === '1' &&
+    environment.CF_PAGES_BRANCH === 'master';
   const connections: CspSource[] = [
     'self',
     'https://*.google-analytics.com',
@@ -39,6 +43,16 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    define: productionPages
+      ? {
+          'import.meta.env.VITE_CPU_ML_ENABLED': JSON.stringify(
+            environment.VITE_CPU_ML_ENABLED ?? 'true',
+          ),
+          'import.meta.env.VITE_CPU_MODEL_MANIFEST': JSON.stringify(
+            environment.VITE_CPU_MODEL_MANIFEST ?? '/cpu/value-and-team-v7-9ec77b1e/manifest.json',
+          ),
+        }
+      : undefined,
     plugins: [
       tailwindcss(),
       sveltekit({

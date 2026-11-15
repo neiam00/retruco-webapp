@@ -23,6 +23,8 @@ const manifest = JSON.parse(readFileSync(resolve(bundle, 'manifest.json'), 'utf8
 const caseData = readFileSync(resolve(casesArgument));
 const cases = JSON.parse(caseData);
 const recurrent = cases.format === 3;
+if ((cases.choice_policy ?? null) !== (manifest.choice_policy ?? null))
+  throw new Error('Benchmark cases and model require different CPU choice policies');
 if (
   ![2, 3].includes(cases.format) ||
   cases.encoder !== manifest.encoder ||
@@ -97,7 +99,12 @@ function requestFor(input, cursor = input.events?.length ?? 0) {
           },
         }
       : {}),
-    features: { version: cases.encoder, state: input.features, actions: input.actions },
+    features: {
+      version: cases.encoder,
+      choicePolicy: cases.choice_policy,
+      state: input.features,
+      actions: input.actions,
+    },
   };
 }
 const calibrationCode = `function calibrate() {
@@ -108,7 +115,7 @@ const calibrationCode = `function calibrate() {
 const helpers = `
 import { DecisionSession } from '/decision.js';
 import { loadPolicy } from '/load-policy.js';
-const cases={encoder:${cases.encoder}};
+const cases=${JSON.stringify({ encoder: cases.encoder, choice_policy: cases.choice_policy })};
 export ${requestFor.toString()}
 export async function load() {
   const started = performance.now();
