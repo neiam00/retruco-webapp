@@ -85,8 +85,8 @@ server validates each action against the current game state. Local builds and
 branch previews use the built-in TypeScript heuristic by default. The [backend ML project](https://github.com/neiam00/retruco-backend/tree/master/ml)
 trains and exports optional learned policies.
 
-Cloudflare Pages builds of `master` default to the `value-and-team-v7` release
-at `/cpu/value-and-team-v7-9ec77b1e/manifest.json`. The production build
+Cloudflare Pages builds of `master` default to the `value-and-team-v8` release
+at `/cpu/value-and-team-v8-9ec77b1e/manifest.json`. The production build
 variables below override those defaults. Set `VITE_CPU_ML_ENABLED=false` and
 rebuild to switch back to the heuristic.
 

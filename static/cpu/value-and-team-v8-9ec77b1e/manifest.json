@@ -15,25 +15,25 @@
   "cell": "lstm",
   "inference_math": "centered-f64-heads-f32-state",
   "training_kind": "rmappo-v1",
-  "model_id": "cpu-v2-9ec77b1e476a93cd-closing-card-and-flor-v2-value-and-team-v7",
+  "model_id": "cpu-v2-9ec77b1e476a93cd-closing-card-and-flor-v2-value-and-team-v8",
   "checkpoint_sha256": "e9fef3ff4598520ea066edacde748e14c9893ff7bc2939af4a07b3e6ebe5798a",
   "training_snapshot_sha256": "4a5fae0aa3e21f89e5348222def9654d0556d7ad2547a7452b202f485f1aca41",
   "training_source_commit": "37e5b1a10cc0ac99456a12688cafd86100717a38",
-  "exporter_commit": "ab39d33f10f04428da6b435222025dbf6a7f7138",
-  "runtime_source_commit": "ab39d33f10f04428da6b435222025dbf6a7f7138",
-  "runtime_source_sha256": "e0998f1b319fbd968c569cec5af48421660c314edfd7d51c211fd6909c615a7c",
+  "exporter_commit": "aab53c17486c2795bc314f665061a8f4587d3c27",
+  "runtime_source_commit": "aab53c17486c2795bc314f665061a8f4587d3c27",
+  "runtime_source_sha256": "bd5e1ac50cf73b9ad71a9bd2c24030e684d6f294053dcc9306d6de235427b689",
   "source_dirty": false,
-  "wasm_sha256": "37f32384fb80d01fa453f0846298b577d5e9d7db343c8c45617d9d3782eb405d",
-  "wasm_bytes": 13367,
+  "wasm_sha256": "c1529598c784efcdd7b981fde7a3ed3219cc3085c6c405cb6f75649a59cf8d32",
+  "wasm_bytes": 13877,
   "actor_parameters": 122567,
   "training_update": 118,
   "training_seconds": null,
   "training_choices": 1000549,
   "torch_version": "2.15.0",
   "team_play": "closing-card-and-flor-v2",
-  "choice_policy": "value-and-team-v7",
+  "choice_policy": "value-and-team-v8",
   "gzip_bytes": {
     "model": 115900,
-    "wasm": 6069
+    "wasm": 6317
   }
 }
