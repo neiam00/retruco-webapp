@@ -31,13 +31,9 @@
       <summary>Envido fijo: 2 piedras · Ver regla</summary>
       <div class="explanation">
         <p>Envido fijo: 2 piedras, sin subidas. Se cuenta antes del truco.</p>
-        {#if game.pending?.kind === 'privo'}
-          <p>«Privo y Truco» acepta jugar; el truco sigue valiendo 1 hasta que alguien lo cante.</p>
-          {#if game.legal.some((command) => command.kind === 'present_flor')}
-            <p>
-              Puedes presentar tu flor para cerrar la mano con 3 piedras, o jugar y conservarla.
-            </p>
-          {/if}
+        <p>Con «Privo y Truco» el truco queda cantado por 3 piedras, sin subidas.</p>
+        {#if game.pending?.kind === 'privo' && game.legal.some((command) => command.kind === 'present_flor')}
+          <p>Puedes presentar tu flor para cerrar la mano con 3 piedras, o jugar y conservarla.</p>
         {/if}
       </div>
     </details>
