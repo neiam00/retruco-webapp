@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
             environment.VITE_CPU_ML_ENABLED ?? 'true',
           ),
           'import.meta.env.VITE_CPU_MODEL_MANIFEST': JSON.stringify(
-            environment.VITE_CPU_MODEL_MANIFEST ?? '/cpu/value-and-team-v13-e1d6dcb3/manifest.json',
+            environment.VITE_CPU_MODEL_MANIFEST ?? '/cpu/value-and-team-v14-e1d6dcb3/manifest.json',
           ),
         }
       : undefined,
