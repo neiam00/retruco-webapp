@@ -86,7 +86,7 @@ branch previews use the built-in TypeScript heuristic by default. The [backend M
 trains and exports optional learned policies.
 
 This candidate branch configures Cloudflare Pages production builds to load
-`/cpu/value-and-team-v11-9ec77b1e/manifest.json`. The v11 manifest keeps approval disabled during qualification. The production build
+`/cpu/value-and-team-v12-e1d6dcb3/manifest.json`. The v12 manifest keeps approval disabled during qualification. The production build
 variables below override those defaults. Set `VITE_CPU_ML_ENABLED=false` and
 rebuild to switch back to the heuristic.
 
