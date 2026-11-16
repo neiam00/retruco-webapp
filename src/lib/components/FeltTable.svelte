@@ -5,7 +5,7 @@
   import Card from '#lib/components/Card.svelte';
   import PlayerSeat from '#lib/components/PlayerSeat.svelte';
   import { cantoName } from '#lib/command-labels.js';
-  import { eventLabel } from '#lib/game-events.js';
+  import { eventLabel, qualifiedEnvidoOpening } from '#lib/game-events.js';
   import { teamLabel, victoryLabel } from '#lib/team-labels.js';
   import type { Snapshot } from '#lib/protocol.js';
 
@@ -45,6 +45,11 @@
   let respondingTeam = $derived(game?.pending ? 1 - game.pending.caller : undefined);
   let latestEvent = $derived(snapshot.events?.at(-1)?.event);
 
+  let leyOpening = $derived(qualifiedEnvidoOpening(snapshot));
+  let pendingLabel = $derived(
+    game?.pending ? (leyOpening?.label ?? cantoName(game.pending.kind)) : '',
+  );
+
   function seatName(seat: number) {
     return snapshot.seats[seat]?.name || 'Puesto libre';
   }
@@ -55,9 +60,9 @@
       const item = events[index];
       if (item.event.automatic && item.event.type === 'respond') continue;
       if (item.event.seat === seat && item.hand === game?.handNumber) {
-        // Playing, stacking, or burning ends this player's turn. Older cantos
-        // remain in the match history, but no longer belong above their seat.
-        if (['play', 'stack', 'burn'].includes(item.event.type)) return '';
+        if (['play', 'stack', 'burn'].includes(item.event.type)) {
+          return item.event.automatic ? '' : eventLabel(item.event);
+        }
         const label = eventLabel(item.event);
         if (label) return label;
       }
@@ -243,7 +248,7 @@
         <div class="turn-message">
           <span class="turn-dot"></span>
           {#if game.pending}
-            <strong title={cantoName(game.pending.kind)}>{cantoName(game.pending.kind)}</strong>
+            <strong title={pendingLabel}>{pendingLabel}</strong>
             <span class="wager-value">
               {game.pending.value === 100 ? 'Vale partida' : game.pending.value + ' piedras'}
             </span>
@@ -261,6 +266,9 @@
         </div>
         {#if game.pending}
           <p>
+            {#if leyOpening?.speaker !== undefined}
+              {seatName(leyOpening.speaker)} dijo «A ley» ·
+            {/if}
             Responde: {teamLabel(1 - game.pending.caller, snapshot.seat)}{game.suspended
               ? ' · Truco en espera'
               : ''}

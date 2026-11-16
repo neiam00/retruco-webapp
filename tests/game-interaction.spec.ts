@@ -654,6 +654,43 @@ test('a played card lands at the scaled tabletop card size and position', async 
   expect(difference).toBeLessThan(2);
 });
 
+test('a qualified envido shows who said A ley, including after reconnect', async ({ page }) => {
+  const snapshot = tableSnapshot(4, 0, false);
+  snapshot.events = [{ id: 1, hand: 1, event: { type: 'play', seat: 3, text: 'a_ley' } }];
+  snapshot.cantoHistory = structuredClone(snapshot.events);
+  const update = await showTable(page, snapshot);
+  await expect(page.locator('[data-seat="3"] .speech-bubble')).toHaveText('A ley');
+
+  const wager = structuredClone(snapshot);
+  wager.sequence++;
+  wager.state!.revision++;
+  wager.state!.pending = { kind: 'ley_envido', caller: 0, value: 2, previous: 1, terminal: false };
+  const call = {
+    id: 2,
+    hand: 1,
+    event: { type: 'call', seat: 2, kind: 'ley_envido', mode: 'con_ley' },
+  };
+  wager.events!.push(call);
+  wager.cantoHistory!.push(call);
+  update(wager);
+  const origin = page.getByText('CPU 3 dijo «A ley»', { exact: false });
+  await expect(origin).toBeVisible();
+  await expect(page.locator('.turn-message strong')).toHaveText('Con ley, envido');
+
+  wager.events = [call];
+  update(wager);
+  await update.disconnect();
+  await page.reload();
+  await expect(origin).toBeVisible();
+
+  const resolved = structuredClone(wager);
+  resolved.sequence++;
+  resolved.state!.revision++;
+  resolved.state!.pending = undefined;
+  update(resolved);
+  await expect(origin).toHaveCount(0);
+});
+
 for (const type of ['play', 'stack', 'burn']) {
   test(`${type} clears only that player's canto bubble and preserves history`, async ({ page }) => {
     const snapshot = tableSnapshot(4, 0, false);

@@ -287,9 +287,7 @@ test('two guests can play, chat, reconnect and forfeit a private match', async (
           await available.first().press('Enter');
           const other = active === first ? second : first;
           await expect(other.locator('.canto-history')).toContainText('A ley');
-          await expect(other.locator('.speech-bubble').filter({ hasText: /^A ley$/ })).toHaveCount(
-            0,
-          );
+          await expect(other.locator('.seat-top .speech-bubble')).toHaveText('A ley');
         } else {
           await available.first().click();
         }
