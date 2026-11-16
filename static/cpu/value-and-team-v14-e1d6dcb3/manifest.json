@@ -3,7 +3,7 @@
   "encoder": 2,
   "action_encoder": 1,
   "rules": "2",
-  "approved": false,
+  "approved": true,
   "architecture": "candidate-768-96-64-48-32-32-1-signal6-lstm64-residual-team-play-v2",
   "memory_size": 64,
   "memory_version": 1,

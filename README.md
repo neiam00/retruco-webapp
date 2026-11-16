@@ -85,9 +85,9 @@ server validates each action against the current game state. Local builds and
 branch previews use the built-in TypeScript heuristic by default. The [backend ML project](https://github.com/neiam00/retruco-backend/tree/master/ml)
 trains and exports optional learned policies.
 
-This candidate branch configures Cloudflare Pages production builds to load
-`/cpu/value-and-team-v14-e1d6dcb3/manifest.json`. The v14 manifest keeps approval disabled during qualification. The production build
-variables below override those defaults. Set `VITE_CPU_ML_ENABLED=false` and
+Cloudflare Pages production builds load the qualified v14 policy from
+`/cpu/value-and-team-v14-e1d6dcb3/manifest.json`. The production build
+variables below override that default. Set `VITE_CPU_ML_ENABLED=false` and
 rebuild to switch back to the heuristic.
 
 To serve an approved policy, set `VITE_CPU_ML_ENABLED=true` and point
