@@ -1,4 +1,5 @@
 import { socketURL } from '#lib/api.js';
+import { ReconnectBackoff } from '#lib/reconnect.js';
 import type { VoiceMode } from '#lib/voice-settings.js';
 
 export interface VoicePeer {
@@ -9,6 +10,7 @@ export interface VoicePeer {
 
 export interface VoiceState {
   connected: boolean;
+  reconnecting: boolean;
   canSpeak: boolean;
   microphone: boolean;
   talking: boolean;
@@ -74,13 +76,17 @@ export class VoiceSession {
   private peers = new Map<string, PeerConnection>();
   private servers: RTCIceServer[] = [];
   private stream?: MediaStream;
-  private refresh?: ReturnType<typeof setInterval>;
+  private refresh?: ReturnType<typeof setTimeout>;
+  private backoff = new ReconnectBackoff();
+  private failedJoins = 0;
+  private microphoneWanted = false;
   private disposed = false;
   private microphoneRequest = 0;
   private mode: VoiceMode = 'listen';
   private muted = false;
   private state: VoiceState = {
     connected: false,
+    reconnecting: false,
     canSpeak: false,
     microphone: false,
     talking: false,
@@ -94,26 +100,47 @@ export class VoiceSession {
   connect(code: string) {
     const url = new URL(socketURL(code));
     url.pathname = url.pathname.replace(/\/ws$/, '/voice');
-    this.socket = new WebSocket(url);
+    if (this.disposed || this.socket) return;
+    const socket = new WebSocket(url);
+    this.socket = socket;
     let messages = Promise.resolve();
-    this.socket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       messages = messages
-        .then(() => this.receive(JSON.parse(event.data) as Signal))
+        .then(() => {
+          if (this.socket === socket) return this.receive(JSON.parse(event.data) as Signal);
+        })
         .catch(() => {
-          if (!this.disposed) {
+          if (this.socket === socket) {
             this.update({
               error: 'No pudimos conectar el audio. Sal del audio y vuelve a entrar.',
             });
           }
         });
     };
-    this.socket.onclose = () => {
-      if (!this.disposed) {
+    socket.onclose = ({ code: status, reason }) => {
+      if (this.socket !== socket) return;
+      const recovering = this.state.connected || this.state.reconnecting;
+      if (status === 4001 || status === 1008 || !recovering || ++this.failedJoins > 5) {
         this.close();
-        this.update({ error: 'Se perdió la conexión de voz. Vuelve a entrar al audio.' });
+        const error =
+          status === 4001
+            ? 'El audio se abrió en otra pestaña.'
+            : status === 1008
+              ? reason || 'La sesión de voz finalizó. Revisa tu acceso a la mesa.'
+              : 'No pudimos conectar la voz. Vuelve a entrar al audio.';
+        this.update({ error });
+        return;
       }
+      this.disconnect();
+      this.update({ reconnecting: true, error: '' });
+      // Failed upgrades hide the HTTP status, including the TURN issuance limit.
+      this.backoff.schedule(() => this.connect(code), this.failedJoins > 1 ? 16_000 : 0);
     };
-    this.refresh = setInterval(() => this.send({ type: 'refresh' }), 30 * 60 * 1000);
+  }
+
+  private scheduleRefresh(delay: number) {
+    clearTimeout(this.refresh);
+    this.refresh = setTimeout(() => this.send({ type: 'refresh' }), delay);
   }
 
   private update(change: Partial<VoiceState>) {
@@ -131,8 +158,15 @@ export class VoiceSession {
     if (this.disposed) return;
     this.mode = mode;
     this.muted = false;
+    this.microphoneWanted = mode !== 'listen';
+    await this.applyMode();
+  }
+
+  private async applyMode() {
+    const mode = this.mode;
     this.setTalking(false);
     if (mode === 'listen' || !this.self?.canSpeak) {
+      this.microphoneWanted = false;
       this.stopMicrophone();
       return;
     }
@@ -154,6 +188,7 @@ export class VoiceSession {
       const track = stream.getAudioTracks()[0];
       track.enabled = false;
       track.onended = () => {
+        this.microphoneWanted = false;
         this.stopMicrophone();
         this.update({ error: 'El micrófono se desconectó. Actívalo de nuevo para continuar.' });
       };
@@ -163,6 +198,7 @@ export class VoiceSession {
       this.setTalking(this.mode === 'live');
     } catch {
       if (this.disposed || request !== this.microphoneRequest) return;
+      this.microphoneWanted = false;
       this.stopMicrophone();
       this.update({
         error:
@@ -246,14 +282,16 @@ export class VoiceSession {
     this.peers.set(peer.id, entry);
     connection.ontrack = ({ track, streams }) => {
       // Permissions come from the server roster, never from the sender's SDP.
-      if (!entry.peer.canSpeak || track.kind !== 'audio') return;
+      if (entry.closed || !entry.peer.canSpeak || track.kind !== 'audio') return;
       audio.srcObject = streams[0] ?? new MediaStream([track]);
       void audio.play().catch(() => this.update({ playbackBlocked: true }));
     };
     connection.onicecandidate = ({ candidate }) => {
-      if (candidate) this.send({ type: 'signal', to: peer.id, candidate: candidate.toJSON() });
+      if (!entry.closed && candidate)
+        this.send({ type: 'signal', to: peer.id, candidate: candidate.toJSON() });
     };
     connection.onconnectionstatechange = () => {
+      if (entry.closed) return;
       if (connection.connectionState === 'failed') {
         connection.restartIce();
         this.update({ error: `Reconectando el audio de ${peer.name}…` });
@@ -266,9 +304,10 @@ export class VoiceSession {
         entry.makingOffer = true;
         await this.attachMicrophone(entry);
         await connection.setLocalDescription();
-        this.send({ type: 'signal', to: peer.id, description: connection.localDescription });
+        if (!entry.closed)
+          this.send({ type: 'signal', to: peer.id, description: connection.localDescription });
       } catch {
-        if (!this.disposed) this.update({ error: `No pudimos negociar el audio de ${peer.name}.` });
+        if (!entry.closed) this.update({ error: `No pudimos negociar el audio de ${peer.name}.` });
       } finally {
         entry.makingOffer = false;
       }
@@ -309,13 +348,29 @@ export class VoiceSession {
   private async receive(message: Signal) {
     if (this.disposed) return;
     if (message.type === 'welcome' && message.self) {
+      if (!message.self.canSpeak) this.microphoneWanted = false;
+      const restoreMic = this.state.reconnecting && this.microphoneWanted && message.self.canSpeak;
+      this.failedJoins = 0;
+      this.backoff.connected();
       this.self = message.self;
       this.servers = message.iceServers ?? [];
-      this.update({ connected: true, canSpeak: message.self.canSpeak, error: '' });
+      if (this.servers.length) this.scheduleRefresh(30 * 60_000);
+      this.update({
+        connected: true,
+        reconnecting: false,
+        canSpeak: message.self.canSpeak,
+        error: '',
+      });
       this.syncPeers(message.peers ?? []);
+      if (restoreMic) void this.applyMode();
+    } else if (message.type === 'heartbeat') {
+      this.send({ type: 'heartbeat' });
+    } else if (message.type === 'refresh_retry') {
+      this.scheduleRefresh(60_000);
     } else if (message.type === 'peers') {
       this.syncPeers(message.peers ?? []);
     } else if (message.type === 'ice') {
+      this.scheduleRefresh(30 * 60_000);
       this.servers = message.iceServers ?? [];
       for (const entry of this.peers.values()) {
         if (entry.closed) continue;
@@ -343,7 +398,8 @@ export class VoiceSession {
         for (const candidate of entry.candidates.splice(0)) await pc.addIceCandidate(candidate);
         if (message.description.type === 'offer') {
           await pc.setLocalDescription();
-          this.send({ type: 'signal', to: message.from, description: pc.localDescription });
+          if (!entry.closed)
+            this.send({ type: 'signal', to: message.from, description: pc.localDescription });
         }
       } else if (message.candidate !== undefined && !entry.ignoreOffer) {
         const candidate = normalizeCandidate(message.candidate);
@@ -372,13 +428,22 @@ export class VoiceSession {
     entry.audio.srcObject = null;
   }
 
-  close() {
-    this.disposed = true;
-    clearInterval(this.refresh);
-    this.socket?.close();
-    this.stopMicrophone();
+  private disconnect() {
+    clearTimeout(this.refresh);
+    const socket = this.socket;
+    this.socket = undefined;
+    socket?.close();
+    this.self = undefined;
     for (const peer of this.peers.values()) this.closePeer(peer);
     this.peers.clear();
-    this.update({ connected: false, peers: [] });
+    this.stopMicrophone();
+    this.update({ connected: false, canSpeak: false, peers: [], playbackBlocked: false });
+  }
+
+  close() {
+    this.disposed = true;
+    this.backoff.cancel();
+    this.disconnect();
+    this.update({ reconnecting: false, error: '' });
   }
 }

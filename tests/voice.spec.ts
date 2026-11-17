@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 declare global {
   interface Window {
     voiceConnections: RTCPeerConnection[];
+    voiceSocket?: WebSocket;
   }
 }
 
@@ -85,6 +86,12 @@ for (const players of [2, 4]) {
         await context.addInitScript(
           ({ relayOnly }) => {
             window.voiceConnections = [];
+            window.WebSocket = class extends WebSocket {
+              constructor(url: string | URL, protocols?: string | string[]) {
+                super(url, protocols);
+                if (new URL(url).pathname.endsWith('/voice')) window.voiceSocket = this;
+              }
+            };
             const NativeConnection = window.RTCPeerConnection;
             window.RTCPeerConnection = class extends NativeConnection {
               constructor(config?: RTCConfiguration) {
@@ -218,13 +225,36 @@ for (const players of [2, 4]) {
       await second.mouse.up();
       await expect.poll(async () => (await audioStats(second)).transmitting).toBe(false);
       if (players === 2) {
+        // The API and the signaling heartbeat use real time, independently of the page clock.
+        await first.evaluate(
+          () =>
+            new Promise<void>((resolve, reject) => {
+              const socket = window.voiceSocket!;
+              const closed = () =>
+                reject(new Error('Voice closed while waiting for its heartbeat'));
+              const received = (event: MessageEvent<string>) => {
+                if (JSON.parse(event.data).type === 'heartbeat') {
+                  socket.removeEventListener('message', received);
+                  socket.removeEventListener('close', closed);
+                  resolve();
+                }
+              };
+              socket.addEventListener('close', closed, { once: true });
+              socket.addEventListener('message', received);
+            }),
+        );
         const beforeRefresh = await first.evaluate(
           () => window.voiceConnections[0].localDescription?.sdp,
         );
         await first.clock.fastForward(30 * 60 * 1000 + 1000);
-        await expect
-          .poll(() => first.evaluate(() => window.voiceConnections[0].localDescription?.sdp))
-          .not.toBe(beforeRefresh);
+        const hasRelay = await first.evaluate(
+          () => window.voiceConnections[0].getConfiguration().iceServers?.length,
+        );
+        if (hasRelay) {
+          await expect
+            .poll(() => first.evaluate(() => window.voiceConnections[0].localDescription?.sdp))
+            .not.toBe(beforeRefresh);
+        }
         await expect.poll(async () => (await audioStats(first)).connected).toBe(2);
         const received = (await audioStats(second)).receivedBytes;
         await expect
@@ -233,6 +263,20 @@ for (const players of [2, 4]) {
       }
       await first.getByRole('button', { name: 'Silenciar micrófono' }).click();
       await expect.poll(async () => (await audioStats(first)).transmitting).toBe(false);
+      await first.evaluate(() => window.voiceSocket!.close());
+      await expect
+        .poll(() => first.evaluate(() => window.voiceConnections[0].connectionState))
+        .toBe('closed');
+      await expect.poll(async () => (await audioStats(first)).connected).toBe(players);
+      await expect(
+        first.getByRole('button', { name: 'Activar micrófono', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'false');
+      expect((await audioStats(first)).transmitting).toBe(false);
+      await first.getByRole('button', { name: 'Activar micrófono', exact: true }).click();
+      const beforeRecovery = (await audioStats(second)).receivedEnergy;
+      await expect
+        .poll(async () => (await audioStats(second)).receivedEnergy)
+        .toBeGreaterThan(beforeRecovery);
       await first.getByRole('button', { name: 'Salir del audio' }).click();
       await expect.poll(async () => (await audioStats(first)).microphone).toBe(false);
       await expect(spectator.getByText(`${players} en audio`, { exact: true })).toBeVisible();

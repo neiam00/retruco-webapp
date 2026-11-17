@@ -11,6 +11,7 @@
   let muted = $state(false);
   let voice = $state<VoiceState>({
     connected: false,
+    reconnecting: false,
     canSpeak: false,
     microphone: false,
     talking: false,
@@ -87,7 +88,14 @@
 />
 
 <section class="voice-controls" aria-label="Voz de la mesa">
-  {#if !voice.connected}
+  {#if voice.reconnecting}
+    <div class="row voice-row">
+      <span class="voice-status" role="status">Reconectando el audio…</span>
+      <Button variant="ghost" size="icon" aria-label="Salir del audio" onclick={leave}>
+        <PhoneOff size={18} />
+      </Button>
+    </div>
+  {:else if !voice.connected}
     <Button variant="outline" disabled={joining} onclick={join}>
       <Headphones size={18} />{joining ? 'Conectando audio…' : 'Entrar al audio'}
     </Button>

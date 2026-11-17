@@ -8,6 +8,7 @@ class TestSocket {
   static instance: TestSocket;
   readyState = 1;
   onmessage?: (event: { data: string }) => void;
+  onclose?: (event: { code: number; reason?: string }) => void;
   send = vi.fn();
   close = vi.fn();
   constructor() {
@@ -70,6 +71,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   session.close();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -192,3 +194,46 @@ test('speakers still connect to listeners so spectators can hear them', async ()
   });
   expect(TestConnection.instances).toHaveLength(2);
 });
+
+test('retries a failed relay renewal on the same socket with the current peers', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  session.close();
+  session = new VoiceSession(vi.fn());
+  session.connect('ABC');
+  const socket = TestSocket.instance;
+  const servers = [{ urls: 'turn:example.test', username: 'renewed', credential: 'temporary' }];
+  await socket.receive({
+    type: 'welcome',
+    self: { id: 'z', name: 'Self', canSpeak: false },
+    peers: [peer],
+    iceServers: [{ ...servers[0], username: 'original' }],
+  });
+  await vi.advanceTimersByTimeAsync(30 * 60_000);
+  expect(socket.send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ type: 'refresh' }));
+  socket.send.mockClear();
+  await socket.receive({ type: 'refresh_retry' });
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(socket.send).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ type: 'refresh' }));
+  const connection = TestConnection.instances.at(-1)!;
+  expect(connection.close).not.toHaveBeenCalled();
+  expect(connection.setConfiguration).not.toHaveBeenCalled();
+  await socket.receive({ type: 'ice', iceServers: servers });
+  expect(connection.setConfiguration).toHaveBeenCalledWith({ iceServers: servers });
+  await vi.advanceTimersByTimeAsync(30 * 60_000);
+  expect(socket.send).toHaveBeenCalledTimes(2);
+});
+
+test.each(['leave', 'tab replacement', 'access revoked'])(
+  'stops reconnecting after %s',
+  async (reason) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const socket = TestSocket.instance;
+    socket.onclose?.({
+      code: reason === 'leave' ? 1006 : reason === 'tab replacement' ? 4001 : 1008,
+    });
+    if (reason === 'leave') session.close();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(TestSocket.instance).toBe(socket);
+    expect(TestConnection.instances.every((connection) => connection.closed)).toBe(true);
+  },
+);
