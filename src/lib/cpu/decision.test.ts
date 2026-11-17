@@ -204,6 +204,7 @@ test.each([
   'value-and-team-v12',
   'value-and-team-v13',
   'value-and-team-v14',
+  'value-and-team-v15',
 ] as const)('only uses candidates prepared for %s', (choicePolicy) => {
   const input = request('game');
   const decide = vi.fn().mockReturnValue(0);

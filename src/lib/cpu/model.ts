@@ -32,7 +32,8 @@ export interface PolicyManifest {
     | 'value-and-team-v11'
     | 'value-and-team-v12'
     | 'value-and-team-v13'
-    | 'value-and-team-v14';
+    | 'value-and-team-v14'
+    | 'value-and-team-v15';
 }
 
 type PolicyExports = WebAssembly.Exports & {
@@ -134,6 +135,7 @@ export class LocalPolicy {
           'value-and-team-v12',
           'value-and-team-v13',
           'value-and-team-v14',
+          'value-and-team-v15',
         ].includes(manifest.choice_policy) ||
           manifest.team_play !== 'closing-card-and-flor-v2')) ||
       (manifest.team_play !== undefined &&
@@ -181,7 +183,8 @@ export class LocalPolicy {
         manifest.choice_policy === 'value-and-team-v11' ||
         manifest.choice_policy === 'value-and-team-v12' ||
         manifest.choice_policy === 'value-and-team-v13' ||
-        manifest.choice_policy === 'value-and-team-v14') &&
+        manifest.choice_policy === 'value-and-team-v14' ||
+        manifest.choice_policy === 'value-and-team-v15') &&
       wasm.opening_bluff_version?.() !== 1
     )
       throw new Error('Missing bounded opening-bluff runtime');
