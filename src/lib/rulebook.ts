@@ -74,10 +74,10 @@ export const rulebook = [
   {
     title: 'Flor frente a envido',
     paragraphs: [
-      'Con flor puedes abrir «A ley, envido». También puedes decir «Flor tengo y la mía envida» solo si otro jugador ya anunció flor. Si alguien dijo «A ley» y nadie ha anunciado flor, quien tiene flor debe abrir «Con ley, envido». Cada apertura requiere una respuesta.',
+      'Antes de anunciar tu flor puedes abrir «A ley, envido». Si ya dijiste «A las flores no» o «Con mi flor, quiero», tu flor ya es pública y esa apertura queda cerrada para ti. También puedes decir «Flor tengo y la mía envida» solo si otro jugador ya anunció flor. Si alguien dijo «A ley» y nadie ha anunciado flor, quien tiene flor debe abrir «Con ley, envido». Cada apertura requiere una respuesta.',
       'Con flor o después de que alguien la anunció, el envido ordinario queda fuera de juego. Si un rival abrió envido ordinario antes del anuncio, quien tenga flor puede decir «A las flores no» para anularlo.',
       'Si después del envido otro jugador canta flor, la apuesta queda anulada, incluso si ya se había dicho «Quiero» o «No quiero». Tampoco se cobra la piedra del rechazo. Si se cantó «A ley, envido» y se aceptó con «Con ley, quiero», la apuesta sigue vigente.',
-      '«A las flores no» cierra el envido ordinario durante toda la mano. La apuesta de ley conserva su ventana hasta la primera carta de quien la abre. Aceptar el envido cierra la negociación.',
+      '«A las flores no» cierra el envido ordinario durante toda la mano. Quien aún no anunció su flor conserva la posibilidad de abrir «A ley, envido» hasta jugar su primera carta. Aceptar el envido cierra la negociación.',
       'Frente a «A ley, envido», quien tiene flor responde «Con ley, quiero» o «Con ley, no quiero». Si otro jugador ya anunció flor, «Flor tengo y la mía envida» también acepta. Sin flor, responde «Sin ley, quiero» o «Sin ley, no quiero». Ante «Con ley, envido» o «Flor tengo y la mía envida», un jugador sin flor solo puede decir «Sin ley, no quiero».',
       '«Sin ley, quiero» enfrenta el envido ordinario del jugador sin flor al valor completo de la flor rival. Un 7 y un 6 de copas con un 5 de oros suman 33 y pierden ante una flor de 36.',
       'Con ley se compara la mejor flor válida de cada equipo. Gana 3 piedras por la flor más alta más las piedras del envido aceptado, aunque el equipo tenga dos flores. Las flores ordinarias inferiores se queman. Si hay empate, gana quien está antes desde mano. La receta conserva su protección.',
@@ -87,7 +87,7 @@ export const rulebook = [
   {
     title: 'A ley, con ley y sin ley',
     paragraphs: [
-      'Puedes decir «A ley» con tu primera carta o abrir «A ley, envido» con cualquier mano. La frase no revela si tienes flor.',
+      'Puedes decir «A ley» con tu primera carta o abrir «A ley, envido» con cualquier mano antes de anunciar tu propia flor. La frase no revela si tienes flor.',
       'Con la primera respuesta se fija la comparación. Las subidas y la falta siguen las reglas del envido. Si se rechaza una subida, se cobra la apuesta anterior.',
       'En parejas, cada jugador responde según su propia flor. Que el compañero tenga flor no autoriza a decir «Con ley».',
       'La apuesta de ley tiene una prioridad especial: se paga primero el envido, después la flor y después el truco. Si ese envido alcanza el objetivo, termina la partida antes de sumar flores.',

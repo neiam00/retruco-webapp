@@ -86,7 +86,7 @@ branch previews use the built-in TypeScript heuristic by default. The [backend M
 trains and exports optional learned policies.
 
 Cloudflare Pages production builds load the v16 policy from
-`/cpu/value-and-team-v17-e1d6dcb3/manifest.json`. The production build
+`/cpu/value-and-team-v18-e1d6dcb3/manifest.json`. The production build
 variables below override that default. Set `VITE_CPU_ML_ENABLED=false` and
 rebuild to switch back to the heuristic.
 
