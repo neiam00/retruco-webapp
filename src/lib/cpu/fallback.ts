@@ -35,7 +35,7 @@ function publicTrucoWinner(view: CPURequest['view']): number | undefined {
       if (rank > best) {
         best = rank;
         winner = seat.team;
-      } else if (rank === best && (round !== 0 || winner !== seat.team)) {
+      } else if (rank === best && winner !== seat.team) {
         winner = -1;
       }
     }

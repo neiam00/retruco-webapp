@@ -38,7 +38,7 @@ export const rulebook = [
       'El envido inicial vale 2 piedras si se acepta y 1 si se rechaza. «Quiero y envido» agrega 2. «Quiero y N piedras más» agrega N a la apuesta actual. Por ejemplo, de 2 a 4 y luego 5 más se llega a 9. Si se rechaza esa última subida, quien la propuso gana las 4 anteriores.',
       'La apuesta total no puede superar el objetivo de la mesa: 12 o 24. Una subida que exceda el límite no es válida y no se recorta automáticamente.',
       '«Envido la falta» vale lo que le falta al equipo que va adelante para llegar al objetivo. Se fija al cantarla, antes de sumar las flores de esa mano, y debe ser igual o mayor a la apuesta actual. Es terminal: solo se puede aceptar o rechazar.',
-      'Aceptar o rechazar cierra el envido por el resto de la mano. Se compara y se paga al terminar la mano, incluso si el truco acaba con un «No quiero». No se muestran ni se pagan los tantos al aceptar.',
+      'Aceptar o rechazar cierra la negociación. Si el envido sigue vigente, se paga al terminar la mano, incluso si el truco acaba con un «No quiero». No se muestran ni se pagan los tantos al aceptar.',
       'Con dos cartas compatibles, cuenta 20 más la mejor pareja. Una flor de 7, 6 y 5 tiene 33 de envido ordinario, no 38. Sin pareja, cuenta la carta de mayor valor. Gana el mejor envido del equipo; si rivales empatan, gana quien aparece antes en el orden original desde mano.',
     ],
   },
@@ -76,6 +76,7 @@ export const rulebook = [
     paragraphs: [
       'Con flor puedes abrir «A ley, envido». También puedes decir «Flor tengo y la mía envida» solo si otro jugador ya anunció flor. Si alguien dijo «A ley» y nadie ha anunciado flor, quien tiene flor debe abrir «Con ley, envido». Cada apertura requiere una respuesta.',
       'Con flor o después de que alguien la anunció, el envido ordinario queda fuera de juego. Si un rival abrió envido ordinario antes del anuncio, quien tenga flor puede decir «A las flores no» para anularlo.',
+      'Si después del envido otro jugador canta flor, la apuesta queda anulada, incluso si ya se había dicho «Quiero» o «No quiero». Tampoco se cobra la piedra del rechazo. Si se cantó «A ley, envido» y se aceptó con «Con ley, quiero», la apuesta sigue vigente.',
       '«A las flores no» cierra el envido ordinario durante toda la mano. La apuesta de ley conserva su ventana hasta la primera carta de quien la abre. Aceptar el envido cierra la negociación.',
       'Frente a «A ley, envido», quien tiene flor responde «Con ley, quiero» o «Con ley, no quiero». Si otro jugador ya anunció flor, «Flor tengo y la mía envida» también acepta. Sin flor, responde «Sin ley, quiero» o «Sin ley, no quiero». Ante «Con ley, envido» o «Flor tengo y la mía envida», un jugador sin flor solo puede decir «Sin ley, no quiero».',
       '«Sin ley, quiero» enfrenta el envido ordinario del jugador sin flor al valor completo de la flor rival. Un 7 y un 6 de copas con un 5 de oros suman 33 y pierden ante una flor de 36.',
@@ -103,12 +104,12 @@ export const rulebook = [
   {
     title: 'Empardes y jugar pegado',
     paragraphs: [
-      'En la primera vuelta hay emparde si comparten la carta más alta jugadores de equipos contrarios. Si las más altas son de dos compañeros, su equipo gana y abre la segunda quien jugó antes. En la segunda y tercera vuelta, dos cartas máximas iguales siguen empardando aunque sean del mismo equipo. Las cartas empatadas por debajo de la ganadora no empardan.',
+      'En cualquier vuelta hay emparde cuando ambos equipos igualan la carta más alta. Si solo dos compañeros comparten la carta más alta, su equipo gana la vuelta. Si la mano continúa con cartas sueltas, abre quien jugó primero esa carta. Los empates entre cartas más bajas no afectan el resultado.',
       'Si un equipo gana la primera vuelta y la segunda emparda, gana la mano sin tercera vuelta. Si cada equipo gana una de las dos primeras y la tercera emparda, gana quien ganó la primera.',
       'Solo un emparde en la primera obliga a todos a jugar las dos restantes pegadas; abre mano. La de arriba representa la tercera vuelta y la de abajo la segunda. Primero se comparan las de arriba. Solo si empardan se revelan las de abajo. Si también empardan, gana el equipo de mano.',
       'Puedes jugar pegado voluntariamente en la segunda vuelta sin obligar a los demás. Abajo va la carta para la segunda y arriba la de la tercera. La de abajo queda oculta hasta que los demás jueguen su tercera carta, y solo se revela si hace falta para resolver.',
       'Si el equipo que ganó la primera también gana la tercera con una carta única que no fue jugada pegada, la mano ya está decidida: las cartas de abajo siguen ocultas. Las penalizaciones del pegado se calculan igualmente.',
-      'En pegado voluntario, tu propia carta de abajo debe ganar la segunda para que la de arriba siga válida. Si pierde, se quema la de arriba aunque tu compañero haya ganado. La excepción es que ambas cartas de tu equipo emparden arriba de las dos rivales: entonces tu tercera sigue válida, aunque la segunda sea emparde.',
+      'En pegado voluntario, tu propia carta de abajo debe ganar la segunda para que la de arriba siga válida. Si pierde, se quema la de arriba aunque tu compañero haya ganado. Si tu carta de abajo y la de tu compañero tienen el mismo valor y superan a las dos rivales, tu equipo gana la segunda y tu carta de arriba sigue válida.',
       'Si solo una persona juega pegado y la segunda está pendiente, abre la tercera quien está a su derecha. Si lo hacen varias, abre la primera persona que aún tenga carta en el orden desde mano. Se omite a quienes ya jugaron las dos. El castigo de quemar la de arriba no se aplica al pegado obligatorio.',
       'En la segunda o tercera vuelta puedes elegir «Quemar carta» y seleccionar una carta para pasar tu turno. Se juega boca abajo, queda inválida y ya no puedes volver a usarla. En pegado obligatorio, «Quemar las dos» descarta ambas cartas restantes. Nunca se puede quemar voluntariamente en la primera vuelta.',
       'Quemar voluntariamente exige las mismas declaraciones de flor que jugar: «Flor» con una carta no final, «Presento flor» con la última y «Flor flor» al quemar las dos en pegado obligatorio. La receta sigue protegida y el valor original de envido no cambia.',

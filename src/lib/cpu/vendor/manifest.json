@@ -1,8 +1,8 @@
 {
-  "sourceCommit": "88b58bb8dda4089ca74c8deee40647ebcc4ff888",
+  "sourceCommit": "c9dea6c2da55265d6dcbd16c5f804ece781358e7",
   "goVersion": "go1.27.4",
   "hashes": {
-    "cpu.wasm": "8f62d6a874de39064ec1fb94b1770761a333a1ee4f933d0b855699e7ab415bec",
+    "cpu.wasm": "fac2bb91c931a3686bd8d7e257072edc6ba57c4041bc6a25a952f35a7a7dec07",
     "wasm_exec.js": "0c949f4996f9a89698e4b5c586de32249c3b69b7baadb64d220073cc04acba14",
     "LICENSE.GO": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
   }
