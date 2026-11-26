@@ -120,7 +120,7 @@ for (const size of [
 ]) {
   test(`match and tutorial fill ${size.width}×${size.height} with separate controls`, async ({
     page,
-  }) => {
+  }, { project }) => {
     await page.setViewportSize(size);
     await page.addInitScript(() => localStorage.setItem('retruco.table.mode', '3d'));
     const errors = graphicsErrors(page);
@@ -141,8 +141,9 @@ for (const size of [
     await expectTappable(page.getByRole('button', { name: 'Decir…' }));
     const truco = page.getByRole('button', { name: 'Truco', exact: true });
     await expectTappable(truco);
-    await truco.click();
-    expect(command).toEqual({ type: 'call', kind: 'truco', amount: 3 });
+    if (project.use.hasTouch) await truco.tap();
+    else await truco.click();
+    await expect.poll(() => command).toEqual({ type: 'call', kind: 'truco', amount: 3 });
     await page.unroute('**/api/**');
     await page.goto('/aprender');
     await expectViewport(page);
@@ -407,10 +408,10 @@ async function showTouchFan(page: Page) {
     const timestamp = await page.evaluate(() => Date.now() / 1000);
     await session.send('Input.dispatchTouchEvent', { type, touchPoints, timestamp });
   };
-  return { card: { ...fan.card, id: 0 }, commands: fan.commands, nextPose, touch };
+  return { ...fan, card: { ...fan.card, id: 0 }, nextPose, touch };
 }
 
-test('a quick touch swipe leaves the camera still until the player holds to turn', async ({
+test('a quick one-finger swipe turns the camera without playing the card underneath', async ({
   page,
   browserName,
 }, { project }) => {
@@ -418,29 +419,21 @@ test('a quick touch swipe leaves the camera still until the player holds to turn
     browserName !== 'chromium' || !project.use.hasTouch,
     'This case uses Chromium touch input.',
   );
-  const { card, commands, nextPose, touch } = await showTouchFan(page);
+  const { card, commands, poses, nextPose, touch } = await showTouchFan(page);
+  await page.mouse.move(card.x, card.y);
+  await expect(scene(page).locator('.held-card-label')).toHaveText('3 de espadas');
   const before = await nextPose();
   const moved = { ...card, x: card.x + 65 };
   await touch('touchStart', card);
+  await page.clock.fastForward(16);
   await touch('touchMove', moved);
-  await touch('touchEnd');
-  expect(await nextPose()).toEqual(before);
-  expect(commands).toEqual([]);
+  // Keep the finger down and elapsed time below the old 260 ms hold threshold.
+  await page.clock.fastForward(144);
+  await expect.poll(() => poses.at(-1)?.yaw).toBeLessThan(before.yaw - 10);
 
-  await touch('touchStart', card);
-  await touch('touchMove', moved);
   await touch('touchMove', card);
   await touch('touchEnd');
   expect(await nextPose()).toEqual(before);
-  expect(commands).toEqual([]);
-
-  await touch('touchStart', card);
-  expect(await nextPose()).toEqual(before);
-  await touch('touchMove', moved);
-  const turned = await nextPose();
-  expect(turned.yaw).toBeLessThan(before.yaw - 10);
-  await touch('touchEnd');
-  expect(await nextPose()).toEqual(turned);
   expect(commands).toEqual([]);
 });
 

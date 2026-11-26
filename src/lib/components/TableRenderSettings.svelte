@@ -80,7 +80,7 @@
       </select>
     </label>
     <p class="touch-help">
-      Toca una carta para elegirla. Mantén presionada la mesa y arrastra para mirar.
+      Toca una carta o un botón una vez. Desliza un dedo sobre la mesa para mover la cámara.
     </p>
   {/if}
   {#if failed}

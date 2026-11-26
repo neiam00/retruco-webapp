@@ -15,8 +15,8 @@
   import { sceneIdentity, viewSeat } from '#lib/table3d/presentation.js';
   import type { PointerLabel, TableCue, TableScene } from '#lib/table3d/scene.js';
 
-  const touchHoldMs = 260;
-  const tapSlop = 8;
+  const maxTapMs = 260;
+  const touchDragSlop = 8;
   const dragSlop = 6;
   const dragSensitivity = -0.0055;
 
@@ -24,7 +24,6 @@
     startedAt: number;
     selectionContext: string;
     cardTarget?: number;
-    timer?: ReturnType<typeof setTimeout>;
   }
 
   interface Gesture {
@@ -197,7 +196,6 @@
     const active = gesture;
     if (!active) return;
     gesture = undefined;
-    clearTimeout(active.touch?.timer);
     if (active.dragging) active.scene.setDragging(false);
     if (active.canvas.hasPointerCapture(active.id)) active.canvas.releasePointerCapture(active.id);
   }
@@ -209,17 +207,6 @@
   function cancelCompetingTouch(event: PointerEvent) {
     if (gesture?.touch && event.pointerType === 'touch' && gesture.id !== event.pointerId)
       cancelGesture();
-  }
-
-  function beginDrag(active: Gesture) {
-    if (gesture !== active || active.dragging) return;
-    clearTimeout(active.touch?.timer);
-    active.dragging = true;
-    active.scene.setDragging(true);
-  }
-
-  function pointerTravel(active: Gesture, event: PointerEvent) {
-    return Math.hypot(event.clientX - active.x, event.clientY - active.y);
   }
 
   function start(event: PointerEvent) {
@@ -250,30 +237,29 @@
         cardTarget: canSelectCard
           ? current.selectableCardAt(event.clientX, event.clientY)
           : undefined,
-        timer: setTimeout(() => beginDrag(active), touchHoldMs),
       };
     }
   }
 
+  function updateDrag(active: Gesture, x: number, y: number) {
+    const startingSwipe = active.touch && !active.dragging;
+    const dx = x - (startingSwipe ? active.x : active.lastX);
+    const dy = y - (startingSwipe ? active.y : active.lastY);
+    active.lastX = x;
+    active.lastY = y;
+    if (!active.dragging) {
+      const slop = active.touch ? touchDragSlop : dragSlop;
+      if (Math.hypot(x - active.x, y - active.y) <= slop) return;
+      active.dragging = true;
+      active.scene.setDragging(true);
+    }
+    if (dx || dy) active.scene.lookBy(dx * dragSensitivity, dy * dragSensitivity);
+  }
+
   function move(event: PointerEvent) {
     const active = gesture;
-    if (!active) {
-      if (event.pointerType === 'mouse') scene?.hover(event.clientX, event.clientY);
-      return;
-    }
-    if (active.id !== event.pointerId) return;
-    const dx = event.clientX - active.lastX;
-    const dy = event.clientY - active.lastY;
-    active.lastX = event.clientX;
-    active.lastY = event.clientY;
-    if (active.touch && event.timeStamp - active.touch.startedAt < touchHoldMs) {
-      if (pointerTravel(active, event) > tapSlop) cancelGesture();
-      return;
-    }
-    if (!active.dragging && (active.touch || pointerTravel(active, event) > dragSlop))
-      beginDrag(active);
-    if (active.dragging && (dx || dy))
-      active.scene.lookBy(dx * dragSensitivity, dy * dragSensitivity);
+    if (active?.id === event.pointerId) updateDrag(active, event.clientX, event.clientY);
+    else if (!active && event.pointerType === 'mouse') scene?.hover(event.clientX, event.clientY);
   }
 
   function finish(event: PointerEvent) {
@@ -281,12 +267,10 @@
     if (active?.id !== event.pointerId) return;
     const { clientX, clientY } = event;
     const touch = active.touch;
-    const held = touch && event.timeStamp - touch.startedAt >= touchHoldMs;
-    const moved = touch && pointerTravel(active, event) > tapSlop;
-    // A late timer must still treat a stationary hold as manual camera input.
-    if (held && !moved) beginDrag(active);
+    if (touch && visible) updateDrag(active, clientX, clientY);
     cancelGesture();
-    if (!visible || active.dragging || held || moved) return;
+    if (!visible || active.dragging || (touch && event.timeStamp - touch.startedAt >= maxTapMs))
+      return;
     if (
       touch &&
       (touch.selectionContext !== selectionContext ||
@@ -360,8 +344,8 @@
   onkeydown={keys}
 >
   <span id={touchControlsId} hidden>
-    En pantallas táctiles, mantén presionada la mesa y arrastra para mirar. Toca una carta una vez
-    para seleccionarla.
+    En pantallas táctiles, toca una carta o un botón una vez. Desliza un dedo sobre la mesa para
+    mover la cámara.
   </span>
   <canvas
     {@attach mountScene}

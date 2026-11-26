@@ -108,8 +108,8 @@ desktop. Keep the score, timer, turn controls, and tutorial coach over the
 scene. Draw the canvas to all four edges and inset the touch controls around
 display cutouts. Returning to the lobby restores the normal page layout.
 
-On touchscreens, tap a held card once to choose it. Hold one finger still
-briefly, then drag to look around. Lifting the finger ends the camera gesture.
+On touchscreens, tap a held card or a control once to choose it. Swipe one
+finger across the table to look around, including from the held cards.
 
 Unplayed cards stay in the player's grip, fanned toward their owner. Looking
 up lowers the wrists while keeping the cards tilted and visibly above the
