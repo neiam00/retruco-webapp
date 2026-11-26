@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { VoiceSession } from './voice.js';
+import { subscribeMouthLevels, type MouthLevel } from './voice-levels.js';
 
 vi.mock('#lib/api.js', () => ({ socketURL: () => 'wss://example.test/api/matches/ABC/ws' }));
 
@@ -25,6 +26,7 @@ class TestConnection {
   static instances: TestConnection[] = [];
   remoteDescription: RTCSessionDescriptionInit | null = null;
   signalingState = 'stable';
+  ontrack?: (event: Pick<RTCTrackEvent, 'track' | 'streams'>) => void;
   closed = false;
   close = vi.fn(() => {
     this.closed = true;
@@ -45,6 +47,23 @@ class TestConnection {
   }
 }
 
+class TestAudio {
+  static blocked = false;
+  srcObject: MediaStream | null = null;
+  paused = true;
+  muted = false;
+  volume = 1;
+  onplaying?: () => void;
+  play = vi.fn(async () => {
+    if (TestAudio.blocked) throw new Error('playback blocked');
+    this.paused = false;
+    this.onplaying?.();
+  });
+  pause = vi.fn(() => {
+    this.paused = true;
+  });
+}
+
 let session: VoiceSession;
 const peer = { id: 'a', name: 'Peer', canSpeak: true };
 const otherPeer = { id: 'b', name: 'Other', canSpeak: true };
@@ -54,12 +73,8 @@ beforeEach(async () => {
   TestConnection.instances = [];
   vi.stubGlobal('WebSocket', TestSocket);
   vi.stubGlobal('RTCPeerConnection', TestConnection);
-  vi.stubGlobal(
-    'Audio',
-    class {
-      pause = vi.fn();
-    },
-  );
+  TestAudio.blocked = false;
+  vi.stubGlobal('Audio', TestAudio);
   session = new VoiceSession(vi.fn());
   session.connect('ABC');
   await TestSocket.instance.receive({
@@ -67,6 +82,95 @@ beforeEach(async () => {
     self: { id: 'z', name: 'Self', canSpeak: false },
     peers: [peer, otherPeer],
   });
+});
+
+test('samples the authorized tracks and clears stale or inaudible avatar mouths', async () => {
+  class Track {
+    kind = 'audio';
+    readyState = 'live';
+    muted = false;
+    enabled = true;
+    amplitude = 0;
+    stop = vi.fn();
+  }
+  class Stream {
+    constructor(readonly tracks: Track[]) {}
+    getTracks = () => this.tracks;
+    getAudioTracks = () => this.tracks;
+  }
+  class Analyser {
+    fftSize = 0;
+    track?: Track;
+    getFloatTimeDomainData = (samples: Float32Array) => samples.fill(this.track?.amplitude ?? 0);
+  }
+  const disconnect = vi.fn();
+  const closeContext = vi.fn(async () => {});
+  class Context {
+    state = 'running';
+    close = closeContext;
+    createAnalyser = () => new Analyser();
+    createMediaStreamSource = (stream: Stream) => ({
+      connect: (analyser: Analyser) => (analyser.track = stream.tracks[0]),
+      disconnect,
+    });
+  }
+  const microphone = new Track();
+  const remote = new Track();
+  const remoteStream = new Stream([remote]);
+  vi.stubGlobal('AudioContext', Context);
+  vi.stubGlobal('MediaStream', Stream);
+  vi.stubGlobal('navigator', {
+    mediaDevices: { getUserMedia: async () => new Stream([microphone]) },
+  });
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  session.close();
+  TestConnection.instances = [];
+  let levels: ReadonlyMap<number, MouthLevel> = new Map();
+  const unsubscribe = subscribeMouthLevels('ABC', (next) => (levels = next));
+  try {
+    session = new VoiceSession(vi.fn());
+    session.connect('ABC');
+    const self = { id: 'z', name: 'Homónima', canSpeak: true, seat: 0, userID: 'local' };
+    const speaker = { id: 'a', name: 'Homónima', canSpeak: true, seat: 1, userID: 'remote' };
+    await TestSocket.instance.receive({ type: 'welcome', self, peers: [self, speaker] });
+    await session.setMode('live');
+    expect(levels.size).toBe(0);
+    microphone.amplitude = 0.12;
+    vi.advanceTimersByTime(50);
+    expect(levels.get(0)).toEqual({ userID: 'local', level: 0.5 });
+    session.setMuted(true);
+    expect(levels.has(0)).toBe(false);
+
+    TestAudio.blocked = true;
+    remote.amplitude = 0.12;
+    TestConnection.instances[0].ontrack?.({
+      track: remote as unknown as MediaStreamTrack,
+      streams: [remoteStream as unknown as MediaStream],
+    });
+    await Promise.resolve();
+    vi.advanceTimersByTime(50);
+    expect(levels.size).toBe(0);
+    TestAudio.blocked = false;
+    await session.resumePlayback();
+    expect(levels.get(1)).toEqual({ userID: 'remote', level: 0.5 });
+    const moved = { ...speaker, seat: 2 };
+    await TestSocket.instance.receive({ type: 'peers', peers: [self, moved] });
+    expect(levels.has(1)).toBe(false);
+    expect(levels.get(2)?.userID).toBe('remote');
+    remote.amplitude = 0.004;
+    vi.advanceTimersByTime(50);
+    expect(levels.size).toBe(0);
+    remote.amplitude = 0.12;
+    vi.advanceTimersByTime(50);
+    expect(levels.has(2)).toBe(true);
+    await TestSocket.instance.receive({ type: 'peers', peers: [self] });
+    expect(levels.size).toBe(0);
+    expect(disconnect).toHaveBeenCalledTimes(2);
+    session.close();
+    expect(closeContext).toHaveBeenCalledOnce();
+  } finally {
+    unsubscribe();
+  }
 });
 
 afterEach(() => {

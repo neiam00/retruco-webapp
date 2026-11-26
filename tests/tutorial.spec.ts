@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { tableSnapshot } from './fixtures/table.js';
 import type { Command, GameView } from '../src/lib/protocol.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 // These public-view fixtures exercise the lesson UI. The backend lesson tests
 // independently own the rules, card order, legal moves, and settled score.

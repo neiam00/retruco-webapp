@@ -1,3 +1,5 @@
+import type { Appearance } from './appearance.js';
+
 export interface Card {
   suit: 'coins' | 'cups' | 'spades' | 'clubs';
   number: number;
@@ -115,7 +117,7 @@ export interface Snapshot {
   code: string;
   private: boolean;
   config: Config;
-  seats: { id: string; name: string; cpu?: boolean }[];
+  seats: { id: string; name: string; cpu?: boolean; appearance?: Appearance }[];
   seat: number;
   perspective: number;
   state?: GameView;

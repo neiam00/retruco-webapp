@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  let { children }: { children: Snippet } = $props();
+  let { children, immersive = false }: { children: Snippet; immersive?: boolean } = $props();
 
   function fitTable(viewport: HTMLElement) {
+    if (immersive) return;
     const stage = viewport.firstElementChild as HTMLElement;
     let frame = 0;
     let previousScale = 0;
@@ -37,7 +38,7 @@
   }
 </script>
 
-<div class="table-viewport" {@attach fitTable}>
+<div class={['table-viewport', { immersive }]} {@attach fitTable}>
   <div class="table-stage">{@render children()}</div>
 </div>
 
@@ -57,5 +58,12 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%) scale(var(--table-scale, 1));
+  }
+  .immersive .table-stage {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    transform: none;
   }
 </style>

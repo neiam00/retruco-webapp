@@ -10,6 +10,7 @@
     answering = false,
     self = false,
     mano = false,
+    showAvatar = true,
     announcement = '',
   }: {
     name: string;
@@ -19,12 +20,13 @@
     answering?: boolean;
     self?: boolean;
     mano?: boolean;
+    showAvatar?: boolean;
     announcement?: string;
   } = $props();
 </script>
 
 <div class={['player-seat', { active, answering }]}>
-  <PlayerAvatar {name} size={38} />
+  {#if showAvatar}<PlayerAvatar {name} size={38} />{/if}
   <div class="identity">
     <strong>{name}{self ? ' · Tú' : ''}</strong>
     <span>

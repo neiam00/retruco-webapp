@@ -3,6 +3,12 @@
   import { resolve } from '$app/paths';
   import { ArrowLeft, Headphones, Mic, Hand, Volume2 } from '@lucide/svelte';
   import { Button } from '#lib/components/ui/button/index.js';
+  import { Input } from '#lib/components/ui/input/index.js';
+  import { Label } from '#lib/components/ui/label/index.js';
+  import Wardrobe from '#lib/components/Wardrobe.svelte';
+  import { api } from '#lib/api.js';
+  import { displayNameError, focusField } from '#lib/form-validation.js';
+  import type { User } from '#lib/protocol.js';
   import { loadVoiceMode, saveVoiceMode, type VoiceMode } from '#lib/voice-settings.js';
   import {
     CARD_SOUND_STORAGE_KEY,
@@ -13,6 +19,10 @@
   let mode = $state<VoiceMode>('listen');
   let notice = $state('');
   let ready = $state(false);
+  let wardrobeReady = $state(false);
+  let user = $state<User | null>(null);
+  let name = $state('');
+  let nameError = $state('');
   let cardsMuted = $state(false);
   const choices = [
     {
@@ -39,7 +49,26 @@
     mode = loadVoiceMode();
     cardsMuted = loadCardSoundsMuted();
     ready = true;
+    void api<User | null>('/session')
+      .then((session) => (user = session))
+      .catch(() => {})
+      .finally(() => (wardrobeReady = true));
   });
+
+  async function prepareWardrobe() {
+    if (user) return true;
+    nameError = displayNameError(name);
+    if (!nameError) {
+      try {
+        user = await api<User>('/guest', { name });
+        return true;
+      } catch (cause) {
+        nameError = cause instanceof Error ? cause.message : 'No pudimos guardar tu nombre.';
+      }
+    }
+    await focusField('settings-guest-name');
+    return false;
+  }
 
   function choose(value: VoiceMode) {
     mode = value;
@@ -64,13 +93,34 @@
 />
 
 <svelte:head>
-  <title>Configuración de audio — Retruco</title>
+  <title>Configuración — Retruco</title>
 </svelte:head>
 
 <main class="settings-page">
   <Button href={resolve('/')} variant="ghost"><ArrowLeft />Volver a las mesas</Button>
   <span class="eyebrow">A tu manera</span>
-  <h1>El sonido de la mesa.</h1>
+  <h1>Configuración</h1>
+  <fieldset>
+    <legend>Apariencia</legend>
+    {#if wardrobeReady && !user}
+      <div class="field">
+        <Label for="settings-guest-name">Tu nombre en la mesa</Label>
+        <Input
+          id="settings-guest-name"
+          bind:value={name}
+          maxlength={24}
+          autocomplete="nickname"
+          oninput={() => (nameError = '')}
+          aria-invalid={!!nameError}
+          aria-describedby={nameError ? 'settings-guest-name-error' : undefined}
+        />
+        {#if nameError}<p id="settings-guest-name-error" class="field-error" role="alert">
+            {nameError}
+          </p>{/if}
+      </div>
+    {/if}
+    <Wardrobe beforeOpen={prepareWardrobe} disabled={!wardrobeReady} />
+  </fieldset>
   <fieldset>
     <legend>Sonidos de cartas</legend>
     <label class={['choice', { selected: !cardsMuted }]}>

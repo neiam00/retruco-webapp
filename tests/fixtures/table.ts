@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { Command, Snapshot } from '../../src/lib/protocol.js';
+import type { HeadPose } from '../../src/lib/table3d/camera.js';
 
 export function tableSnapshot(players: number, dealer: number, spectator: boolean): Snapshot {
   const config = { players, target: 24, florRequired: true };
@@ -73,6 +74,7 @@ export async function showTable(
   page: Page,
   initial: Snapshot,
   onCommand?: (command: Command) => void,
+  onPose?: (pose: HeadPose | null) => void,
 ) {
   let snapshot = initial;
   let sendSnapshot: ((value: Snapshot) => void) | undefined;
@@ -91,9 +93,12 @@ export async function showTable(
     closeSocket = () => socket.close({ code: 1012, reason: 'Service restart' });
     sendSnapshot = (value) => socket.send(JSON.stringify({ type: 'snapshot', data: value }));
     sendSnapshot(snapshot);
+    if (onPose) socket.send(JSON.stringify({ type: 'pose_ready' }));
     socket.onMessage((message) => {
-      const command = JSON.parse(message.toString()).input?.command;
+      const input = JSON.parse(message.toString());
+      const command = input.input?.command;
       if (command) onCommand?.(command);
+      if ('pose' in input) onPose?.(input.pose);
     });
   });
   await page.goto(`/mesa/${snapshot.code}`);
@@ -103,7 +108,8 @@ export async function showTable(
       sendSnapshot?.(snapshot);
     },
     {
-      disconnect: async () => {
+      disconnect: async (resume?: Snapshot) => {
+        if (resume) snapshot = resume;
         await closeSocket?.();
       },
     },

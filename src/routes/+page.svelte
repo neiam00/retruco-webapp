@@ -27,6 +27,7 @@
   import Card from '#lib/components/Card.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
   import MatchHistory from '#lib/components/MatchHistory.svelte';
+  import Wardrobe from '#lib/components/Wardrobe.svelte';
   import { api, ApiError } from '#lib/api.js';
   import {
     displayNameError,
@@ -214,6 +215,11 @@
         throw new FieldError('guest-name', cause.message);
       throw cause;
     }
+  }
+  async function prepareWardrobe() {
+    if (!validateFields({ 'guest-name': user ? '' : displayNameError(name) })) return false;
+    await act(identify);
+    return user !== null;
   }
   function create(mode: 'table' | 'practice' = 'table') {
     if (!validateFields({ 'guest-name': user ? '' : displayNameError(name) })) return;
@@ -445,9 +451,10 @@
         </div>
       </div>
       <p class="muted panel-intro">Crea una mesa o entra con un código. Sin cuenta obligatoria.</p>
-      {#if !user}
-        <div class="field">
-          <Label for="guest-name">Tu nombre en la mesa</Label><Input
+      <div class={['player-details', { identified: !!user }]}>
+        {#if !user}
+          <Label for="guest-name">Tu nombre en la mesa</Label>
+          <Input
             id="guest-name"
             disabled={!ready}
             bind:value={name}
@@ -463,18 +470,17 @@
               {fieldErrors['guest-name']}
             </p>
           {/if}
-        </div>
-      {:else}
-        <div class="row identity">
-          <PlayerAvatar name={user.name} />
-          <div>
+        {:else}
+          <div class="identity">
+            <PlayerAvatar name={user.name} />
             <strong>{user.name}</strong>
-            <p class="muted text-sm">
-              {user.registered ? 'Tu historial está activado' : 'Jugando como invitado'}
-            </p>
           </div>
-        </div>
-      {/if}
+          <p class="muted text-sm">
+            {user.registered ? 'Tu historial está activado' : 'Jugando como invitado'}
+          </p>
+        {/if}
+        <Wardrobe inline beforeOpen={prepareWardrobe} disabled={!ready || busy} />
+      </div>
 
       <div class="settings-grid">
         <div>
@@ -970,8 +976,50 @@
     margin-bottom: 20px;
     border-bottom: 1px solid var(--border);
   }
+  .player-details {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px;
+  }
+  .player-details > :global(label) {
+    grid-area: 1 / 1;
+    margin-bottom: 0;
+  }
+  .player-details > :global(input),
+  .player-details > .field-error,
+  .player-details :global(.wardrobe-status) {
+    grid-column: 1 / -1;
+  }
+  .player-details :global(.wardrobe-trigger) {
+    grid-area: 1 / 2;
+    justify-self: end;
+    gap: 6px;
+    padding-inline: 4px 0;
+    color: var(--primary);
+    font-size: 0.85rem;
+  }
+  .player-details :global(.wardrobe-trigger svg) {
+    width: 1rem;
+    height: 1rem;
+  }
   .identity {
-    padding: 8px 0;
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+    padding-block: 4px;
+  }
+  .identity strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .identified {
+    row-gap: 0;
+  }
+  .identified :global(.wardrobe-trigger) {
+    grid-row: 2;
   }
   .settings-grid {
     display: grid;

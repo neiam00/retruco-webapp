@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { showTable, tableSnapshot } from './fixtures/table.js';
 import { expectClearTableCards } from './table-layout.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 for (const width of [320, 393, 1280]) {
   test(`spectator pause message stays clear of the vira at ${width}px`, async ({

@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { expectClearTableCards } from './table-layout.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 declare global {
   interface Window {

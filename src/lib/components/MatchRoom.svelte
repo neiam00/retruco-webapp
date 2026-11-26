@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { CardMotion } from '#lib/card-motion.js';
   import { preloadDeck } from '#lib/card-preload.js';
   import { CardSounds } from '#lib/card-sounds.js';
@@ -19,7 +20,9 @@
   import { resolve } from '$app/paths';
   import {
     BookOpen,
+    Check,
     Copy,
+    Link2,
     Share2,
     LogOut,
     Eye,
@@ -33,6 +36,7 @@
     VolumeX,
     MoreHorizontal,
     List,
+    Menu,
   } from '@lucide/svelte';
   import { Button } from '#lib/components/ui/button/index.js';
   import { Input } from '#lib/components/ui/input/index.js';
@@ -43,8 +47,12 @@
   import CantoHistory from '#lib/components/CantoHistory.svelte';
   import HandRecap from '#lib/components/HandRecap.svelte';
   import FeltTable from '#lib/components/FeltTable.svelte';
+  import Table3D from '#lib/components/Table3D.svelte';
+  import TableRenderSettings from '#lib/components/TableRenderSettings.svelte';
   import TableViewport from '#lib/components/TableViewport.svelte';
   import SeatSelector from '#lib/components/SeatSelector.svelte';
+  import Wardrobe from '#lib/components/Wardrobe.svelte';
+  import WaitingCharacters from '#lib/components/WaitingCharacters.svelte';
   import PrivoSummary from '#lib/components/PrivoSummary.svelte';
   import { signals } from '#lib/signal-options.js';
   import Hierarchy from '#lib/components/Hierarchy.svelte';
@@ -55,6 +63,16 @@
   import { CPUController, type CPUStatus } from '#lib/cpu/controller.js';
   import { MatchStream, type GameUpdateMessage, type SnapshotMessage } from '#lib/match-stream.js';
   import { ReconnectBackoff } from '#lib/reconnect.js';
+  import type { HeadPose } from '#lib/table3d/camera.js';
+  import {
+    readTableMode,
+    readTableQuality,
+    saveTableSetting,
+    tableModeKey,
+    tableQualityKey,
+    type QualitySetting,
+    type TableMode,
+  } from '#lib/table3d/preferences.js';
   import type {
     User,
     Snapshot,
@@ -76,7 +94,8 @@
   let cpuError = $state('');
   let busy = $state(false);
   let ready = $state(false);
-  let copied = $state(false);
+  let copied = $state<'code' | 'invite' | null>(null);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
   let inviteOpen = $state(false);
   let inviteTrigger: HTMLElement | null = null;
   let disconnectedAt = $state<number | null>(null);
@@ -86,6 +105,9 @@
   let declarationOpen = $state(false);
   let moreActionsOpen = $state(false);
   let detailsOpen = $state(false);
+  let detailsToggle = $state<HTMLButtonElement | null>(null);
+  let detailsPanel = $state<HTMLElement>();
+  let tableToolbar = $state<HTMLElement>();
   let recapOpen = $state(false);
   let recapSelection = $state.raw<{
     recap: Recap;
@@ -116,7 +138,28 @@
   let suspended = false;
   let stopPreloading: (() => void) | undefined;
   let gameSurface = $state<HTMLElement>();
+  let handHeight = $state(0);
   let cardsMoving = $state(false);
+  let tableMode = $state<TableMode>('classic');
+  let tableQuality = $state<QualitySetting>('auto');
+  let sceneReady = $state(false);
+  let sceneFailed = $state(false);
+  let sceneDealing = $state(false);
+  let wardrobeOpen = $state(false);
+  let sceneReset = $state(0);
+  let cardPicker = $state(false);
+  let poseReady = false;
+  let poseTimer: ReturnType<typeof setTimeout> | undefined;
+  let poses = $state.raw<ReadonlyMap<number, HeadPose>>(new Map());
+  const poseRecords = new SvelteMap<
+    number,
+    {
+      userID: string;
+      id: number;
+      pose: HeadPose | null;
+      expires: number;
+    }
+  >();
   const cardMotion = new CardMotion((moving) => {
     cardsMoving = moving;
   });
@@ -174,6 +217,129 @@
       cardLabelsEnabled = loadCardLabels();
       clearCardLabel();
     }
+    if (event.key === tableModeKey || event.key === null) setTableMode(readTableMode(), false);
+    if (event.key === tableQualityKey || event.key === null)
+      setTableQuality(readTableQuality(), false);
+  }
+
+  function setTableMode(mode: TableMode, persist = true) {
+    if (tableMode === mode && !sceneFailed) return;
+    sceneReady = sceneFailed = sceneDealing = false;
+    tableMode = mode;
+    cardPicker = false;
+    if (mode === 'classic') clearPoses();
+    updateDeckPreload(snapshot);
+    if (persist) saveTableSetting(tableModeKey, mode);
+  }
+
+  function setTableQuality(quality: QualitySetting, persist = true) {
+    if (tableQuality === quality) return;
+    sceneReady = sceneFailed = sceneDealing = false;
+    tableQuality = quality;
+    updateDeckPreload(snapshot);
+    if (persist) saveTableSetting(tableQualityKey, quality);
+  }
+
+  function sceneLoaded() {
+    cardMotion.cancel();
+    cardSounds.stop();
+    clearCardLabel();
+    sceneReady = true;
+  }
+
+  function sceneUnavailable() {
+    sceneReady = sceneDealing = false;
+    sceneFailed = true;
+    updateDeckPreload(snapshot);
+    clearPoses();
+  }
+
+  function updateDeckPreload(current: Snapshot | null) {
+    if (
+      current?.state &&
+      current.state.phase !== 'match_over' &&
+      (tableMode === 'classic' || sceneFailed)
+    ) {
+      stopPreloading ??= preloadDeck();
+    } else if (stopPreloading) {
+      stopPreloading();
+      stopPreloading = undefined;
+    }
+  }
+
+  function sendPose(pose: HeadPose | null) {
+    if (!poseReady || socket?.readyState !== WebSocket.OPEN || socket.bufferedAmount > 2048) return;
+    if (pose && (!sceneReady || !connected || updating || spectator)) return;
+    if (snapshot && snapshot.seat >= 0) socket.send(JSON.stringify({ pose }));
+  }
+
+  function clearPoses() {
+    poseRecords.clear();
+    clearTimeout(poseTimer);
+    poses = new Map();
+  }
+
+  function refreshPoses() {
+    const now = performance.now();
+    let earliest = Infinity;
+    const active = new SvelteMap<number, HeadPose>();
+    for (const [seat, record] of poseRecords) {
+      if (!record.pose || record.expires <= now) continue;
+      active.set(seat, record.pose);
+      earliest = Math.min(earliest, record.expires);
+    }
+    poses = active;
+    clearTimeout(poseTimer);
+    if (Number.isFinite(earliest))
+      poseTimer = setTimeout(refreshPoses, Math.max(1, earliest - now));
+  }
+
+  function receivePose(payload: {
+    seat?: unknown;
+    id?: unknown;
+    userID?: unknown;
+    gameNumber?: unknown;
+    pose?: unknown;
+  }) {
+    const { seat, id, userID, pose } = payload;
+    if (
+      !snapshot ||
+      !sceneReady ||
+      typeof seat !== 'number' ||
+      !Number.isInteger(seat) ||
+      seat < 0 ||
+      seat >= snapshot.seats.length ||
+      payload.gameNumber !== (snapshot.gameNumber ?? 1) ||
+      typeof id !== 'number' ||
+      !Number.isSafeInteger(id) ||
+      typeof userID !== 'string' ||
+      !userID ||
+      snapshot.seats[seat].id !== userID
+    )
+      return;
+    const last = poseRecords.get(seat);
+    if (last?.userID === userID && id <= last.id) return;
+    if (
+      pose !== null &&
+      (!pose ||
+        typeof pose !== 'object' ||
+        !('yaw' in pose) ||
+        !('pitch' in pose) ||
+        typeof pose.yaw !== 'number' ||
+        typeof pose.pitch !== 'number' ||
+        !Number.isInteger(pose.yaw) ||
+        !Number.isInteger(pose.pitch) ||
+        Math.abs(pose.yaw) > 100 ||
+        Math.abs(pose.pitch) > 100)
+    )
+      return;
+    poseRecords.set(seat, {
+      id,
+      userID,
+      pose: pose as HeadPose | null,
+      expires: performance.now() + 1000,
+    });
+    refreshPoses();
   }
   const cpu = new CPUController(
     (seat, revision, command, decision) => {
@@ -199,7 +365,7 @@
       cpuStatus = status;
       cpuError = message ?? '';
     },
-    () => cardMotion.moving,
+    () => (sceneReady ? sceneDealing : cardMotion.moving),
     (request) => {
       if (!disposed && !suspended && socket?.readyState === WebSocket.OPEN) {
         socket.send(
@@ -224,6 +390,10 @@
     return state.legal.some((command) => command.declaration === value);
   }
   let spectator = $derived((snapshot?.seat ?? -1) < 0);
+  let showCardPicker = $derived(sceneReady && !!game?.hand.length);
+  let showDeclaration = $derived(
+    !spectator && game?.phase === 'playing' && game.pending?.kind !== 'privo',
+  );
   let myTurn = $derived(
     connected &&
       !updating &&
@@ -321,6 +491,10 @@
   }
 
   function releaseConnection() {
+    sendPose(null);
+    poseReady = false;
+    clearPoses();
+    sceneReset++;
     retry.cancel();
     cpu.stop();
     cardMotion.cancel();
@@ -375,6 +549,7 @@
     const url = new URL(socketURL(code));
     url.searchParams.set('transport', '2');
     url.searchParams.set('cpuProtocol', '2');
+    url.searchParams.set('pose', '1');
     if (import.meta.env.VITE_CPU_ML_ENABLED === 'true') url.searchParams.set('cpuMemory', '1');
     const current = new WebSocket(url);
     socket = current;
@@ -388,6 +563,8 @@
       busy = false;
       cpu.stop();
       if (!resyncPending && current.readyState === WebSocket.OPEN) {
+        clearPoses();
+        sceneReset++;
         resyncPending = true;
         current.send(JSON.stringify({ resync: true }));
       }
@@ -404,6 +581,7 @@
             return;
           }
           if (resyncPending && payload.type !== 'snapshot') return;
+          if (payload.type === 'snapshot' && (resyncPending || !connected)) sceneReset++;
           resyncPending = false;
           if (incoming.state && !['1', '2'].includes(incoming.state.version)) {
             updating = false;
@@ -415,7 +593,7 @@
           if (!connected) error = '';
           updating = incoming.updating === true;
           if (updating) error = '';
-          if (incoming.state?.phase !== 'match_over') stopPreloading ??= preloadDeck();
+          updateDeckPreload(incoming);
           if (incoming.state?.revision !== snapshot?.state?.revision) {
             clearCardLabel();
             bottom = null;
@@ -427,10 +605,22 @@
             declaration = '';
             declarationOpen = false;
           }
-          const animateCards = gameSurface
-            ? cardMotion.prepare(gameSurface, connected ? snapshot : null, incoming)
-            : undefined;
-          cardSounds.update(connected ? snapshot : null, incoming);
+          const animateCards =
+            gameSurface && !sceneReady
+              ? cardMotion.prepare(gameSurface, connected ? snapshot : null, incoming)
+              : undefined;
+          if (!sceneReady || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            cardSounds.update(connected ? snapshot : null, incoming);
+          }
+          if ((snapshot?.gameNumber ?? 1) !== (incoming.gameNumber ?? 1)) clearPoses();
+          let changedOccupancy = false;
+          for (const [seat, record] of poseRecords) {
+            if (incoming.seats[seat]?.id !== record.userID) {
+              poseRecords.delete(seat);
+              changedOccupancy = true;
+            }
+          }
+          if (changedOccupancy) refreshPoses();
           snapshot = incoming;
           if (incoming.config.players !== 4) signalsOpen = false;
           void tick().then(() => {
@@ -456,6 +646,10 @@
           if (leaving && (incoming.seat < 0 || incoming.state?.phase === 'match_over')) {
             void goto(resolve('/'));
           }
+        } else if (payload.type === 'pose_ready') {
+          poseReady = true;
+        } else if (payload.type === 'pose') {
+          receivePose(payload);
         } else if (payload.type === 'room_closed') {
           roomClosed = true;
           void goto(resolve('/'));
@@ -476,6 +670,9 @@
     };
     current.onclose = () => {
       if (!active()) return;
+      poseReady = false;
+      clearPoses();
+      sceneReset++;
       cardMotion.cancel();
       cardSounds.stop();
       cpu.stop();
@@ -503,6 +700,8 @@
   }
   onMount(() => {
     cardLabelsEnabled = loadCardLabels();
+    tableMode = readTableMode();
+    tableQuality = readTableQuality();
     cardsMuted = loadCardSoundsMuted();
     cardSounds.setMuted(cardsMuted);
     const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
@@ -529,6 +728,7 @@
       cardSounds.close();
       motionPreference.removeEventListener('change', stopMotion);
       clearInterval(timer);
+      clearTimeout(copyTimer);
     };
   });
   async function enter(seat?: number) {
@@ -591,6 +791,11 @@
       }
     } else send({ type: 'play', card: index, declaration });
   }
+
+  function pickCard(index: number) {
+    if (!myTurn || busy || !game?.hand.some((card) => card.index === index && !card.used)) return;
+    play(index);
+  }
   function sendChat(message: string) {
     if (!message.trim() || !connected || !socket) return;
     socket.send(
@@ -638,14 +843,50 @@
     event.preventDefault();
     void tick().then(() => {
       if (recapTrigger?.isConnected && recapTrigger.getClientRects().length) recapTrigger.focus();
-      else document.querySelector<HTMLButtonElement>('[aria-controls="match-details"]')?.focus();
+      else detailsToggle?.focus();
     });
   }
-  async function copy() {
+  function closeDetails(restoreFocus: boolean) {
+    detailsOpen = false;
+    if (restoreFocus) void tick().then(() => detailsToggle?.focus({ preventScroll: true }));
+  }
+  function toggleDetails() {
+    if (detailsOpen) {
+      closeDetails(true);
+      return;
+    }
+    detailsOpen = true;
+    if (sceneReady)
+      void tick().then(() => {
+        if (!detailsOpen || !detailsPanel) return;
+        detailsPanel.scrollTop = 0;
+        detailsPanel.focus({ preventScroll: true });
+      });
+  }
+  function overlayOpen() {
+    return (
+      recapOpen ||
+      inviteOpen ||
+      hierarchyOpen ||
+      leaveOpen ||
+      signalsOpen ||
+      declarationOpen ||
+      moreActionsOpen
+    );
+  }
+  function dismissDetails(event: PointerEvent) {
+    if (!sceneReady || !detailsOpen || overlayOpen() || !(event.target instanceof Node)) return;
+    if (!detailsPanel?.contains(event.target) && !tableToolbar?.contains(event.target))
+      closeDetails(false);
+  }
+  async function copy(part: 'code' | 'invite') {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/mesa/${code}`);
-      copied = true;
-      setTimeout(() => (copied = false), 2500);
+      await navigator.clipboard.writeText(
+        part === 'code' ? code : `${window.location.origin}/mesa/${code}`,
+      );
+      copied = part;
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => (copied = null), 2500);
     } catch {
       error = `Comparte este código: ${code}`;
     }
@@ -678,6 +919,24 @@
   }
 </script>
 
+{#snippet roomCode()}
+  <Button
+    class="copy-room-code"
+    variant="outline"
+    aria-label={`Copiar código de la mesa ${code}`}
+    onclick={() => copy('code')}
+  >
+    <span class="room-identity">
+      <span>Mesa</span>
+      <strong>{code}</strong>
+    </span>
+    {#if copied === 'code'}<Check size={16} aria-hidden="true" />{:else}<Copy
+        size={16}
+        aria-hidden="true"
+      />{/if}
+  </Button>
+{/snippet}
+
 <svelte:window
   onpagehide={pagehide}
   onpageshow={pageshow}
@@ -697,14 +956,18 @@
   onkeydown={(event) => {
     cardSounds.unlock();
     if (event.key === 'Escape') {
-      if (recapOpen) return;
-      detailsOpen = false;
+      if (event.defaultPrevented || overlayOpen()) return;
+      if (detailsOpen) {
+        event.preventDefault();
+        closeDetails(true);
+      }
       clearCardLabel();
     }
   }}
   onstorage={syncCardSettings}
 />
 <svelte:document
+  onpointerdown={dismissDetails}
   onvisibilitychange={() => {
     clearCardLabel();
     cardMotion.cancel();
@@ -716,41 +979,79 @@
   <title>Mesa {code} — Retruco</title>
   <meta name="robots" content="noindex,nofollow" />
 </svelte:head>
-<div class={['match-page', { 'active-match': !!game, 'details-open': detailsOpen }]}>
+<div
+  class={[
+    'match-page',
+    { 'active-match': !!game, 'details-open': detailsOpen, 'immersive-view': sceneReady },
+  ]}
+  style:--table-caption-bottom={sceneReady && handHeight
+    ? `calc(var(--view-bottom) + ${handHeight + 8}px)`
+    : undefined}
+>
   <header class="match-header">
     <a href={resolve('/')} class="brand">
       <span class="brand-mark">r.</span>
       retruco
     </a>
-    <div class="row">
-      <span class="room-code">{code}</span>
-      <Button variant="ghost" size="icon" aria-label="Copiar invitación" onclick={copy}>
-        <Copy />
-      </Button><Button
-        variant="ghost"
-        size="icon"
-        aria-label="Compartir invitación"
-        onclick={invite}
-      >
-        <Share2 />
-      </Button><Button
-        variant="ghost"
-        size="icon"
-        aria-label="Ver jerarquía de las cartas"
-        onclick={() => (hierarchyOpen = true)}
-      >
-        <BookOpen />
-      </Button><Button
-        variant="ghost"
-        size="icon"
-        aria-label="Salir de la mesa"
-        onclick={() => (leaveOpen = true)}
-      >
-        <LogOut />
-      </Button>
-    </div>
+    {#if sceneReady}
+      <div class="table-toolbar" bind:this={tableToolbar}>
+        <div class="toolbar-room-code">{@render roomCode()}</div>
+        <Button
+          class="room-details-toggle"
+          variant="outline"
+          aria-label="Detalles de la partida"
+          aria-expanded={detailsOpen}
+          aria-controls="match-details"
+          bind:ref={detailsToggle}
+          onclick={toggleDetails}
+        >
+          {#if detailsOpen}<X size={16} aria-hidden="true" />{:else}<Menu
+              size={16}
+              aria-hidden="true"
+            />{/if}
+          Detalles
+        </Button>
+      </div>
+    {:else}
+      <div class="row">
+        <span class="room-code">{code}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Copiar invitación"
+          onclick={() => copy('invite')}
+        >
+          <Copy />
+        </Button><Button
+          variant="ghost"
+          size="icon"
+          aria-label="Compartir invitación"
+          onclick={invite}
+        >
+          <Share2 />
+        </Button><Button
+          variant="ghost"
+          size="icon"
+          aria-label="Ver jerarquía de las cartas"
+          onclick={() => (hierarchyOpen = true)}
+        >
+          <BookOpen />
+        </Button><Button
+          variant="ghost"
+          size="icon"
+          aria-label="Salir de la mesa"
+          onclick={() => (leaveOpen = true)}
+        >
+          <LogOut />
+        </Button>
+      </div>
+    {/if}
   </header>
-  {#if copied}
+  {#if sceneReady}
+    <p class="sr-only" aria-live="polite" aria-atomic="true">
+      {copied === 'code' ? 'Código copiado.' : copied === 'invite' ? 'Invitación copiada.' : ''}
+    </p>
+  {:else if copied}
     <p class="toast" role="status">Invitación copiada.</p>
   {/if}
 
@@ -834,17 +1135,34 @@
       <main class="game-surface" bind:this={gameSurface}>
         {#if spectator}
           <div class={['spectator-bar', { 'waiting-spectator': !game }]}>
-            <span class="row"><Eye size={16} />Estás mirando</span>
-            {#each snapshot.seats as seat, i (seat.id || `empty-${i}`)}
-              {#if seat.id}
-                <Button
-                  variant={snapshot.perspective === i ? 'secondary' : 'ghost'}
-                  onclick={() => perspective(i)}
+            {#if sceneReady}
+              <label>
+                <Eye size={16} aria-hidden="true" />
+                <span class="sr-only">Estás mirando desde el puesto de</span>
+                <select
+                  value={snapshot.perspective}
+                  onchange={(event) => perspective(Number(event.currentTarget.value))}
                 >
-                  {seat.name}
-                </Button>
+                  {#each snapshot.seats as seat, i (seat.id || `empty-${i}`)}
+                    {#if seat.id}<option value={i}>{seat.name}</option>{/if}
+                  {/each}
+                </select>
+              </label>
+            {:else}
+              <span class="row"><Eye size={16} />Estás mirando</span>
+              {#if game}
+                {#each snapshot.seats as seat, i (seat.id || `empty-${i}`)}
+                  {#if seat.id}
+                    <Button
+                      variant={snapshot.perspective === i ? 'secondary' : 'ghost'}
+                      onclick={() => perspective(i)}
+                    >
+                      {seat.name}
+                    </Button>
+                  {/if}
+                {/each}
               {/if}
-            {/each}
+            {/if}
           </div>
         {/if}
 
@@ -856,20 +1174,61 @@
           />
         {/if}
 
-        <div class="table-area" class:four-player={snapshot.config.players === 4}>
+        {#if !game}
+          <div class="waiting-character-controls">
+            <WaitingCharacters
+              {snapshot}
+              showPreview={tableMode === '3d' && !wardrobeOpen}
+              onselect={spectator ? perspective : undefined}
+            />
+            <Wardrobe
+              roomCode={spectator ? undefined : code}
+              initialAppearance={spectator ? undefined : snapshot.seats[snapshot.seat]?.appearance}
+              disabled={busy || !connected}
+              onopenchange={(open) => (wardrobeOpen = open)}
+            />
+          </div>
+        {/if}
+        <div
+          class="table-area"
+          class:four-player={snapshot.config.players === 4}
+          class:immersive={sceneReady}
+        >
           {#if game}
-            <TableViewport>
-              <FeltTable
+            {#if tableMode === '3d' && !sceneFailed}
+              <Table3D
                 {snapshot}
-                {seconds}
-                {myTurn}
-                {cardsMoving}
-                oninvite={invite}
-                onrematch={() => send({ type: 'rematch' })}
-                onrecap={showRecap}
-                rematchDisabled={!connected || busy || updating}
+                resetKey={sceneReset}
+                visible={sceneReady}
+                quality={tableQuality}
+                canSelectCard={myTurn && !busy}
+                selectedBottom={bottom}
+                selectedTop={top}
+                cardLabels={cardLabelsEnabled}
+                {poses}
+                onready={sceneLoaded}
+                onfailure={sceneUnavailable}
+                ondealing={(value) => (sceneDealing = value)}
+                onlanded={(kind) => cardSounds.landed(kind)}
+                onpose={sendPose}
+                onselect={pickCard}
               />
-            </TableViewport>
+            {/if}
+            <div class="table-layer">
+              <TableViewport immersive={sceneReady}>
+                <FeltTable
+                  {snapshot}
+                  {seconds}
+                  {myTurn}
+                  cardsMoving={sceneReady ? sceneDealing : cardsMoving}
+                  immersive={sceneReady}
+                  oninvite={invite}
+                  onrematch={() => send({ type: 'rematch' })}
+                  onrecap={showRecap}
+                  rematchDisabled={!connected || busy || updating}
+                />
+              </TableViewport>
+            </div>
           {:else}
             <FeltTable
               {snapshot}
@@ -918,13 +1277,14 @@
         {#if game}
           <section
             class={['hand-area', { undealt: game.phase === 'cutting', spectator }]}
+            bind:offsetHeight={handHeight}
             inert={game.phase === 'cutting'}
             aria-hidden={game.phase === 'cutting'}
             aria-label="Tu mano"
           >
             <PrivoSummary {game} viewerSeat={snapshot.seat} />
             <div class="row spread hand-label">
-              <div>
+              <div class="hand-heading">
                 <span class="eyebrow">
                   {spectator ? `Mano de ${seatName(snapshot.perspective)}` : 'Tus cartas'}
                 </span>
@@ -948,8 +1308,32 @@
                   <span>Viste para tu compañero: {cardName(game.preview)}</span>
                 </div>
               {/if}
+              {#if showCardPicker || showDeclaration}
+                <div class="hand-tools">
+                  {#if showCardPicker}
+                    <Button
+                      class="card-picker"
+                      variant="outline"
+                      aria-expanded={cardPicker}
+                      aria-controls="table-hand-cards"
+                      onclick={() => (cardPicker = !cardPicker)}
+                    >
+                      {cardPicker ? 'Ocultar mano' : 'Ver mano'}
+                    </Button>
+                  {/if}
+                  {#if showDeclaration}
+                    <div class="declaration-control">
+                      <Button variant="outline" onclick={() => (declarationOpen = true)}>
+                        <Speech size={16} />{declaration
+                          ? declarations.find((option) => option.value === declaration)?.label
+                          : 'Decir…'}
+                      </Button>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             </div>
-            <div class="hand-cards">
+            <div id="table-hand-cards" class="hand-cards" hidden={sceneReady && !cardPicker}>
               {#each game.hand as held (`${game.handNumber}:${held.index}`)}
                 <Button
                   class={`hand-card ${held.used ? 'used' : ''} ${bottom === held.index ? 'selected-bottom' : ''} ${top === held.index ? 'selected-top' : ''}`}
@@ -957,7 +1341,7 @@
                   variant="ghost"
                   disabled={held.used || !myTurn || busy}
                   aria-label={`${cardName(held.card)}${bottom === held.index ? ', abajo' : top === held.index ? ', arriba' : ''}`}
-                  onclick={() => play(held.index)}
+                  onclick={() => pickCard(held.index)}
                 >
                   <span class="card-face">
                     <Card card={held.card} width={126} intro={false} />
@@ -971,15 +1355,6 @@
               {/each}
             </div>
             {#if !spectator && game.phase === 'playing'}
-              {#if game.pending?.kind !== 'privo'}
-                <div class="declaration-control">
-                  <Button variant="outline" onclick={() => (declarationOpen = true)}>
-                    <Speech size={16} />{declaration
-                      ? declarations.find((option) => option.value === declaration)?.label
-                      : 'Decir…'}
-                  </Button>
-                </div>
-              {/if}
               <Dialog.Root bind:open={declarationOpen}>
                 <Dialog.Content>
                   <Dialog.Header>
@@ -1008,7 +1383,7 @@
                   </div>
                 </Dialog.Content>
               </Dialog.Root>
-              <div class="play-controls">
+              <div class="play-controls" class:choosing-cards={burnMode || (stacking && canStack)}>
                 {#if canStack || canBurn}
                   <div class="row stack-controls">
                     {#if canStack}
@@ -1138,16 +1513,17 @@
           </aside>
         {/if}
         <div class="social-controls" role="group" aria-label="Herramientas de la partida">
-          <Button
-            class="details-toggle"
-            variant="outline"
-            aria-label={detailsOpen ? 'Cerrar detalles' : 'Detalles de la partida'}
-            aria-expanded={detailsOpen}
-            aria-controls="match-details"
-            onclick={() => (detailsOpen = !detailsOpen)}
-          >
-            <List size={18} />
-          </Button>
+          {#if !sceneReady}<Button
+              class="details-toggle"
+              variant="outline"
+              aria-label={detailsOpen ? 'Cerrar detalles' : 'Detalles de la partida'}
+              aria-expanded={detailsOpen}
+              aria-controls="match-details"
+              bind:ref={detailsToggle}
+              onclick={toggleDetails}
+            >
+              <List size={18} />
+            </Button>{/if}
           <Button
             variant="outline"
             size="icon"
@@ -1183,7 +1559,7 @@
         {#if chatOpen}
           <div class="chat-popover"><ChatPanel {snapshot} {connected} onmessage={sendChat} /></div>
         {/if}
-        {#if snapshot.signals.length}
+        {#if snapshot.signals.length && !sceneReady}
           <div class="visible-signals" aria-live="polite">
             {#each snapshot.signals.slice(-2) as item (item.id)}
               <span>
@@ -1194,10 +1570,21 @@
           </div>
         {/if}
       </main>
-      <aside id="match-details" class="match-details" aria-label="Detalles de la partida">
-        <Button class="details-close" variant="outline" onclick={() => (detailsOpen = false)}>
-          <X size={16} />Cerrar detalles
-        </Button>
+      <aside
+        id="match-details"
+        class={['match-details', { 'below-vira': sceneReady && !!game?.vira }]}
+        aria-label="Detalles de la partida"
+        tabindex="-1"
+        bind:this={detailsPanel}
+      >
+        {#if sceneReady}
+          <h2 class="details-heading">Detalles de la partida</h2>
+          <div class="details-room-code">{@render roomCode()}</div>
+        {:else}
+          <Button class="details-close" variant="outline" onclick={() => closeDetails(true)}>
+            <X size={16} />Cerrar detalles
+          </Button>
+        {/if}
         <div class="table-meta row spread">
           <span>
             {snapshot.config.target} piedras · {snapshot.config.florRequired
@@ -1208,7 +1595,15 @@
             <span>Mano {game.handNumber}</span>
           {/if}
         </div>
-        <VoiceControls {code} />
+        {#if sceneReady}<h3 class="details-section-title">Vista y cámara</h3>{/if}
+        <TableRenderSettings
+          mode={tableMode}
+          quality={tableQuality}
+          failed={sceneFailed}
+          compact={sceneReady}
+          onmode={(mode) => setTableMode(mode)}
+          onquality={(quality) => setTableQuality(quality)}
+        />
         {#if game?.lastHand}
           <Button variant="outline" onclick={showRecap}>Resumen de la última mano</Button>
         {/if}
@@ -1220,6 +1615,28 @@
           />
           <span>Mostrar valor y palo al pasar el cursor</span>
         </label>
+        {#if sceneReady}
+          <div class="table-menu-actions" role="group" aria-label="Acciones de la mesa">
+            <Button variant="outline" onclick={invite}>
+              <Share2 size={16} />Compartir invitación
+            </Button>
+            <Button variant="outline" onclick={() => copy('invite')}>
+              {#if copied === 'invite'}<Check size={16} />{:else}<Link2 size={16} />{/if}
+              Copiar enlace
+            </Button>
+            <Button
+              variant="outline"
+              aria-label="Ver jerarquía de las cartas"
+              onclick={() => (hierarchyOpen = true)}
+            >
+              <BookOpen size={16} />Jerarquía de las cartas
+            </Button>
+            <Button class="table-leave-button" variant="outline" onclick={() => (leaveOpen = true)}>
+              <LogOut size={16} />Salir de la mesa
+            </Button>
+          </div>
+        {/if}
+        <VoiceControls {code} />
         {#if cpuStatus !== 'idle'}
           <section class="cpu-status" aria-label="Estado de la CPU">
             <span role="status">
@@ -1237,10 +1654,20 @@
             {/if}
           </section>
         {/if}
-        <CantoHistory
-          events={snapshot.cantoHistory ?? snapshot.events ?? []}
-          viewerSeat={snapshot.seat}
-        />
+        {#if sceneReady}
+          <details class="details-history">
+            <summary>Historial de cantos</summary>
+            <CantoHistory
+              events={snapshot.cantoHistory ?? snapshot.events ?? []}
+              viewerSeat={snapshot.seat}
+            />
+          </details>
+        {:else}
+          <CantoHistory
+            events={snapshot.cantoHistory ?? snapshot.events ?? []}
+            viewerSeat={snapshot.seat}
+          />
+        {/if}
       </aside>
       <Dialog.Root bind:open={signalsOpen}>
         <Dialog.Content>
@@ -1358,6 +1785,8 @@
   .match-page {
     position: relative;
     min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
     overflow: hidden;
     color: #f1f2e8;
     background:
@@ -1517,6 +1946,9 @@
   }
   .hand-label p {
     margin-top: 5px;
+  }
+  .hand-tools {
+    display: contents;
   }
   .preview {
     position: absolute;
@@ -1728,6 +2160,11 @@
     margin: 20px 20px 0;
     max-width: none;
     font-size: 12px;
+  }
+  .waiting-character-controls {
+    display: grid;
+    gap: 8px;
+    margin: 12px clamp(12px, 3vw, 20px);
   }
   .cutting-panel {
     position: absolute;
@@ -1997,10 +2434,6 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-top: env(safe-area-inset-top);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
   }
   .active-match .match-header {
     flex: 0 0 48px;
@@ -2017,8 +2450,22 @@
   }
   .active-match .table-area {
     display: block;
+    position: relative;
     flex: 1;
     min-height: 0;
+  }
+  .active-match .table-layer {
+    position: absolute;
+    inset: 0;
+  }
+  .table-area.immersive .table-layer {
+    pointer-events: none;
+  }
+  .active-match .hand-cards[hidden] {
+    display: none;
+  }
+  :global(.card-picker) {
+    min-height: 44px;
   }
   .active-match .hand-area {
     width: calc(100% - 104px);
@@ -2188,6 +2635,481 @@
   @media (max-height: 650px) {
     .active-match .hand-cards {
       height: 80px;
+    }
+  }
+
+  .match-page.immersive-view {
+    position: fixed;
+    inset: 0;
+    width: 100dvw;
+    max-width: none;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    overflow: clip;
+    isolation: isolate;
+    --view-top: max(8px, env(safe-area-inset-top));
+    --view-left: max(8px, env(safe-area-inset-left));
+    --view-right: max(8px, env(safe-area-inset-right));
+    --view-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .immersive-view .match-grid,
+  .immersive-view .game-surface,
+  .immersive-view .table-area {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .immersive-view .table-area {
+    overflow: visible;
+  }
+
+  .immersive-view .match-header {
+    position: absolute;
+    top: var(--view-top);
+    right: var(--view-right);
+    z-index: 5;
+    width: auto;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .immersive-view .match-header .brand {
+    display: none;
+  }
+
+  .table-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .immersive-view :global(.copy-room-code),
+  .immersive-view .match-header :global(.room-details-toggle) {
+    width: auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 9px;
+    gap: 8px;
+    border: 1px solid #c7d3b84c;
+    border-radius: 9px;
+    background: #10231af3;
+    color: #f5f1df;
+    box-shadow: 0 2px 9px #07110f55;
+  }
+
+  .immersive-view .match-header :global(.room-details-toggle) {
+    background: #20382cf5;
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  .immersive-view .match-header :global(.room-details-toggle[aria-expanded='true']) {
+    background: #ddd2a3;
+    border-color: #ddd2a3;
+    color: #17352a;
+  }
+
+  .immersive-view :global(.copy-room-code:hover),
+  .immersive-view .match-header :global(.room-details-toggle[aria-expanded='false']:hover) {
+    background: #2a4938f5;
+  }
+
+  .room-identity {
+    display: grid;
+    text-align: left;
+    line-height: 1.05;
+  }
+
+  .room-identity > span {
+    font-size: 10px;
+    color: #b9c9b1;
+  }
+
+  .room-identity strong {
+    margin-top: 2px;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .immersive-view .hand-area,
+  .immersive-view .cutting-panel {
+    position: absolute;
+    inset: auto auto var(--view-bottom) 50%;
+    transform: translateX(-50%);
+    width: min(620px, calc(100% - 120px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+    margin: 0;
+    border-radius: 12px;
+    border: 1px solid #c7d3b840;
+    padding: 6px 8px;
+    background: #10231aee;
+  }
+
+  .immersive-view .hand-area {
+    z-index: 4;
+    width: min(620px, calc(100% - 104px - 2 * max(var(--view-left), var(--view-right))));
+    container-type: inline-size;
+  }
+
+  .immersive-view .hand-label {
+    display: grid;
+    justify-content: stretch;
+    justify-items: center;
+    font-size: 12px;
+    min-height: 0;
+    margin-bottom: 0;
+    gap: 3px;
+  }
+
+  .immersive-view .hand-heading {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .immersive-view .hand-label .eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .immersive-view .preview {
+    position: static;
+    max-width: none;
+    width: auto;
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .immersive-view .hand-tools {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  @container (min-width: 500px) {
+    .immersive-view .hand-heading,
+    .immersive-view .preview,
+    .immersive-view .hand-tools {
+      grid-area: 1 / 1;
+    }
+
+    .immersive-view .hand-heading {
+      width: 32%;
+    }
+
+    .immersive-view .preview {
+      justify-self: start;
+      max-width: min(140px, calc(34% - 6px));
+      text-align: left;
+    }
+
+    .immersive-view .hand-tools {
+      justify-self: end;
+      justify-content: end;
+      max-width: calc(34% - 6px);
+    }
+  }
+
+  .immersive-view .hand-label :global(.card-picker),
+  .immersive-view .declaration-control :global(button) {
+    min-width: 44px;
+    min-height: 44px;
+    width: auto;
+    flex-direction: row;
+    gap: 3px;
+    padding: 4px 7px;
+    font-size: 11px;
+    white-space: normal;
+  }
+
+  .immersive-view .declaration-control {
+    position: static;
+  }
+
+  .immersive-view .play-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 3px;
+  }
+
+  @container (min-width: 500px) {
+    .immersive-view .play-controls:not(.choosing-cards) {
+      flex-flow: row wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+  }
+
+  .immersive-view .stack-controls,
+  .immersive-view .canto-actions {
+    flex-wrap: wrap;
+  }
+
+  .immersive-view .canto-actions:not(:has(button)) {
+    display: none;
+  }
+
+  .immersive-view .stack-controls :global(button),
+  .immersive-view .canto-actions :global(button) {
+    min-width: 44px;
+  }
+
+  .immersive-view .hand-cards {
+    height: clamp(62px, 17dvh, 120px);
+    padding: 4px 0;
+  }
+
+  .immersive-view .cutting-panel {
+    width: min(435px, calc(100% - 120px));
+    padding: 8px;
+    gap: 5px;
+  }
+
+  .immersive-view .cutting-panel h2 {
+    font-size: 16px;
+  }
+
+  .immersive-view .cut-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .immersive-view .cut-controls :global(input) {
+    width: 64px;
+  }
+
+  .immersive-view .social-controls {
+    z-index: 5;
+    right: var(--view-right);
+    bottom: var(--view-bottom);
+  }
+
+  .immersive-view .connection-status {
+    left: var(--view-left);
+    bottom: calc(var(--view-bottom) + 100px);
+    z-index: 2;
+    padding: 2px 4px;
+    border-radius: 5px;
+    background: #10231ae3;
+  }
+
+  .immersive-view .match-details {
+    --details-top: calc(var(--view-top) + 50px);
+    z-index: 9;
+    top: var(--details-top);
+    right: var(--view-right);
+    bottom: auto;
+    width: 302px;
+    max-width: calc(100% - var(--view-left) - var(--view-right));
+    max-height: calc(100dvh - var(--details-top) - var(--view-bottom));
+    padding: 10px;
+    background: #10251cf7;
+    border-color: #a7bd9d55;
+    box-shadow: 0 12px 32px #070f0cc0;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    outline: none;
+  }
+
+  .immersive-view .match-details.below-vira {
+    --details-top: calc(109px + env(safe-area-inset-top));
+  }
+
+  .immersive-view.details-open .match-details {
+    display: grid;
+    gap: 6px;
+  }
+
+  .details-heading {
+    margin: 2px 0 4px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #f4ebce;
+  }
+
+  .table-menu-actions :global(button),
+  .immersive-view .match-details :global(.voice-controls button) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .details-room-code {
+    display: none;
+  }
+
+  .immersive-view .table-meta {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+    margin: -4px 0 4px;
+    color: #bdcbb6;
+    font-size: 11px;
+  }
+
+  .details-section-title {
+    margin: 2px 0 0;
+    color: #e7d9a8;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .immersive-view .card-label-option {
+    min-height: 44px;
+    margin: 0;
+    align-items: center;
+  }
+
+  .immersive-view .card-label-option input {
+    margin: 0;
+  }
+
+  .table-menu-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    margin-bottom: 3px;
+  }
+
+  .table-menu-actions :global(button) {
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 5px 7px;
+    text-align: left;
+    white-space: normal;
+    line-height: 1.15;
+    font-size: 11px;
+  }
+
+  .table-menu-actions :global(.table-leave-button) {
+    color: #f0c6b7;
+  }
+
+  .immersive-view .match-details :global(.voice-controls) {
+    margin: 0;
+    padding: 6px;
+    border-radius: 9px;
+  }
+
+  .details-history summary {
+    min-height: 44px;
+    align-content: center;
+    padding-inline: 6px;
+    color: #e9e3ca;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  @media (max-width: 1250px) {
+    .immersive-view .match-details.below-vira {
+      max-height: calc(
+        100dvh - var(--details-top) - var(--table-caption-bottom, var(--view-bottom))
+      );
+    }
+  }
+
+  .immersive-view .chat-popover {
+    right: calc(var(--view-right) + 47px);
+    bottom: var(--view-bottom);
+    z-index: 6;
+  }
+
+  .immersive-view .visible-signals {
+    position: absolute;
+    top: calc(var(--view-top) + 106px);
+    left: var(--view-left);
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .immersive-view .match-error,
+  .immersive-view .update-notice,
+  .immersive-view .reconnect-notice,
+  .immersive-view .toast {
+    position: absolute;
+    inset: calc(var(--view-top) + 108px) auto auto 50%;
+    z-index: 7;
+    transform: translateX(-50%);
+    width: min(370px, calc(100% - 20px));
+    margin: 0;
+  }
+
+  .immersive-view .reconnect-notice {
+    max-width: 270px;
+  }
+
+  .immersive-view .spectator-bar:not(.waiting-spectator) {
+    position: absolute;
+    z-index: 4;
+    inset: calc(var(--view-top) + 107px) auto auto var(--view-left);
+    max-width: min(230px, calc(100% - 76px));
+    margin: 0;
+    padding: 3px;
+    border-radius: 8px;
+    background: #10231ac9;
+  }
+
+  .immersive-view .spectator-bar label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .immersive-view .spectator-bar select {
+    min-height: 44px;
+    max-width: 180px;
+    padding: 4px 8px;
+    border: 1px solid #c7d3b840;
+    border-radius: 6px;
+    color: var(--foreground);
+    background: #10231ae9;
+    font-size: 12px;
+  }
+
+  @media (max-width: 760px) {
+    .immersive-view .connection-status {
+      bottom: max(calc(var(--view-bottom) + 100px), calc(var(--table-caption-bottom, 0px) + 24px));
+    }
+  }
+
+  @media (max-width: 520px) {
+    .toolbar-room-code {
+      display: none;
+    }
+
+    .details-room-code {
+      display: block;
+    }
+
+    .details-room-code :global(.copy-room-code) {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .immersive-view .spectator-bar:not(.waiting-spectator) {
+      max-width: calc(50% - var(--view-left) - 4px);
+    }
+
+    .immersive-view .spectator-bar label,
+    .immersive-view .spectator-bar select {
+      min-width: 0;
+    }
+
+    .immersive-view .spectator-bar label :global(svg) {
+      flex: none;
     }
   }
 </style>

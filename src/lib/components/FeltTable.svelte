@@ -14,6 +14,7 @@
     seconds,
     myTurn,
     cardsMoving = false,
+    immersive = false,
     oninvite,
     onrematch,
     onrecap,
@@ -23,6 +24,7 @@
     seconds: number;
     myTurn: boolean;
     cardsMoving?: boolean;
+    immersive?: boolean;
     oninvite: () => void;
     onrematch?: () => void;
     onrecap?: (event?: MouseEvent) => void;
@@ -78,9 +80,10 @@
 </script>
 
 <section
-  class="felt-table"
-  class:four-player={snapshot.config.players === 4}
-  class:active={!!game}
+  class={[
+    'felt-table',
+    { 'four-player': snapshot.config.players === 4, active: !!game, immersive },
+  ]}
   aria-label="Mesa de truco"
 >
   {#if latestEvent?.automatic && latestEvent.type === 'respond'}
@@ -88,7 +91,7 @@
       {teamLabel(latestEvent.seat % 2, snapshot.seat)}: {eventLabel(latestEvent)}
     </div>
   {/if}
-  <div class="table-outline" aria-hidden="true"></div>
+  {#if !immersive}<div class="table-outline" aria-hidden="true"></div>{/if}
   <div class="scoreboard" aria-label="Marcador">
     <div>
       <span>
@@ -105,70 +108,73 @@
     </div>
   </div>
 
-  {#each Array.from({ length: snapshot.config.players }, (_, seat) => seat) as seat (seat)}
-    <div class={['seat', 'seat-' + position(seat)]} data-seat={seat}>
-      <PlayerSeat
-        name={seatName(seat)}
-        team={teamLabel(seat % 2, snapshot.seat)}
-        remaining={game?.seats[seat].remaining ?? 3}
-        self={seat === snapshot.seat}
-        mano={seat === game?.mano}
-        announcement={announcement(seat)}
-        active={game?.turn === seat && !game.pending && game.phase === 'playing'}
-        answering={respondingTeam === seat % 2}
-      />
-      {#if game?.vira && seat !== perspective}
-        <div class="seat-hand" aria-hidden="true">
-          {#each Array.from({ length: game.seats[seat].remaining }, (_, index) => 3 - game.seats[seat].remaining + index) as card (card)}
-            <span data-card-back={card}><Card hidden width={20} intro={false} /></span>
-          {/each}
-        </div>
+  {#if !immersive}
+    {#each Array.from({ length: snapshot.config.players }, (_, seat) => seat) as seat (seat)}
+      <div class={['seat', 'seat-' + position(seat)]} data-seat={seat}>
+        <PlayerSeat
+          name={seatName(seat)}
+          team={teamLabel(seat % 2, snapshot.seat)}
+          remaining={game?.seats[seat].remaining ?? 3}
+          self={seat === snapshot.seat}
+          mano={seat === game?.mano}
+          showAvatar={!!game}
+          announcement={announcement(seat)}
+          active={game?.turn === seat && !game.pending && game.phase === 'playing'}
+          answering={respondingTeam === seat % 2}
+        />
+        {#if game?.vira && seat !== perspective}
+          <div class="seat-hand" aria-hidden="true">
+            {#each Array.from({ length: game.seats[seat].remaining }, (_, index) => 3 - game.seats[seat].remaining + index) as card (card)}
+              <span data-card-back={card}><Card hidden width={20} intro={false} /></span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/each}
+
+    <div class="play-zone">
+      <svg class="direction-ring" viewBox="0 0 360 360" fill="none" aria-hidden="true">
+        <circle cx="180" cy="180" r="174" stroke-dasharray="3 13" />
+        <circle cx="180" cy="180" r="156" />
+        <path d="M 306 92 A 154 154 0 0 0 64 82 M 64 82 l 2 -25 M 64 82 l 26 -1" />
+        <path d="M 54 268 A 154 154 0 0 0 296 278 M 296 278 l -2 25 M 296 278 l -26 1" />
+      </svg>
+      <div class="table-watermark" aria-hidden="true">r.</div>
+      {#if game}
+        {#each game.seats as seat, index (index)}
+          <div
+            class={['played-group', 'played-' + position(index)]}
+            aria-label={'Cartas de ' + seatName(index)}
+          >
+            {#each seat.plays as play, round (round)}
+              {#if play.present}
+                <div
+                  class={['played-card', { burned: play.burned }]}
+                  data-play-seat={index}
+                  data-play-round={round}
+                  style:--tilt={round * 7 - 7 + 'deg'}
+                >
+                  <Card card={play.card} hidden={!play.card} width={70} intro={false} />
+                  <span>{play.burned ? 'Quemada' : round + 1 + '.ª'}</span>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
       {/if}
     </div>
-  {/each}
 
-  <div class="play-zone">
-    <svg class="direction-ring" viewBox="0 0 360 360" fill="none" aria-hidden="true">
-      <circle cx="180" cy="180" r="174" stroke-dasharray="3 13" />
-      <circle cx="180" cy="180" r="156" />
-      <path d="M 306 92 A 154 154 0 0 0 64 82 M 64 82 l 2 -25 M 64 82 l 26 -1" />
-      <path d="M 54 268 A 154 154 0 0 0 296 278 M 296 278 l -2 25 M 296 278 l -26 1" />
-    </svg>
-    <div class="table-watermark" aria-hidden="true">r.</div>
     {#if game}
-      {#each game.seats as seat, index (index)}
-        <div
-          class={['played-group', 'played-' + position(index)]}
-          aria-label={'Cartas de ' + seatName(index)}
-        >
-          {#each seat.plays as play, round (round)}
-            {#if play.present}
-              <div
-                class={['played-card', { burned: play.burned }]}
-                data-play-seat={index}
-                data-play-round={round}
-                style:--tilt={round * 7 - 7 + 'deg'}
-              >
-                <Card card={play.card} hidden={!play.card} width={70} intro={false} />
-                <span>{play.burned ? 'Quemada' : round + 1 + '.ª'}</span>
-              </div>
-            {/if}
-          {/each}
-        </div>
-      {/each}
+      <div class={['deck', 'dealer-' + position(game.dealer)]}>
+        <div class="deck-back" data-deck><Card hidden width={54} /></div>
+        {#if game.vira}
+          <div class="vira">
+            <Card card={game.vira} width={72} />
+            <span>LA VIRA</span>
+          </div>
+        {/if}
+      </div>
     {/if}
-  </div>
-
-  {#if game}
-    <div class={['deck', 'dealer-' + position(game.dealer)]}>
-      <div class="deck-back" data-deck><Card hidden width={54} /></div>
-      {#if game.vira}
-        <div class="vira">
-          <Card card={game.vira} width={72} />
-          <span>LA VIRA</span>
-        </div>
-      {/if}
-    </div>
   {/if}
 
   {#if game?.phase !== 'cutting' || paused}
@@ -827,6 +833,46 @@
     left: 50%;
     transform: translate(-50%, -50%);
     margin: 0;
+  }
+  .immersive .table-status.expanded,
+  .immersive .table-status.paused {
+    pointer-events: auto;
+  }
+  .felt-table.active.immersive {
+    height: 100%;
+  }
+  .active.immersive .scoreboard {
+    top: var(--view-top);
+    left: var(--view-left);
+    min-height: 44px;
+    max-width: calc(100% - 113px);
+    padding: 4px 8px;
+    gap: 6px;
+    border-radius: 9px;
+    background: #10231ae9;
+  }
+  .active.immersive .scoreboard > div {
+    gap: 3px;
+  }
+  .active.immersive .scoreboard span {
+    font-size: 9px;
+  }
+  .active.immersive .scoreboard strong {
+    font-size: 19px;
+  }
+  .active.immersive .score-target {
+    padding-inline: 6px;
+    white-space: nowrap;
+  }
+  .active.immersive .table-status:not(.expanded) {
+    top: calc(var(--view-top) + 51px);
+    left: var(--view-left);
+    transform: none;
+    text-align: left;
+  }
+  .active.immersive .team-response {
+    top: calc(var(--view-top) + 96px);
+    max-width: calc(100% - 34px);
   }
   @container (min-width: 901px) and (max-height: 519px) {
     .active .seat-bottom {

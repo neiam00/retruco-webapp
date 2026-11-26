@@ -1,6 +1,12 @@
 import { expect, test, type Page, type WebSocketRoute } from '@playwright/test';
 import type { Snapshot } from '../src/lib/protocol.js';
 import { tableSnapshot } from './fixtures/table.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
+
+const matchStreamURL = (url: URL) =>
+  url.pathname.endsWith('/api/matches/VIRA-1234/ws') && url.searchParams.get('transport') === '2';
 
 async function session(page: Page) {
   const snapshotReads: string[] = [];
@@ -30,7 +36,7 @@ test('uses one socket baseline, reconstructs chat updates, and blocks play until
   initial.state!.legal = [{ type: 'play', card: 1 }];
   let socket: WebSocketRoute | undefined;
   const requests: object[] = [];
-  await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', (route) => {
+  await page.routeWebSocket(matchStreamURL, (route) => {
     socket = route;
     route.onMessage((message) => requests.push(JSON.parse(message.toString())));
     route.send(
@@ -84,7 +90,7 @@ for (const status of [401, 404]) {
     const snapshotReads = await session(page);
     let connections = 0;
     await page.clock.install();
-    await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', async (socket) => {
+    await page.routeWebSocket(matchStreamURL, async (socket) => {
       connections++;
       socket.send(JSON.stringify({ type: 'error', status, error: `Error ${status} de la mesa` }));
       await socket.close();
@@ -107,7 +113,7 @@ test('pauses reconnects while offline and cancels pending reconnects after leavi
   let currentSocket: WebSocketRoute | undefined;
   const initial = tableSnapshot(4, 0, false);
   initial.state!.legal = [{ type: 'play', card: 1 }];
-  await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', (socket) => {
+  await page.routeWebSocket(matchStreamURL, (socket) => {
     connections++;
     currentSocket = socket;
     socket.send(JSON.stringify({ type: 'snapshot', data: initial }));
@@ -139,7 +145,7 @@ test('releases a suspended page connection and reconnects once when restored', a
   initial.state!.legal = [{ type: 'play', card: 1 }];
   let connections = 0;
   const requests: object[] = [];
-  await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', (socket) => {
+  await page.routeWebSocket(matchStreamURL, (socket) => {
     connections++;
     socket.onMessage((message) => requests.push(JSON.parse(message.toString())));
     socket.send(JSON.stringify({ type: 'snapshot', data: initial }));
@@ -181,7 +187,7 @@ test('diagnoses rejected legacy handshakes once instead of retrying missing tabl
     diagnostics++;
     await route.fulfill({ status: 404, json: { error: 'No encontramos esa mesa.' } });
   });
-  await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', async (socket) => {
+  await page.routeWebSocket(matchStreamURL, async (socket) => {
     connections++;
     await socket.close();
   });
@@ -196,7 +202,7 @@ test('honors a server retry delay after temporary admission failure', async ({ p
   const snapshotReads = await session(page);
   await page.clock.install();
   let connections = 0;
-  await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', async (socket) => {
+  await page.routeWebSocket(matchStreamURL, async (socket) => {
     connections++;
     if (connections === 1) {
       socket.send(
@@ -232,7 +238,7 @@ test('retries through a short outage within the existing ten-second room grace',
   let initialSocket: WebSocketRoute | undefined;
   const initial = tableSnapshot(4, 0, false);
   initial.state!.legal = [{ type: 'play', card: 1 }];
-  await page.routeWebSocket('**/api/matches/VIRA-1234/ws?transport=2', async (socket) => {
+  await page.routeWebSocket(matchStreamURL, async (socket) => {
     connections++;
     if (connections === 1 || available) {
       initialSocket ??= socket;

@@ -26,6 +26,7 @@ export default defineConfig(({ mode }) => {
     environment.CF_PAGES_BRANCH === 'master';
   const connections: CspSource[] = [
     'self',
+    'blob:',
     'https://*.google-analytics.com',
     'https://challenges.cloudflare.com',
   ];
@@ -45,6 +46,9 @@ export default defineConfig(({ mode }) => {
   return {
     define: productionPages
       ? {
+          'import.meta.env.VITE_TABLE_3D_DEFAULT': JSON.stringify(
+            environment.VITE_TABLE_3D_DEFAULT ?? 'false',
+          ),
           'import.meta.env.VITE_CPU_ML_ENABLED': JSON.stringify(
             environment.VITE_CPU_ML_ENABLED ?? 'true',
           ),
@@ -70,7 +74,12 @@ export default defineConfig(({ mode }) => {
             'frame-src': ['https://challenges.cloudflare.com'],
             'worker-src': ['self'],
             'style-src': ['self', 'unsafe-inline'],
-            'img-src': ['self', 'data:', ...(assetOrigin ? [configuredOrigin(assetOrigin)] : [])],
+            'img-src': [
+              'self',
+              'data:',
+              'blob:',
+              ...(assetOrigin ? [configuredOrigin(assetOrigin)] : []),
+            ],
             'connect-src': connections,
             'media-src': ['self', 'blob:'],
             'frame-ancestors': ['none'],
