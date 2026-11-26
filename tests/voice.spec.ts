@@ -4,6 +4,7 @@ declare global {
   interface Window {
     voiceConnections: RTCPeerConnection[];
     voiceSocket?: WebSocket;
+    avatarAudio?: { reads: number; rms: number; peak: number };
   }
 }
 
@@ -14,6 +15,7 @@ test.use({
       '--use-fake-ui-for-media-stream',
       // Use numeric host candidates on the local headless test network.
       '--disable-features=WebRtcHideLocalIpsWithMdns',
+      '--enable-unsafe-swiftshader',
     ],
   },
 });
@@ -63,6 +65,124 @@ async function audioStats(page: Page) {
     };
   });
 }
+
+test('the 3D table samples authorized remote audio and quiets when the speaker mutes', async ({
+  browser,
+  baseURL,
+}, testInfo) => {
+  test.setTimeout(45_000);
+  const speakerContext = await browser.newContext({ baseURL, permissions: ['microphone'] });
+  const listenerContext = await browser.newContext({
+    baseURL,
+    viewport: testInfo.project.use.viewport,
+    reducedMotion: 'reduce',
+  });
+  try {
+    await speakerContext.addInitScript(() => {
+      if (location.origin === 'null') return;
+      localStorage.setItem('retruco.table.mode', 'classic');
+      localStorage.setItem('retruco.voice.mode', 'live');
+      // A continuous tone gives the native WebRTC track a predictable level
+      // across platforms, independent of the browser's fake-microphone cadence.
+      navigator.mediaDevices.getUserMedia = async () => {
+        const context = new AudioContext();
+        const source = context.createOscillator();
+        const gain = context.createGain();
+        const stream = context.createMediaStreamDestination();
+        source.frequency.value = 440;
+        gain.gain.value = 0.35;
+        source.connect(gain).connect(stream);
+        source.start();
+        await context.resume();
+        return stream.stream;
+      };
+    });
+    await listenerContext.addInitScript(() => {
+      if (location.origin === 'null') return;
+      localStorage.setItem('retruco.table.mode', '3d');
+      localStorage.setItem('retruco.table.quality', 'mobile-low');
+      const observation = { reads: 0, rms: 0, peak: 0 };
+      window.avatarAudio = observation;
+      window.voiceConnections = [];
+      const Connection = window.RTCPeerConnection;
+      window.RTCPeerConnection = class extends Connection {
+        constructor(config?: RTCConfiguration) {
+          super(config);
+          window.voiceConnections.push(this);
+        }
+      };
+      const createAnalyser = AudioContext.prototype.createAnalyser;
+      AudioContext.prototype.createAnalyser = function () {
+        const analyser = createAnalyser.call(this);
+        const read = analyser.getFloatTimeDomainData.bind(analyser);
+        analyser.getFloatTimeDomainData = (samples) => {
+          read(samples);
+          observation.reads++;
+          observation.rms = Math.sqrt(
+            samples.reduce((total, value) => total + value * value, 0) / samples.length,
+          );
+          observation.peak = Math.max(observation.peak, observation.rms);
+        };
+        return analyser;
+      };
+    });
+    const api = process.env.TEST_API_ORIGIN ?? 'http://127.0.0.1:8080';
+    const headers = { Origin: baseURL! };
+    for (const [context, name] of [
+      [speakerContext, 'Voz del avatar'],
+      [listenerContext, 'Escucha 3D'],
+    ] as const) {
+      expect(
+        (await context.request.post(`${api}/api/guest`, { headers, data: { name } })).ok(),
+      ).toBe(true);
+    }
+    const created = await speakerContext.request.post(`${api}/api/matches`, {
+      headers,
+      data: { private: true, config: { players: 2, target: 12, florRequired: false } },
+    });
+    expect(created.ok()).toBe(true);
+    const { code } = (await created.json()) as { code: string };
+    expect(
+      (
+        await listenerContext.request.post(`${api}/api/matches/${code}/join`, { headers, data: {} })
+      ).ok(),
+    ).toBe(true);
+    const [speaker, listener] = await Promise.all([
+      speakerContext.newPage(),
+      listenerContext.newPage(),
+    ]);
+    await listener.goto(`/mesa/${code}`);
+    await expect(listener.locator('.first-person-table.visible canvas')).toBeVisible();
+    await speaker.goto(`/mesa/${code}`);
+    for (const page of [speaker, listener]) {
+      await expect(page.getByText('En línea', { exact: true })).toBeVisible();
+      const details = page.getByRole('button', { name: 'Detalles de la partida', exact: true });
+      if (await details.isVisible()) await details.click();
+      await page.getByRole('button', { name: 'Entrar al audio', exact: true }).click();
+      await expect(
+        page.getByRole('button', { name: 'Salir del audio', exact: true }),
+      ).toBeVisible();
+    }
+    await expect.poll(async () => (await audioStats(listener)).receivedEnergy).toBeGreaterThan(0);
+    await expect.poll(() => listener.evaluate(() => window.avatarAudio!.reads)).toBeGreaterThan(0);
+    await expect
+      .poll(() => listener.evaluate(() => window.avatarAudio!.peak))
+      .toBeGreaterThan(0.02);
+    const reads = await listener.evaluate(() => window.avatarAudio!.reads);
+    const mute = speaker.getByRole('button', { name: 'Silenciar micrófono', exact: true });
+    if (!(await mute.isVisible())) {
+      const details = speaker.getByRole('button', { name: 'Detalles de la partida', exact: true });
+      if (await details.isVisible()) await details.click();
+    }
+    await mute.click();
+    await expect
+      .poll(() => listener.evaluate(() => window.avatarAudio!.reads))
+      .toBeGreaterThan(reads);
+    await expect.poll(() => listener.evaluate(() => window.avatarAudio!.rms)).toBeLessThan(0.02);
+  } finally {
+    await Promise.allSettled([speakerContext.close(), listenerContext.close()]);
+  }
+});
 
 for (const players of [2, 4]) {
   test(`Opus voice with ${players} players supports room permissions, push-to-talk and cleanup`, async ({

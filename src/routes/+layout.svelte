@@ -11,6 +11,7 @@
   let { children }: { children: Snippet } = $props();
 
   const siteOrigin = $derived(SITE_ORIGIN || page.url.origin);
+  const tableRoute = $derived(page.route.id === '/mesa/[code]' || page.route.id === '/aprender');
   const socialTitle = 'Retruco | Truco venezolano con amigos';
   const description =
     'Juega truco venezolano con tus amigos. Mesas de 2 o 4 jugadores, señas, envido y flor. Entra gratis, sin descargar nada.';
@@ -26,6 +27,12 @@
 </script>
 
 <svelte:head>
+  <meta
+    name="viewport"
+    content={tableRoute
+      ? 'width=device-width, initial-scale=1, viewport-fit=cover'
+      : 'width=device-width, initial-scale=1'}
+  />
   <title>Retruco | Truco venezolano online</title>
   <link rel="preload" href={nunitoFont} as="font" type="font/woff2" crossorigin="anonymous" />
   <meta name="description" content={description} />

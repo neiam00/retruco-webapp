@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 declare global {
   interface Window {

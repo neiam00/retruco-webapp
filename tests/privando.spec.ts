@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Command, CPUWork, Snapshot } from '../src/lib/protocol.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 declare global {
   interface Window {

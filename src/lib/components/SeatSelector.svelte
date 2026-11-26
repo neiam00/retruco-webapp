@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snapshot } from '#lib/protocol.js';
   import { Button } from '#lib/components/ui/button/index.js';
-  import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
 
   let {
     snapshot,
@@ -24,12 +23,9 @@
         {#each Array.from({ length: snapshot.config.players }, (_, seat) => seat).filter((seat) => seat % 2 === team) as seat (seat)}
           {@const player = snapshot.seats[seat]}
           <div class="seat">
-            <div class="row">
-              {#if player?.id}<PlayerAvatar name={player.name} />{/if}
-              <div>
-                <strong>{player?.id ? player.name : 'Puesto libre'}</strong>
-                <small>Puesto {seat + 1}{player?.cpu ? ' · CPU' : ''}</small>
-              </div>
+            <div>
+              <strong>{player?.id ? player.name : 'Puesto libre'}</strong>
+              <small>Puesto {seat + 1}{player?.cpu ? ' · CPU' : ''}</small>
             </div>
             {#if !player?.id}
               <Button

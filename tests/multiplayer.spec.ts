@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { expectClearResults, expectClearTableCards } from './table-layout.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 test('four players surround the central cards and can choose a declaration', async ({
   browser,

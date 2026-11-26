@@ -6,8 +6,20 @@
   import Card from '#lib/components/Card.svelte';
   import PlayerAvatar from '#lib/components/PlayerAvatar.svelte';
   import HandRecap from '#lib/components/HandRecap.svelte';
+  import Table3D from '#lib/components/Table3D.svelte';
+  import TableRenderSettings from '#lib/components/TableRenderSettings.svelte';
   import { api } from '#lib/api.js';
   import { cardName } from '#lib/cards.js';
+  import { lessonSnapshot } from '#lib/table3d/presentation.js';
+  import {
+    readTableMode,
+    readTableQuality,
+    saveTableSetting,
+    tableModeKey,
+    tableQualityKey,
+    type QualitySetting,
+    type TableMode,
+  } from '#lib/table3d/preferences.js';
   import {
     tutorialCopy,
     isTutorialLesson,
@@ -32,6 +44,14 @@
     [0, 1, 2].filter((round) => step?.view.seats.some((seat) => seat.plays[round]?.present)),
   );
   let finished = $derived(step?.id === 'recap');
+  let tableMode = $state<TableMode>('classic');
+  let tableQuality = $state<QualitySetting>('auto');
+  let sceneReady = $state(false);
+  let sceneFailed = $state(false);
+  let sceneReset = $state(0);
+  let practicePicker = $state(false);
+  let coachOpen = $state(true);
+  let practiceView = $derived(step ? lessonSnapshot(step.view, step.events) : null);
 
   async function load() {
     const request = ++attempt;
@@ -45,6 +65,7 @@
         );
       if (disposed || request !== attempt) return;
       lesson = latest;
+      sceneReset++;
       index = 0;
       feedback = '';
       whyOpen = false;
@@ -60,6 +81,8 @@
   }
 
   onMount(() => {
+    tableMode = readTableMode();
+    tableQuality = readTableQuality();
     void load();
     return () => {
       disposed = true;
@@ -68,10 +91,14 @@
 
   function move(next: number) {
     if (!lesson || next < 0 || next >= lesson.steps.length) return;
+    if (next <= index) sceneReset++;
     index = next;
     feedback = '';
     whyOpen = false;
-    void tick().then(() => document.getElementById('lesson-title')?.focus());
+    practicePicker = false;
+    void tick().then(() => {
+      if (!sceneReady || coachOpen) document.getElementById('lesson-title')?.focus();
+    });
   }
 
   function chooseCard(card: number) {
@@ -100,6 +127,18 @@
       return;
     }
     move(index + 1);
+  }
+
+  function setTableMode(mode: TableMode) {
+    sceneReady = sceneFailed = false;
+    tableMode = mode;
+    saveTableSetting(tableModeKey, mode);
+  }
+
+  function setTableQuality(quality: QualitySetting) {
+    sceneReady = sceneFailed = false;
+    tableQuality = quality;
+    saveTableSetting(tableQualityKey, quality);
   }
 </script>
 
@@ -140,7 +179,7 @@
   />
 </svelte:head>
 
-<main class="page-shell lesson-shell">
+<main class={['page-shell lesson-shell', { 'immersive-practice': sceneReady }]}>
   <header class="masthead">
     <a href={resolve('/')} class="brand" aria-label="Retruco, inicio">
       <span class="brand-mark">r.</span>
@@ -166,8 +205,46 @@
       <Button onclick={() => void load()}>Volver a intentar</Button>
     </section>
   {:else if lesson && step && copy}
+    {#if sceneReady}
+      <div class="tutorial-hud" role="group" aria-label="Práctica">
+        <Button href={resolve('/')} variant="outline" size="icon" aria-label="Volver a las mesas">
+          <ArrowLeft />
+        </Button>
+        <Button
+          variant="outline"
+          aria-expanded={coachOpen}
+          aria-controls="lesson-coach"
+          onclick={() => (coachOpen = !coachOpen)}
+        >
+          <BookOpen />Paso {index + 1} de {lesson.steps.length}
+        </Button>
+      </div>
+      {#if !coachOpen}
+        <div class="tutorial-actions">
+          {#if finished}
+            <Button variant="outline" onclick={() => move(0)}><RotateCcw />Repetir</Button>
+          {:else if choosingCard}
+            <Button
+              variant="outline"
+              aria-expanded={practicePicker}
+              aria-controls="practice-card-picker"
+              onclick={() => (practicePicker = !practicePicker)}
+            >
+              {practicePicker ? 'Ocultar mano' : 'Ver mano'}
+            </Button>
+          {:else}
+            <Button onclick={advance}>{copy.action ?? 'Continuar'}<ArrowRight /></Button>
+          {/if}
+        </div>
+      {/if}
+    {/if}
     <div class="lesson-layout">
-      <section class="lesson-coach" aria-labelledby="lesson-title">
+      <section
+        id="lesson-coach"
+        class="lesson-coach"
+        aria-labelledby="lesson-title"
+        hidden={sceneReady && !coachOpen}
+      >
         <div class="lesson-progress">
           <span>Paso {index + 1} de {lesson.steps.length}</span>
           <progress
@@ -222,7 +299,18 @@
           </Button>
         {:else}
           <p class="card-instruction">Elige una carta de tu mano para continuar.</p>
-          <div class="mobile-choice-hand">{@render learnerHand()}</div>
+          {#if !sceneReady}
+            <div class="mobile-choice-hand">{@render learnerHand()}</div>
+          {:else}
+            <Button
+              variant="outline"
+              aria-expanded={practicePicker}
+              aria-controls="practice-card-picker"
+              onclick={() => (practicePicker = !practicePicker)}
+            >
+              {practicePicker ? 'Ocultar mano' : 'Ver mano'}
+            </Button>
+          {/if}
         {/if}
         <div class="lesson-navigation">
           <Button variant="ghost" disabled={index === 0} onclick={() => move(index - 1)}>
@@ -232,6 +320,18 @@
               <RotateCcw />Reiniciar
             </Button>{/if}
         </div>
+        {#if sceneReady}
+          <details class="tutorial-settings">
+            <summary>Vista y cámara</summary>
+            <TableRenderSettings
+              mode={tableMode}
+              quality={tableQuality}
+              failed={sceneFailed}
+              onmode={setTableMode}
+              onquality={setTableQuality}
+            />
+          </details>
+        {/if}
       </section>
 
       <section class="practice-table" aria-label="Mesa de práctica">
@@ -243,45 +343,81 @@
             CPU <strong>{step.view.scores[1]}</strong>
           </span>
         </div>
-        <div class="opponent-seat">
-          <PlayerAvatar name="CPU de práctica" size={36} />
-          <span>CPU de práctica</span>
-          <div
-            class="opponent-hand"
-            aria-label={`${step.view.seats[1].remaining} cartas sin jugar de la CPU`}
-          >
-            {#each Array.from({ length: step.view.seats[1].remaining }, (_, card) => card) as card (card)}<Card
-                hidden
-                width={27}
-                intro={false}
-              />{/each}
-          </div>
-        </div>
-        <div class={['lesson-vira', { highlighted: step.id === 'vira' || step.id === 'pieces' }]}>
-          <Card card={step.view.vira} width={70} intro={false} />
-          <strong>La vira</strong>
-        </div>
-        {#if rounds.length}
-          <div class="played-tricks" aria-label="Vueltas jugadas">
-            {#each rounds as round (round)}
-              <div class="played-trick">
-                <h3>{round + 1}.ª vuelta</h3>
-                <div class="trick-cards">
-                  {#each step.view.seats as seat (seat.seat)}<div>
-                      <span>{seat.seat === 0 ? 'Tú' : 'CPU'}</span>
-                      {#if seat.plays[round]?.present}<Card
-                          card={seat.plays[round].card}
-                          hidden={!seat.plays[round].card}
-                          width={56}
-                          intro={false}
-                        />{:else}<span class="unplayed">Sin jugar</span>{/if}
-                    </div>{/each}
-                </div>
+        <div class="practice-view">
+          {#if tableMode === '3d' && !sceneFailed && practiceView}
+            <Table3D
+              snapshot={practiceView}
+              resetKey={sceneReset}
+              visible={sceneReady}
+              quality={tableQuality}
+              canSelectCard={choosingCard}
+              onselect={chooseCard}
+              onready={() => (sceneReady = true)}
+              onfailure={() => {
+                sceneReady = false;
+                sceneFailed = true;
+              }}
+            />
+          {/if}
+          {#if !sceneReady}
+            <div class="opponent-seat">
+              <PlayerAvatar name="CPU de práctica" size={36} />
+              <span>CPU de práctica</span>
+              <div
+                class="opponent-hand"
+                aria-label={`${step.view.seats[1].remaining} cartas sin jugar de la CPU`}
+              >
+                {#each Array.from({ length: step.view.seats[1].remaining }, (_, card) => card) as card (card)}<Card
+                    hidden
+                    width={27}
+                    intro={false}
+                  />{/each}
               </div>
-            {/each}
-          </div>
-        {:else}<p class="table-empty">Las cartas jugadas aparecerán aquí.</p>{/if}
-        <div class={['board-hand', { 'choice-active': choosingCard }]}>{@render learnerHand()}</div>
+            </div>
+            <div
+              class={['lesson-vira', { highlighted: step.id === 'vira' || step.id === 'pieces' }]}
+            >
+              <Card card={step.view.vira} width={70} intro={false} />
+              <strong>La vira</strong>
+            </div>
+            {#if rounds.length}
+              <div class="played-tricks" aria-label="Vueltas jugadas">
+                {#each rounds as round (round)}
+                  <div class="played-trick">
+                    <h3>{round + 1}.ª vuelta</h3>
+                    <div class="trick-cards">
+                      {#each step.view.seats as seat (seat.seat)}<div>
+                          <span>{seat.seat === 0 ? 'Tú' : 'CPU'}</span>
+                          {#if seat.plays[round]?.present}<Card
+                              card={seat.plays[round].card}
+                              hidden={!seat.plays[round].card}
+                              width={56}
+                              intro={false}
+                            />{:else}<span class="unplayed">Sin jugar</span>{/if}
+                        </div>{/each}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else}<p class="table-empty">Las cartas jugadas aparecerán aquí.</p>{/if}
+          {/if}
+        </div>
+        <div
+          id="practice-card-picker"
+          class={['board-hand', { 'choice-active': choosingCard && !sceneReady }]}
+          hidden={sceneReady && !practicePicker}
+        >
+          {@render learnerHand()}
+        </div>
+        {#if !sceneReady}
+          <TableRenderSettings
+            mode={tableMode}
+            quality={tableQuality}
+            failed={sceneFailed}
+            onmode={setTableMode}
+            onquality={setTableQuality}
+          />
+        {/if}
       </section>
     </div>
     <footer class="lesson-footer">
@@ -296,6 +432,8 @@
 <style>
   .lesson-shell {
     max-width: 1160px;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
   }
   .lesson-intro {
     padding: 22px 0 28px;
@@ -421,6 +559,13 @@
     background: #15392c;
     color: #edf0ec;
     min-width: 0;
+  }
+  .practice-view {
+    position: relative;
+    min-height: clamp(295px, 48dvh, 465px);
+    display: grid;
+    gap: 12px;
+    align-content: start;
   }
   .practice-score {
     display: flex;
@@ -624,5 +769,157 @@
     .opponent-hand {
       margin-left: 0;
     }
+  }
+
+  .lesson-shell.immersive-practice {
+    position: fixed;
+    inset: 0;
+    width: 100dvw;
+    max-width: none;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    overflow: clip;
+    isolation: isolate;
+    --view-top: max(8px, env(safe-area-inset-top));
+    --view-left: max(8px, env(safe-area-inset-left));
+    --view-right: max(8px, env(safe-area-inset-right));
+    --view-bottom: max(8px, env(safe-area-inset-bottom));
+    --table-caption-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .immersive-practice .masthead,
+  .immersive-practice .lesson-intro,
+  .immersive-practice .lesson-footer {
+    display: none;
+  }
+
+  .immersive-practice .lesson-layout,
+  .immersive-practice .practice-table,
+  .immersive-practice .practice-view {
+    position: absolute;
+    inset: 0;
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    min-height: 0;
+    background: transparent;
+  }
+
+  .immersive-practice .tutorial-hud {
+    position: absolute;
+    z-index: 4;
+    top: var(--view-top);
+    left: var(--view-left);
+    display: flex;
+    gap: 4px;
+  }
+
+  .immersive-practice .tutorial-hud :global(:is(button, a)),
+  .immersive-practice .tutorial-actions :global(button) {
+    min-height: 44px;
+  }
+
+  .immersive-practice .tutorial-actions {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    bottom: var(--view-bottom);
+    transform: translateX(-50%);
+    max-width: calc(100% - 112px);
+  }
+
+  .immersive-practice .lesson-coach {
+    position: absolute;
+    z-index: 3;
+    inset: calc(var(--view-top) + 52px) auto auto var(--view-left);
+    width: clamp(220px, 28vw, 345px);
+    max-width: calc(100% - 116px);
+    max-height: min(54dvh, calc(100% - 124px));
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 10px 11px;
+    border-radius: 9px;
+    background: #10231af5;
+    box-shadow: 0 4px 18px #080b09a0;
+  }
+
+  .immersive-practice .lesson-progress {
+    gap: 4px;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+
+  .immersive-practice .lesson-coach h2 {
+    margin: 0 0 6px;
+    font-size: clamp(16px, 3.4vw, 22px);
+  }
+
+  .immersive-practice .lesson-coach p {
+    margin: 0 0 5px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .immersive-practice .lesson-coach :global(:is(button, a)) {
+    min-height: 44px;
+    white-space: normal;
+  }
+
+  .immersive-practice .lesson-navigation {
+    gap: 4px;
+    margin-top: 5px;
+    padding-top: 4px;
+  }
+
+  .tutorial-settings summary {
+    min-height: 44px;
+    align-content: center;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .immersive-practice .practice-score {
+    position: absolute;
+    z-index: 2;
+    top: var(--view-top);
+    right: var(--view-right);
+    min-height: 44px;
+    gap: 7px;
+    margin: 0;
+    padding: 4px 8px;
+    border: 1px solid #c7d3b840;
+    border-radius: 9px;
+    background: #10231ae9;
+  }
+
+  .immersive-practice .practice-score span {
+    font-size: 10px;
+  }
+
+  .immersive-practice .practice-score strong {
+    font-size: 18px;
+  }
+
+  .immersive-practice .board-hand {
+    position: absolute;
+    z-index: 5;
+    left: 50%;
+    bottom: calc(var(--view-bottom) + 50px);
+    width: min(325px, calc(100% - 114px));
+    transform: translateX(-50%);
+    padding: 5px 8px;
+    border-radius: 10px;
+    background: #10231af3;
+  }
+
+  .immersive-practice .board-hand .learner-hand {
+    margin: 0;
+  }
+
+  .immersive-practice .lesson-card :global(img) {
+    width: min(72px, 100%);
   }
 </style>

@@ -103,11 +103,47 @@ They must show the authoritative state promptly and never delay legal actions.
 
 ## Match screen
 
-The active match retains green felt, the established seat geometry, and its
+In 3D, the room fills the entire browser viewport in portrait, landscape, and
+desktop. Keep the score, timer, turn controls, and tutorial coach over the
+scene. Draw the canvas to all four edges and inset the touch controls around
+display cutouts. Returning to the lobby restores the normal page layout.
+
+On touchscreens, tap a held card once to choose it. Hold one finger still
+briefly, then drag to look around. Lifting the finger ends the camera gesture.
+
+Unplayed cards stay in the player's grip, fanned toward their owner. Looking
+up lowers the wrists while keeping the cards tilted and visibly above the
+felt. The thumbs press the faces and the fingers wrap across the backs.
+Both hands support three cards and move closer for two. The left hand
+holds the last card while the right hand rests. A played card leaves the
+grip and settles on the table.
+
+Frame the held fan in the lower center above the controls. When a card is
+played, close its gap and keep the remaining ranks legible. Hovering shows the
+card's name while its position stays fixed. Leave open felt for each seat's
+played cards. Tuck the vira face up under the dealer's deck with enough of
+the card exposed to recognize it. Keep its rank and suit readable in the HUD.
+Align the hand heading, envido value and actions on the same centerline.
+
+The camera briefly turns toward a canto caller, then returns to the table
+so the player can follow the next play. Manual look takes priority throughout.
+Players can turn off canto camera movement in the table menu. Reduced motion
+uses a visual cue for the caller.
+
+Give the room code its own copy control and keep the menu button beside it.
+Anchor the open menu to its button on desktop and keep every setting within
+reach on a phone.
+
+Every face of the Spanish deck carries its suit's _pinta_ on both horizontal
+inner borders. Oros has a continuous line, copas has one break, espadas has
+two, and bastos has three. Preserve the breaks on the courts and at the
+smallest displayed hand size.
+
+The Classic match retains green felt, the established seat geometry, and its
 viewport-fitting table/hand/action dock. The lobby's ambient cards do not run in
 a match. Preserve the measured Safari rendering improvements.
 
-Keep deck and vira to the dealer's right, large enough to recognize, clear of
+In Classic, keep deck and vira to the dealer's right, large enough to recognize, clear of
 player badges and played cards. Countdown and turn text must not obscure card
 values. Gameplay cards are opaque; hand labels stay below end-of-game overlays.
 Cards on the table and cards in hand have distinct spaces.
@@ -147,9 +183,10 @@ Use exactly:
 
 Desarrollado por [neiam00](https://github.com/neiam00) @ [Hyaxe](https://hyaxe.com) | 2026
 
-Keep “Créditos y cartas” available beside or below this credit. Preserve the
-Spanish deck's attribution and CC BY-SA 3.0 license. Use local DiceBear avatars
-and Lucide functional icons.
+Keep “Créditos y cartas” available beside or below this credit. Credit the
+original Retruco deck and preserve the separate attribution for the social
+preview. Use local DiceBear avatars in the lobby, seated human models at the
+3D table, and Lucide functional icons.
 
 ## Verification
 

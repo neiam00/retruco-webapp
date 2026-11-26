@@ -1,11 +1,14 @@
 import { socketURL } from '#lib/api.js';
 import { ReconnectBackoff } from '#lib/reconnect.js';
+import { MouthSampler, type MouthSource } from '#lib/voice-levels.js';
 import type { VoiceMode } from '#lib/voice-settings.js';
 
 export interface VoicePeer {
   id: string;
   name: string;
   canSpeak: boolean;
+  seat?: number;
+  userID?: string;
 }
 
 export interface VoiceState {
@@ -33,6 +36,7 @@ interface PeerConnection {
   peer: VoicePeer;
   connection: RTCPeerConnection;
   audio: HTMLAudioElement;
+  track?: MediaStreamTrack;
   makingOffer: boolean;
   ignoreOffer: boolean;
   settingAnswer: boolean;
@@ -76,6 +80,7 @@ export class VoiceSession {
   private peers = new Map<string, PeerConnection>();
   private servers: RTCIceServer[] = [];
   private stream?: MediaStream;
+  private mouthSampler?: MouthSampler;
   private refresh?: ReturnType<typeof setTimeout>;
   private backoff = new ReconnectBackoff();
   private failedJoins = 0;
@@ -101,6 +106,8 @@ export class VoiceSession {
     const url = new URL(socketURL(code));
     url.pathname = url.pathname.replace(/\/ws$/, '/voice');
     if (this.disposed || this.socket) return;
+    this.mouthSampler ??= new MouthSampler(code, () => this.mouthSources());
+    this.mouthSampler.resume();
     const socket = new WebSocket(url);
     this.socket = socket;
     let messages = Promise.resolve();
@@ -145,7 +152,27 @@ export class VoiceSession {
 
   private update(change: Partial<VoiceState>) {
     this.state = { ...this.state, ...change };
+    this.mouthSampler?.refresh();
     this.changed(this.state);
+  }
+
+  private mouthSources(): MouthSource[] {
+    if (!this.state.connected) return [];
+    const sources: MouthSource[] = [];
+    const add = (peer: VoicePeer | undefined, track: MediaStreamTrack | undefined) => {
+      if (peer?.canSpeak && peer.userID && peer.seat !== undefined && track) {
+        sources.push({ track, seat: peer.seat, userID: peer.userID });
+      }
+    };
+    if (this.state.talking) add(this.self, this.stream?.getAudioTracks()[0]);
+    for (const entry of this.peers.values()) {
+      const { connectionState: state } = entry.connection;
+      if (entry.closed || state === 'failed' || state === 'disconnected') continue;
+      if (!entry.audio.paused && !entry.audio.muted && entry.audio.volume > 0) {
+        add(entry.peer, entry.track);
+      }
+    }
+    return sources;
   }
 
   private send(message: object) {
@@ -156,6 +183,7 @@ export class VoiceSession {
 
   async setMode(mode: VoiceMode) {
     if (this.disposed) return;
+    this.mouthSampler?.resume();
     this.mode = mode;
     this.muted = false;
     this.microphoneWanted = mode !== 'listen';
@@ -221,6 +249,7 @@ export class VoiceSession {
   }
 
   async resumePlayback() {
+    this.mouthSampler?.resume();
     const results = await Promise.allSettled(
       [...this.peers.values()]
         .filter((peer) => peer.audio.srcObject)
@@ -269,6 +298,7 @@ export class VoiceSession {
     const connection = new RTCPeerConnection({ iceServers: this.servers });
     const audio = new Audio();
     audio.autoplay = true;
+    audio.onplaying = audio.onpause = audio.onvolumechange = () => this.mouthSampler?.refresh();
     const entry: PeerConnection = {
       peer,
       connection,
@@ -283,8 +313,14 @@ export class VoiceSession {
     connection.ontrack = ({ track, streams }) => {
       // Permissions come from the server roster, never from the sender's SDP.
       if (entry.closed || !entry.peer.canSpeak || track.kind !== 'audio') return;
+      entry.track = track;
       audio.srcObject = streams[0] ?? new MediaStream([track]);
-      void audio.play().catch(() => this.update({ playbackBlocked: true }));
+      void audio.play().then(
+        () => this.mouthSampler?.refresh(),
+        () => {
+          if (!entry.closed) this.update({ playbackBlocked: true });
+        },
+      );
     };
     connection.onicecandidate = ({ candidate }) => {
       if (!entry.closed && candidate)
@@ -298,6 +334,7 @@ export class VoiceSession {
       } else if (connection.connectionState === 'connected') {
         this.update({ error: '' });
       }
+      this.mouthSampler?.refresh();
     };
     connection.onnegotiationneeded = async () => {
       try {
@@ -323,6 +360,8 @@ export class VoiceSession {
   }
 
   private syncPeers(peers: VoicePeer[]) {
+    const self = peers.find((peer) => peer.id === this.self?.id);
+    if (self && self.canSpeak === this.self?.canSpeak) this.self = self;
     // Two listeners cannot send audio to each other. Keep them in the roster,
     // but avoid allocating a WebRTC connection (and potentially a TURN relay).
     const audible = new Map(
@@ -424,8 +463,10 @@ export class VoiceSession {
     entry.closed = true;
     entry.candidates.length = 0;
     entry.connection.close();
+    entry.audio.onplaying = entry.audio.onpause = entry.audio.onvolumechange = null;
     entry.audio.pause();
     entry.audio.srcObject = null;
+    entry.track = undefined;
   }
 
   private disconnect() {
@@ -444,6 +485,8 @@ export class VoiceSession {
     this.disposed = true;
     this.backoff.cancel();
     this.disconnect();
+    this.mouthSampler?.close();
+    this.mouthSampler = undefined;
     this.update({ reconnecting: false, error: '' });
   }
 }

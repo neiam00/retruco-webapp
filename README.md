@@ -68,8 +68,8 @@ cannot establish direct connections; see the backend's
 
 ## Assets and CPU engine
 
-Card artwork is based on [Spanish playing cards SVG](https://github.com/gjenkins20/spanish-playing-cards-svg);
-see [attribution](static/cards/ATTRIBUTION.md). Edit `artwork/cards/*.svg` and
+The 40 playable faces and the common back are original Retruco illustrations.
+See the [artwork notice](static/cards/ATTRIBUTION.md). Edit `artwork/cards/*.svg` and
 run `pnpm cards:build` to regenerate the WebP files and manifest. The build also
 runs this conversion. Keep the generated content-hashed filenames when
 publishing the deck to a CDN.
@@ -77,6 +77,48 @@ publishing the deck to a CDN.
 Edit `artwork/social-preview.html` and run `pnpm social:build` to regenerate the
 social image; this requires Playwright Chromium. See
 [the image license](static/og-image.LICENSE.md).
+
+## 3D table
+
+The v2 client renders the match and guided tutorial with Three.js and WebGL 2.
+The scene fills the browser viewport. Scores, the turn timer, and actions sit
+over the scene and stay within the device's safe area.
+Players can switch between 3D and Classic in the same hand. The browser keeps
+the selected view locally. The live game continues through a graphics failure.
+Both views use the server's seat-specific snapshot, including card and signal
+visibility.
+
+The original room and rigged characters are in `artwork/table3d/`. The browser
+loads the exports and card atlas from `static/table3d/` when entering 3D.
+Use the wardrobe before taking a seat or in a waiting room. The server saves
+changes for guests and registered players. Filling the last seat starts play.
+
+To rebuild the artwork from its drawing and modeling scripts, run these from
+the frontend root with Python and Blender 5.3 installed:
+
+```sh
+python3 artwork/cards/draw.py
+pnpm cards:build
+blender --background --python artwork/table3d/build.py
+```
+
+The first step redraws the editable SVG faces. The second produces the Classic
+images and the 3D atlas and checks both horizontal suit markings. The Blender
+script uses that atlas to build the editable deck alongside the room and rig.
+
+Development and preview builds default to 3D. The production Pages build on
+`master` defaults to Classic until the mobile release check passes. Set
+`VITE_TABLE_3D_DEFAULT=true` when enabling that release, or `false` to roll
+back the default. Explicit player preferences take precedence.
+
+For the release check, run a full 2v2 table with voice and a browser CPU seat
+for 20 minutes on a physical budget Android phone in Chrome and an older
+iPhone in Safari. Record cold load time, animation frame intervals, touch
+errors, and whether the same hand remains playable after graphics context
+loss. All 3D quality settings target 60 fps during motion. The renderer draws
+only when the scene needs an update. Both mobile presets cap the render device
+pixel ratio at 1. Exercise portrait at 360 CSS pixels and landscape, including
+a canto interrupting card selection and a pegado.
 
 ## Browser CPU
 
@@ -152,11 +194,11 @@ checkout so local preview assets in `static/cpu-evaluation/` stay local.
 
 ## License
 
-The project code is available under the [MIT License](LICENSE). Separately
-licensed third-party material retains its own terms and notices:
+The project code is available under the [MIT License](LICENSE). The game
+assets and third-party material have the following notices:
 
-- The card artwork in `artwork/cards/` and its generated WebP copies are
-  licensed under CC BY-SA 3.0; see [card attribution](static/cards/ATTRIBUTION.md).
+- The original game deck and Blender artwork use the project's MIT license.
+  See the [card artwork notice](static/cards/ATTRIBUTION.md).
 - The social preview image is licensed under CC BY-SA 3.0; see its
   [license and attribution](static/og-image.LICENSE.md).
 - The vendored UI components have their own [MIT license](src/lib/components/ui/LICENSE.md).

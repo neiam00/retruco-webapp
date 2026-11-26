@@ -44,6 +44,12 @@ export class CardSounds {
     void this.context?.close().catch(() => {});
   }
 
+  landed(kind: CardSound) {
+    if (!this.closed && !this.muted && !document.hidden && this.context?.state === 'running') {
+      this.play(kind, this.context.currentTime);
+    }
+  }
+
   update(previous: Snapshot | null, next: Snapshot) {
     const before = previous?.state;
     const after = next.state;

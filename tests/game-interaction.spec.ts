@@ -2,6 +2,9 @@ import { expect, test } from '@playwright/test';
 import { showTable, tableSnapshot } from './fixtures/table.js';
 import type { Command } from '../src/lib/protocol.js';
 import { expectClearTableCards } from './table-layout.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 test('teammate signals are offered only in 2v2', async ({ page }) => {
   const snapshot = tableSnapshot(2, 0, false);
@@ -562,13 +565,20 @@ test('deployment notice survives downtime and clears after automatic reconnectio
   await page.screenshot({ path: testInfo.outputPath('deployment-notice.png') });
   let unavailable = true;
   let attempts = 0;
-  await page.routeWebSocket(`**/api/matches/${initial.code}/ws?transport=2`, async (socket) => {
-    attempts++;
-    if (unavailable) {
-      socket.send(JSON.stringify({ type: 'error', status: 503, error: 'Deployment maintenance' }));
-      await socket.close();
-    } else socket.send(JSON.stringify({ type: 'snapshot', data: paused }));
-  });
+  await page.routeWebSocket(
+    (url) =>
+      url.pathname.endsWith(`/api/matches/${initial.code}/ws`) &&
+      url.searchParams.get('transport') === '2',
+    async (socket) => {
+      attempts++;
+      if (unavailable) {
+        socket.send(
+          JSON.stringify({ type: 'error', status: 503, error: 'Deployment maintenance' }),
+        );
+        await socket.close();
+      } else socket.send(JSON.stringify({ type: 'snapshot', data: paused }));
+    },
+  );
   await update.disconnect();
   await page.clock.fastForward(2500);
   await expect.poll(() => attempts).toBeGreaterThan(0);

@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { showTable, tableSnapshot } from './fixtures/table.js';
 import type { HandRecap, Snapshot } from '../src/lib/protocol.js';
+import { classicTableState } from './fixtures/classic-table.js';
+
+test.use({ storageState: classicTableState });
 
 function recap(): HandRecap {
   return {

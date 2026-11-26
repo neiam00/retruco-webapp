@@ -202,6 +202,7 @@ test('invitations provide a local QR, native sharing, cancellation and a copy fa
   page,
 }, testInfo) => {
   await page.addInitScript(() => {
+    localStorage.setItem('retruco.table.mode', 'classic');
     Object.defineProperty(navigator, 'share', {
       configurable: true,
       value: async (data: ShareData) => {
