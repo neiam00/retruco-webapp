@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Focus, Layers } from '@lucide/svelte';
+  import { browser } from '$app/env';
+  import { untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { cardName, cardURL } from '#lib/cards.js';
   import type { Snapshot } from '#lib/protocol.js';
@@ -48,6 +50,7 @@
     selectedTop = null,
     cardLabels = true,
     poses = new Map(),
+    onloading,
     onready,
     onfailure,
     ondealing = () => {},
@@ -64,6 +67,7 @@
     selectedTop?: number | null;
     cardLabels?: boolean;
     poses?: ReadonlyMap<number, HeadPose>;
+    onloading: () => void;
     onready: () => void;
     onfailure: () => void;
     ondealing?: (value: boolean) => void;
@@ -73,6 +77,7 @@
   } = $props();
 
   let scene = $state.raw<TableScene>();
+  let renderProfile = $derived(browser ? tableQuality(quality) : 'desktop');
   let reducedMotion = $state(false);
   let autoFocusCantos = $state(true);
   let hovered = $state.raw<PointerLabel | null>(null);
@@ -106,7 +111,11 @@
   let labelTimer: ReturnType<typeof setTimeout>;
 
   function mountScene(canvas: HTMLCanvasElement) {
-    const profile = tableQuality(quality);
+    // The keyed canvas owns its WebGL context until it is removed.
+    const profile = untrack(() => {
+      onloading();
+      return renderProfile;
+    });
     const preference = matchMedia('(prefers-reduced-motion: reduce)');
     reducedMotion = preference.matches;
     autoFocusCantos = readAutoFocusCantos();
@@ -118,6 +127,12 @@
     });
     let disposed = false;
     let instance: TableScene | undefined;
+    const isCurrent = () => !disposed && renderProfile === profile;
+    const failure = () => {
+      if (!isCurrent()) return;
+      cancelGesture();
+      onfailure();
+    };
     const updatePreference = () => (reducedMotion = preference.matches);
     const visibility = () => {
       if (document.hidden) cancelGesture();
@@ -128,34 +143,42 @@
     document.addEventListener('visibilitychange', visibility);
     void import('#lib/table3d/scene.js')
       .then(({ TableScene }) => {
-        if (disposed) return;
+        if (!isCurrent()) return;
         instance = new TableScene(canvas, profile, {
-          ready: () => onready(),
-          failure: () => {
-            cancelGesture();
-            onfailure();
+          ready: () => {
+            if (isCurrent()) onready();
           },
-          dealing: (value) => ondealing(value),
-          landed: (kind) => onlanded(kind),
-          pose: (value) => onpose(value),
-          hover: (value) => (hovered = value),
-          cue: (value) => (speaking = value),
+          failure,
+          dealing: (value) => {
+            if (isCurrent()) ondealing(value);
+          },
+          landed: (kind) => {
+            if (isCurrent()) onlanded(kind);
+          },
+          pose: (value) => {
+            if (isCurrent()) onpose(value);
+          },
+          hover: (value) => {
+            if (isCurrent()) hovered = value;
+          },
+          cue: (value) => {
+            if (isCurrent()) speaking = value;
+          },
         });
         scene = instance;
       })
-      .catch(() => {
-        if (!disposed) onfailure();
-      });
+      .catch(failure);
     return () => {
       disposed = true;
       releaseAutoFocus();
       releaseAutoFocusStorage();
       preference.removeEventListener('change', updatePreference);
       document.removeEventListener('visibilitychange', visibility);
-      cancelGesture();
+      if (gesture?.canvas === canvas) cancelGesture();
       instance?.dispose();
+      if (scene !== instance) return;
       onpose(null);
-      if (scene === instance) scene = undefined;
+      scene = undefined;
       clearTimeout(labelTimer);
       hovered = null;
       speaking = null;
@@ -347,17 +370,19 @@
     En pantallas táctiles, toca una carta o un botón una vez. Desliza un dedo sobre la mesa para
     mover la cámara.
   </span>
-  <canvas
-    {@attach mountScene}
-    aria-hidden="true"
-    onpointerdown={start}
-    onpointermove={move}
-    onpointerup={finish}
-    onpointercancel={cancelPointer}
-    onlostpointercapture={cancelPointer}
-    onpointerleave={() => scene?.endHover()}
-    oncontextmenu={suppressTouchMenu}
-  ></canvas>
+  {#key renderProfile}
+    <canvas
+      {@attach mountScene}
+      aria-hidden="true"
+      onpointerdown={start}
+      onpointermove={move}
+      onpointerup={finish}
+      onpointercancel={cancelPointer}
+      onlostpointercapture={cancelPointer}
+      onpointerleave={() => scene?.endHover()}
+      oncontextmenu={suppressTouchMenu}
+    ></canvas>
+  {/key}
   {#if visible}
     {#each snapshot.seats as seat, index (seat.id || index)}
       {#if seat.id && index !== perspective}

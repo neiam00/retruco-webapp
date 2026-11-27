@@ -51,6 +51,7 @@
   let sceneReset = $state(0);
   let practicePicker = $state(false);
   let coachOpen = $state(true);
+  let settingsOpen = $state(false);
   let practiceView = $derived(step ? lessonSnapshot(step.view, step.events) : null);
 
   async function load() {
@@ -136,7 +137,7 @@
   }
 
   function setTableQuality(quality: QualitySetting) {
-    sceneReady = sceneFailed = false;
+    sceneFailed = false;
     tableQuality = quality;
     saveTableSetting(tableQualityKey, quality);
   }
@@ -321,7 +322,7 @@
             </Button>{/if}
         </div>
         {#if sceneReady}
-          <details class="tutorial-settings">
+          <details class="tutorial-settings" bind:open={settingsOpen}>
             <summary>Vista y cámara</summary>
             <TableRenderSettings
               mode={tableMode}
@@ -352,6 +353,7 @@
               quality={tableQuality}
               canSelectCard={choosingCard}
               onselect={chooseCard}
+              onloading={() => (sceneReady = false)}
               onready={() => (sceneReady = true)}
               onfailure={() => {
                 sceneReady = false;
