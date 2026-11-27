@@ -114,6 +114,71 @@ test('a fresh match follows the build default and can change renderer within tha
   await expect(page.getByLabel('Marcador', { exact: true })).toContainText('3');
 });
 
+test.describe('3D quality settings', () => {
+  test.use({ deviceScaleFactor: 2, viewport: { width: 800, height: 960 } });
+
+  test('repeated quality changes keep the same match playable in 3D', async ({ page }, {
+    project,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem('retruco.table.mode', '3d'));
+    const table = tableSnapshot(4, 1, false);
+    table.state!.legal = [{ type: 'call', kind: 'truco', amount: 3 }];
+    const commands: Command[] = [];
+    const update = await showTable(page, table, (command) => commands.push(command));
+    const canvas = scene(page).locator('canvas');
+    await expect(canvas).toBeVisible();
+    const renderedQuality = () =>
+      canvas.evaluate((element: HTMLCanvasElement) => {
+        const scale = element.width / element.clientWidth;
+        if (scale > 1.25) return 'desktop';
+        return scale < 0.9 ? 'mobile-low' : 'mobile';
+      });
+    const automatic = await renderedQuality();
+
+    const menu = page.getByRole('button', { name: 'Detalles de la partida', exact: true });
+    const openMenu = () => (project.use.hasTouch ? menu.tap() : menu.click());
+    const quality = page.getByRole('combobox', { name: 'Calidad 3D', exact: true });
+    const unavailable = page.getByText('La vista 3D no está disponible.', { exact: false });
+    await openMenu();
+    await expect(quality).toHaveValue('auto');
+
+    for (const [setting, expected] of [
+      [automatic, automatic],
+      ['auto', automatic],
+      ['desktop', 'desktop'],
+      ['mobile', 'mobile'],
+      ['mobile-low', 'mobile-low'],
+      ['auto', automatic],
+      ['mobile-low', 'mobile-low'],
+    ]) {
+      await test.step(`Select ${setting} and render as ${expected}`, async () => {
+        await quality.selectOption(setting);
+        await expect(quality).toHaveValue(setting);
+        await expect(unavailable).toHaveCount(0);
+        await expect(canvas).toBeVisible();
+        await expect.poll(renderedQuality).toBe(expected);
+      });
+    }
+
+    await page.keyboard.press('Escape');
+    await openMenu();
+    await expect(quality).toHaveValue('mobile-low');
+    await page.keyboard.press('Escape');
+
+    const next = structuredClone(table);
+    next.sequence++;
+    next.state!.revision++;
+    next.state!.scores[0] = 7;
+    update(next);
+    await expect(page.getByLabel('Marcador', { exact: true })).toContainText('7');
+    const truco = page.getByRole('button', { name: 'Truco', exact: true });
+    if (project.use.hasTouch) await truco.tap();
+    else await truco.click();
+    await expect.poll(() => commands).toEqual([{ type: 'call', kind: 'truco', amount: 3 }]);
+    await expect(canvas).toBeVisible();
+  });
+});
+
 for (const size of [
   { width: 360, height: 740 },
   { width: 740, height: 360 },
@@ -157,9 +222,9 @@ for (const size of [
   });
 }
 
-test('WebGL context loss falls back within the same match and preserves card input', async ({
+test('WebGL context loss preserves classic card input and can retry 3D within the match', async ({
   page,
-}) => {
+}, { project }) => {
   await page.addInitScript(() => localStorage.setItem('retruco.table.mode', '3d'));
   const table = tableSnapshot(2, 1, false);
   table.state!.legal = [{ type: 'play', card: 1 }];
@@ -174,10 +239,23 @@ test('WebGL context loss falls back within the same match and preserves card inp
       extension.loseContext();
     });
   await expect(scene(page)).toHaveCount(0);
+  await expect(page.locator('.felt-table')).toBeVisible();
   const card = page.getByRole('button', { name: '2 de espadas' });
   await expect(card).toBeEnabled();
-  await card.click();
-  expect(command).toEqual({ type: 'play', card: 1, declaration: '' });
+  if (project.use.hasTouch) await card.tap();
+  else await card.click();
+  await expect.poll(() => command).toEqual({ type: 'play', card: 1, declaration: '' });
+
+  const menu = page.getByRole('button', { name: 'Detalles de la partida', exact: true });
+  if (project.use.hasTouch) await menu.tap();
+  else await menu.click();
+  await expect(page.getByText('La vista 3D no está disponible.', { exact: false })).toBeVisible();
+  const retry = page.getByRole('button', { name: 'Reintentar 3D', exact: true });
+  if (project.use.hasTouch) await retry.tap();
+  else await retry.click();
+  await expectViewport(page);
+  await expect(retry).toHaveCount(0);
+  await expect(page.getByLabel('Marcador', { exact: true })).toContainText('3');
 });
 
 test('a new canto focuses its caller and manual look interrupts while reply remains legal', async ({

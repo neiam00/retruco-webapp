@@ -234,7 +234,7 @@
 
   function setTableQuality(quality: QualitySetting, persist = true) {
     if (tableQuality === quality) return;
-    sceneReady = sceneFailed = sceneDealing = false;
+    sceneFailed = false;
     tableQuality = quality;
     updateDeckPreload(snapshot);
     if (persist) saveTableSetting(tableQualityKey, quality);
@@ -1206,6 +1206,7 @@
                 selectedTop={top}
                 cardLabels={cardLabelsEnabled}
                 {poses}
+                onloading={() => (sceneReady = sceneDealing = false)}
                 onready={sceneLoaded}
                 onfailure={sceneUnavailable}
                 ondealing={(value) => (sceneDealing = value)}
