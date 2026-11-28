@@ -31,8 +31,10 @@ import {
   type HeadPose,
   type LookAngles,
 } from './camera.js';
+import { CardRanks } from './card-ranks.js';
 import { loadCardTexture, TableCards, type TableCard } from './cards.js';
 import { FramePacer } from './frame-pacer.js';
+import { lightTableRoom } from './lighting.js';
 import {
   fanGrip,
   fanOffset,
@@ -150,6 +152,8 @@ export class TableScene {
   private readonly played = new Map<string, VisibleCard>();
   private readonly deck: VisibleCard[] = [];
   private readonly flights = new Map<VisibleCard, Flight>();
+  private readonly cardRanks = new CardRanks();
+  private readonly viewport = new THREE.Vector2();
   private readonly contacts = new THREE.Group();
   private readonly labels = new Map<number, HTMLElement>();
   private readonly labelView = new THREE.Matrix4();
@@ -215,25 +219,7 @@ export class TableScene {
       antialias: quality === 'desktop',
       powerPreference: quality === 'desktop' ? 'high-performance' : 'low-power',
     });
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.04;
-    const ambient = new THREE.HemisphereLight(0xc6d4dc, 0x4d3926, 1.52);
-    const lamp = new THREE.PointLight(0xffe2b9, 3.15, 4);
-    lamp.position.set(0, 1.88, 0);
-    const key = new THREE.DirectionalLight(0xffead0, 0.78);
-    key.position.set(-1.4, 2.2, 1.6);
-    if (this.quality.shadows) {
-      this.renderer.shadowMap.enabled = true;
-      key.castShadow = true;
-      key.shadow.mapSize.set(768, 768);
-      key.shadow.camera.left = key.shadow.camera.bottom = -2;
-      key.shadow.camera.right = key.shadow.camera.top = 2;
-      key.shadow.camera.far = 6;
-      key.shadow.normalBias = 0.015;
-    }
-    this.world.add(ambient, lamp, key);
-    this.world.background = new THREE.Color(0x232a22);
+    lightTableRoom(this.world, this.renderer, this.quality.shadows);
     this.canvas.addEventListener('webglcontextlost', this.contextLost);
     this.observer = new ResizeObserver(() => {
       this.resizePending = true;
@@ -279,6 +265,7 @@ export class TableScene {
       }
     });
     this.cardSet = new TableCards(texture.value, this.lowQuality);
+    this.world.add(this.cardRanks.object);
     this.drawing = true;
     if (this.snapshot) this.baseline(this.snapshot);
     this.visibility(document.hidden);
@@ -597,7 +584,7 @@ export class TableScene {
         !!(bottom?.concealed || (game.mandatoryStack && bottom?.burned && top.burned));
       for (const [round, play] of player.plays.entries()) {
         if (!play.present) continue;
-        const visual = this.make(play.card);
+        const visual = this.make(play.burned || play.concealed ? undefined : play.card);
         this.played.set(`${player.seat}:${round}`, visual);
         this.setPlace(visual, this.positionPlay(player.seat, round, stacked, play.burned));
       }
@@ -906,7 +893,7 @@ export class TableScene {
   }
 
   private playCard(placement: Placement, stacked: boolean, audible: boolean) {
-    const { seat, round, heldIndex, card, burned } = placement;
+    const { seat, round, heldIndex, card, burned, concealed } = placement;
     const rack = this.held.get(seat);
     let source = heldIndex;
     if (source === undefined && rack) {
@@ -928,7 +915,7 @@ export class TableScene {
         if (!held) this.setPlace(visual, this.positionHeld(seat, round));
         if (source !== undefined) rack?.delete(source);
         if (this.hovered === visual) this.endHover();
-        this.syncFace(visual, card);
+        this.syncFace(visual, burned || concealed ? undefined : card);
         this.played.set(`${seat}:${round}`, visual);
         this.fly(
           visual,
@@ -946,7 +933,7 @@ export class TableScene {
     const visual = this.played.get(`${seat}:${round}`);
     if (!visual) return;
     visual.object.rotateY(Math.PI);
-    this.syncFace(visual, card);
+    this.syncFace(visual, burned || concealed ? undefined : card);
     this.fly(
       visual,
       () => this.positionPlay(seat, round, concealed, burned),
@@ -1177,6 +1164,7 @@ export class TableScene {
   private resize() {
     const { clientWidth: width, clientHeight: height } = this.canvas;
     if (!width || !height) return;
+    this.viewport.set(width, height);
     const dpr = Math.min(
       devicePixelRatio || 1,
       this.quality.dpr,
@@ -1192,6 +1180,17 @@ export class TableScene {
     this.camera.fov = cameraFieldOfView(this.camera.aspect);
     this.camera.updateProjectionMatrix();
     this.resizePending = false;
+  }
+
+  private updateCardRanks() {
+    const table = this.vira ? [this.vira, ...this.played.values()] : [...this.played.values()];
+    const faces = table.flatMap((visual) =>
+      visual.card && !this.flights.has(visual)
+        ? [{ number: visual.card.number, object: visual.object }]
+        : [],
+    );
+    const occluders = faces.length ? this.allCards().map(({ object }) => object) : [];
+    this.cardRanks.update(this.camera, this.viewport, faces, occluders);
   }
 
   private readonly tick = (ms: number) => {
@@ -1214,6 +1213,7 @@ export class TableScene {
           if (!this.flights.has(card)) this.setPlace(card, this.positionHeld(seat, index));
         }
       }
+      this.updateCardRanks();
       this.renderer.render(this.world, this.camera);
       this.updateLabels();
       if (!this.ready && !this.resizePending) {
@@ -1306,6 +1306,7 @@ export class TableScene {
     if (this.room) disposeScene(this.room);
     this.labels.clear();
     disposeScene(this.contacts);
+    this.cardRanks.dispose();
     this.cardSet?.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
