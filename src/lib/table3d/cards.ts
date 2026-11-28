@@ -4,7 +4,7 @@ import type { Card } from '#lib/protocol.js';
 import { cardHeight, cardWidth } from './hand-fan.js';
 
 const suits = ['coins', 'cups', 'spades', 'clubs'];
-const ranks = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12];
+export const tableCardNumbers = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12];
 const backTile = 40;
 
 export interface TableCard {
@@ -49,9 +49,9 @@ export class TableCards {
       }
     }
     atlas.colorSpace = THREE.SRGBColorSpace;
-    atlas.anisotropy = low ? 1 : 4;
+    atlas.anisotropy = low ? 2 : 4;
     atlas.minFilter = THREE.LinearMipmapLinearFilter;
-    this.material = new THREE.MeshBasicMaterial({ map: atlas, alphaTest: 0.5 });
+    this.material = new THREE.MeshBasicMaterial({ map: atlas, alphaTest: 0.5, toneMapped: false });
   }
 
   private tile(index: number) {
@@ -73,7 +73,7 @@ export class TableCards {
     const setFace = (card?: Card) => {
       if (card) {
         const suit = suits.indexOf(card.suit);
-        const rank = ranks.indexOf(card.number);
+        const rank = tableCardNumbers.indexOf(card.number);
         face.geometry = this.tile(suit >= 0 && rank >= 0 ? suit * 10 + rank : backTile);
       } else {
         face.geometry = this.tile(backTile);

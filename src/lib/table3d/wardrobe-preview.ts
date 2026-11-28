@@ -10,6 +10,7 @@ import {
   type TableAvatar,
 } from './avatar.js';
 import { seatDistance } from './camera.js';
+import { lightTableRoom } from './lighting.js';
 
 export class WardrobePreview {
   private readonly renderer: THREE.WebGLRenderer;
@@ -32,17 +33,8 @@ export class WardrobePreview {
       antialias: true,
       powerPreference: 'low-power',
     });
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.3;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.75));
-    this.scene.background = new THREE.Color(0x232a22);
-    const ambient = new THREE.HemisphereLight(0xd4e1ff, 0x633b25, 2.7);
-    const lamp = new THREE.PointLight(0xffd5a0, 6.5, 4);
-    lamp.position.set(0, 1.88, 0);
-    const key = new THREE.DirectionalLight(0xffead0, 1.2);
-    key.position.set(-1.4, 2.2, 1.6);
-    this.scene.add(ambient, lamp, key);
+    lightTableRoom(this.scene, this.renderer);
     this.camera.position.set(0.15, 1.48, 0.91);
     this.camera.lookAt(0, 1.16, -seatDistance);
     this.canvas.addEventListener('webglcontextlost', this.contextLost);

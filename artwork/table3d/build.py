@@ -1,7 +1,7 @@
 """Build scenes and web models with blender -b -P build.py, optionally -- player."""
 import bpy
 import sys
-from math import cos, sin, pi, radians
+from math import cos, exp, sin, pi, radians
 from mathutils import Vector, Matrix, Quaternion
 from pathlib import Path
 from collections import defaultdict
@@ -224,8 +224,8 @@ def preview_hand(rig):
         ob['studio_preview']=True
 
 
-def save(name):
-    bpy.ops.export_scene.gltf(filepath=str(STATIC/(name+'.glb')),export_format='GLB',export_animations=True,export_animation_mode='ACTIONS',export_cameras=False,export_lights=False)
+def save(name, **texture_settings):
+    bpy.ops.export_scene.gltf(filepath=str(STATIC/(name+'.glb')),export_format='GLB',export_animations=True,export_animation_mode='ACTIONS',export_cameras=False,export_lights=False,**texture_settings)
     # Studio camera and lights remain editable in the .blend. The runtime
     # owns lighting and camera placement to match the active seat.
     character=name=='player'
@@ -257,6 +257,18 @@ def save(name):
 
 
 
+def room_uv(ob, horizontal, vertical, origin):
+    """Register a nonrepeating baked field to the dimensions of the room mesh."""
+    # The room's objects are joined before export. A shared layer name keeps
+    # every material's coordinates in glTF's first texture coordinate set.
+    uv=ob.data.uv_layers.new(name='Timber and baize')
+    u,v=Vector(horizontal),Vector(vertical)
+    for loop in ob.data.loops:
+        point=ob.data.vertices[loop.vertex_index].co
+        uv.data[loop.index].uv=(u.dot(point)+origin[0],v.dot(point)+origin[1])
+    return ob
+
+
 def room():
     global part
     reset()
@@ -264,8 +276,8 @@ def room():
     ink=mat('End grain',(.25,.102,.034)); felt=mat('Bottle green baize',(.028,.18,.09))
     rim=mat('Polished brass',(.42,.27,.10),.6,.32); dark=mat('Cup well',(.032,.023,.015))
     iron=mat('Gunmetal frame',(.065,.065,.055),.65,.45)
-    woods=[mat('Floorboard '+str(i),(.045+i*.006,.034+i*.005,.028+i*.004)) for i in range(4)]
-    wall=mat('Midnight plaster',(.044,.055,.054)); wainscot=mat('Panel mouldings',(.066,.072,.055))
+    woods=[mat('Floorboard '+str(i),(.092+i*.010,.067+i*.007,.050+i*.005)) for i in range(4)]
+    wall=mat('Midnight plaster',(.044,.055,.054)); wainscot=mat('Panel mouldings',(.13,.16,.15))
     grain_rng=Random(8719)
     def wood_field(x,y,w,h):
         u,v=x/w,y/h
@@ -273,17 +285,32 @@ def room():
         t=v+bend+.0028*sin(10*pi*u+v*4*pi)
         wave=sin(54*pi*t)+.48*sin(108*pi*t)+.21*sin(216*pi*t)
         pores=max(0,sin(270*pi*t+.24*sin(8*pi*u))-.77)*19
-        variation=6.8*wave-pores+2.4*sin(12*pi*u+2*pi*v)+grain_rng.uniform(-2.1,2.1)
-        return (181+variation,130+variation*.88,70+variation*.60)
+        variation=8.0*wave-pores+3.2*sin(12*pi*u+2*pi*v)+grain_rng.uniform(-1.7,1.7)
+        return (161+variation,114+variation*.91,68+variation*.64)
     def felt_field(x,y,w,h):
-        fleck=grain_rng.uniform(-8,8)+1.9*sin((x+y)*pi*.4)+1.4*cos((x-y)*pi*.5)
-        return (33+fleck*.49,108+fleck,67+fleck*.75)
+        u,v=2*(x+.5)/w-1,2*(y+.5)/h-1
+        # The shade feathers across the cloth. The raised rails occlude the
+        # last couple of centimetres, including on phones without shadows.
+        beam=exp(-1.9*(u*u+v*v))
+        rim=1-.17*exp(-(1-max(abs(u),abs(v)))/.035)
+        nap=grain_rng.uniform(-3,3)+1.5*sin((x+y)*pi*.5)+.8*cos((x-y)*pi*.5)
+        return ((22+25*beam+nap*.55)*rim,(73+35*beam+nap)*rim,(56+27*beam+nap*.76)*rim)
+    def plaster_field(x,y,w,h):
+        u,v=(x+.5)/w,1-(y+.5)/h
+        spill=exp(-((u-.54)/.35)**2-((v-.46)/.40)**2)
+        # Slightly warmer plaster where the lamp spills above the woodwork.
+        panel=.90 if v<.285 else 1-.13*exp(-(v-.285)/.032)
+        grain=grain_rng.uniform(-1.4,1.4)
+        return tuple((base+lift*spill+grain)*panel for base,lift in ((70,49),(87,52),(90,47)))
     wood_image=tabletop_texture('Quarter-sawn honey oak',512,256,wood_field)
-    cloth_image=tabletop_texture('Woven billiard baize',128,128,felt_field)
+    cloth_image=tabletop_texture('Baize under the pendant',320,320,felt_field)
+    plaster_image=tabletop_texture('Plaster and panel light',128,80,plaster_field)
     for material in timber: mapped(material,wood_image)
+    mapped(wall,plaster_image)
     mapped(felt,cloth_image)
     felt.node_tree.nodes.get('Principled BSDF').inputs['Roughness'].default_value=.98
-    table_uv(box('Felt playing surface',(0,0,.731),(1.204,1.204,.058),felt,.012),repeat=6)
+    room_uv(box('Felt playing surface',(0,0,.731),(1.204,1.204,.058),felt,.012),
+            (1/1.204,0,0),(0,1/1.204,0),(.5,.5))
     def turn(x,y,n):
         for _ in range(n): x,y=-y,x
         return x,y
@@ -341,8 +368,10 @@ def room():
     for i in range(28):
         box('Oak floorboard',(-3.915+i*.29,0,-.037),(.286,8,.068),woods[i%4])
     for side in (-1,1):
-        box('Back wall',(0,side*4,1.6),(8,.09,3.2),wall)
-        box('Side wall',(side*4,0,1.6),(.09,8,3.2),wall)
+        room_uv(box('Back wall',(0,side*4,1.6),(8,.09,3.2),wall),
+                (side/8,0,0),(0,0,1/3.2),(.5,0))
+        room_uv(box('Side wall',(side*4,0,1.6),(.09,8,3.2),wall),
+                (0,-side/8,0),(0,0,1/3.2),(.5,0))
         for h in (.08,.87,.93):
             box('Wall trim',(0,side*3.94,h),(8,.075,.045),wainscot)
             box('Wall trim',(side*3.94,0,h),(.075,8,.045),wainscot)
@@ -358,7 +387,9 @@ def room():
         tube('Spun shade',(0,0,z0),(0,0,z1),r0,r1,shade,32)
     tube('Light diffuser',(0,0,1.927),(0,0,1.931),.216,.216,milk,32)
     for label,objects in parts.items(): merge(label,objects)
-    save('room')
+    # Keep the lossless swatches packed in Blender. Opaque room textures can
+    # travel as JPEGs inside the GLB without another browser request.
+    save('room',export_image_format='JPEG',export_image_quality=92)
 
 
 

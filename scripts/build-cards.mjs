@@ -12,7 +12,6 @@ const suits = ['coins', 'cups', 'swords', 'clubs'];
 const ranks = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12];
 
 async function checkPintas(image, stem) {
-  if (stem === 'card_back') return;
   const suit = stem.split('_')[1];
   const expected = suits.indexOf(suit);
   // At the smallest normal hand size, sample each printed rule separately.
@@ -38,6 +37,44 @@ async function checkPintas(image, stem) {
       throw new Error(
         `${stem} has ${segments} printed border segments at y=${y}; expected ${expected + 1}.`,
       );
+    }
+  }
+}
+
+async function checkCornerRank(image, stem) {
+  const width = 64;
+  const height = 96;
+  const pixels = await sharp(image)
+    .resize(width, height)
+    .removeAlpha()
+    .greyscale()
+    .raw()
+    .toBuffer();
+  const rank = Number(stem.split('_')[2]);
+  // At this hand size the print starts seven pixels from the left. Compare
+  // matching pixels after a half-turn so that nearby pips cannot supply
+  // a missing index. Each figure on a court card must read independently.
+  const figures =
+    rank >= 10
+      ? [
+          [7, 11],
+          [12, 17],
+        ]
+      : [[7, 12]];
+  for (const [left, right] of figures) {
+    let inkRows = 0;
+    let inkPixels = 0;
+    for (let y = 8; y <= 17; y++) {
+      const previous = inkPixels;
+      for (let x = left; x <= right; x++) {
+        const upper = pixels[y * width + x];
+        const lower = pixels[(height - 1 - y) * width + width - 1 - x];
+        if (Math.max(upper, lower) < 160) inkPixels++;
+      }
+      if (inkPixels > previous) inkRows++;
+    }
+    if (inkRows < 8 || inkPixels < 12) {
+      throw new Error(`${stem} needs a legible rank in both corners at ${width}px wide.`);
     }
   }
 }
@@ -74,7 +111,10 @@ for (const file of files) {
     }
   }
   const stem = file.slice(0, -4);
-  await checkPintas(image, stem);
+  if (stem !== 'card_back') {
+    await checkPintas(image, stem);
+    await checkCornerRank(image, stem);
+  }
   const hash = createHash('sha256').update(image).digest('hex').slice(0, 12);
   const filename = `${stem}-${hash}.webp`;
   await writeFile(join(outputDirectory, filename), image);
