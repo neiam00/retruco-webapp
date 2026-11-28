@@ -31,7 +31,6 @@ import {
   type HeadPose,
   type LookAngles,
 } from './camera.js';
-import { CardRanks } from './card-ranks.js';
 import { loadCardTexture, TableCards, type TableCard } from './cards.js';
 import { FramePacer } from './frame-pacer.js';
 import { lightTableRoom } from './lighting.js';
@@ -152,8 +151,6 @@ export class TableScene {
   private readonly played = new Map<string, VisibleCard>();
   private readonly deck: VisibleCard[] = [];
   private readonly flights = new Map<VisibleCard, Flight>();
-  private readonly cardRanks = new CardRanks();
-  private readonly viewport = new THREE.Vector2();
   private readonly contacts = new THREE.Group();
   private readonly labels = new Map<number, HTMLElement>();
   private readonly labelView = new THREE.Matrix4();
@@ -265,7 +262,6 @@ export class TableScene {
       }
     });
     this.cardSet = new TableCards(texture.value, this.lowQuality);
-    this.world.add(this.cardRanks.object);
     this.drawing = true;
     if (this.snapshot) this.baseline(this.snapshot);
     this.visibility(document.hidden);
@@ -1164,7 +1160,6 @@ export class TableScene {
   private resize() {
     const { clientWidth: width, clientHeight: height } = this.canvas;
     if (!width || !height) return;
-    this.viewport.set(width, height);
     const dpr = Math.min(
       devicePixelRatio || 1,
       this.quality.dpr,
@@ -1180,17 +1175,6 @@ export class TableScene {
     this.camera.fov = cameraFieldOfView(this.camera.aspect);
     this.camera.updateProjectionMatrix();
     this.resizePending = false;
-  }
-
-  private updateCardRanks() {
-    const table = this.vira ? [this.vira, ...this.played.values()] : [...this.played.values()];
-    const faces = table.flatMap((visual) =>
-      visual.card && !this.flights.has(visual)
-        ? [{ number: visual.card.number, object: visual.object }]
-        : [],
-    );
-    const occluders = faces.length ? this.allCards().map(({ object }) => object) : [];
-    this.cardRanks.update(this.camera, this.viewport, faces, occluders);
   }
 
   private readonly tick = (ms: number) => {
@@ -1213,7 +1197,6 @@ export class TableScene {
           if (!this.flights.has(card)) this.setPlace(card, this.positionHeld(seat, index));
         }
       }
-      this.updateCardRanks();
       this.renderer.render(this.world, this.camera);
       this.updateLabels();
       if (!this.ready && !this.resizePending) {
@@ -1239,7 +1222,7 @@ export class TableScene {
     }
   };
 
-  private pick(clientX: number, clientY: number) {
+  private pick(clientX: number, clientY: number, includeFlights = false) {
     if (!this.ready) return;
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.set(
@@ -1247,23 +1230,64 @@ export class TableScene {
       1 - ((clientY - rect.top) / rect.height) * 2,
     );
     this.ray.setFromCamera(this.pointer, this.camera);
-    const cards = this.allCards().filter((card) => !this.flights.has(card));
-    const matches = this.ray.intersectObjects(
+    const cards = includeFlights
+      ? [...new Set([...this.allCards(), ...this.flights.keys()])]
+      : this.allCards().filter((card) => !this.flights.has(card));
+    const [hit] = this.ray.intersectObjects(
       cards.map((card) => card.object),
-      true,
+      false,
     );
-    return cards.find((card) => card.object === matches[0]?.object.parent);
+    if (!hit) return;
+    const visual = cards.find((card) => card.object === hit.object);
+    if (visual) return { visual, front: (hit.face?.normal.z ?? 0) > 0.99, distance: hit.distance };
   }
 
   hover(clientX: number, clientY: number) {
     if (!this.props.cardLabels || this.dragging) return;
-    const card = this.pick(clientX, clientY);
-    if (!card?.card) {
+    const hit = this.pick(clientX, clientY);
+    if (!hit?.front || !hit.visual.card) {
       this.endHover();
       return;
     }
-    this.hovered = card;
-    this.callbacks.hover({ text: cardName(card.card), x: clientX, y: clientY });
+    this.hovered = hit.visual;
+    this.callbacks.hover({ text: cardName(hit.visual.card), x: clientX, y: clientY });
+  }
+
+  exposedTableCardAt(clientX: number, clientY: number): Card | undefined {
+    const hit = this.pick(clientX, clientY, true);
+    if (!hit?.front || !hit.visual.card || this.flights.has(hit.visual)) return;
+    const card = this.currentTableFace(hit.visual);
+    if (card?.suit !== hit.visual.card.suit || card.number !== hit.visual.card.number) return;
+    if (!this.cardObstructed(hit.distance)) return card;
+  }
+
+  private currentTableFace(visual: VisibleCard) {
+    const game = this.snapshot?.state;
+    if (!game) return;
+    if (visual === this.vira) return game.vira;
+    for (const { seat, plays } of game.seats) {
+      for (const [round, play] of plays.entries()) {
+        if (this.played.get(`${seat}:${round}`) === visual) {
+          if (play.present && !play.concealed && !play.burned) return play.card;
+          return;
+        }
+      }
+    }
+  }
+
+  private cardObstructed(distance: number) {
+    const obstacles: THREE.Mesh[] = [];
+    const collect = (object: THREE.Object3D) => {
+      if (object instanceof THREE.Mesh) obstacles.push(object);
+    };
+    this.room?.traverseVisible(collect);
+    for (const avatar of this.avatars) avatar.object.traverseVisible(collect);
+    this.ray.far = distance - 0.0001;
+    try {
+      return this.ray.intersectObjects(obstacles, false).length > 0;
+    } finally {
+      this.ray.far = Infinity;
+    }
   }
 
   endHover() {
@@ -1273,13 +1297,13 @@ export class TableScene {
 
   selectableCardAt(clientX: number, clientY: number) {
     if (!this.props.canSelectCard) return;
-    const card = this.pick(clientX, clientY);
+    const card = this.pick(clientX, clientY)?.visual;
     return card?.selectable === undefined ? undefined : card.object.id;
   }
 
   select(clientX: number, clientY: number, expectedTarget?: number) {
     if (!this.props.canSelectCard) return;
-    const card = this.pick(clientX, clientY);
+    const card = this.pick(clientX, clientY)?.visual;
     if (
       card?.selectable === undefined ||
       (expectedTarget !== undefined && card.object.id !== expectedTarget)
@@ -1306,7 +1330,6 @@ export class TableScene {
     if (this.room) disposeScene(this.room);
     this.labels.clear();
     disposeScene(this.contacts);
-    this.cardRanks.dispose();
     this.cardSet?.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
