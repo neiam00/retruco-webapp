@@ -9,6 +9,12 @@ const tileColumns = 5;
 const chipHeight = 12;
 const texelsPerPixel = 4;
 const printedCapHeight = cardHeight * (12 / 133);
+// Trim blank paper before reducing the actual ink on a narrow exposed face.
+const chipSizes = [
+  { trim: 0, scale: 1 },
+  { trim: 1.25, scale: 1 },
+  { trim: 1.25, scale: 0.85 },
+];
 const anchors = [
   [-0.31, 0.36],
   [0.31, -0.36],
@@ -17,6 +23,12 @@ const anchors = [
   [0, 0.22],
   [0, -0.22],
   [0, 0],
+  [-0.18, 0.29],
+  [0.18, -0.29],
+  [0.18, 0.29],
+  [-0.18, -0.29],
+  [0, 0.29],
+  [0, -0.29],
 ];
 const corners = [
   [-1, -1],
@@ -224,6 +236,7 @@ export class CardRanks {
     revision: number;
     anchor: number;
     number: number;
+    size: (typeof chipSizes)[number];
   }[] = [];
   private buffersDirty = false;
 
@@ -300,55 +313,61 @@ export class CardRanks {
   ) {
     const tile = tableCardNumbers.indexOf(number);
     if (tile < 0 || index >= capacity) return false;
-    const width = chipWidth(number);
-    const height = chipHeight;
     const uvX = ((tile % tileColumns) + 0.5) * tileWidth;
     const uvY = (Math.floor(tile / tileColumns) + 0.5) * tileHeight;
     const { width: textureWidth, height: textureHeight } = this.texture.image as HTMLCanvasElement;
 
-    for (let offset = 0; offset < anchors.length; offset++) {
-      const anchor = (face.anchorIndex + offset) % anchors.length;
-      const [x, y] = anchors[anchor];
-      const { x: centerX, y: centerY } = face.anchor(x, y, this.point);
-      if (
-        centerX < width / 2 ||
-        centerX > viewport.x - width / 2 ||
-        centerY < height / 2 ||
-        centerY > viewport.y - height / 2 ||
-        !face.contains(centerX, centerY, width / 2, height / 2) ||
-        this.occluders.some(
-          (other) => other !== face && other.covers(face, centerX, centerY, width / 2, height / 2),
+    for (const size of chipSizes) {
+      const inkHalfWidth = chipWidth(number) / 2 - size.trim;
+      const inkHalfHeight = chipHeight / 2 - size.trim;
+      const halfWidth = inkHalfWidth * size.scale;
+      const halfHeight = inkHalfHeight * size.scale;
+      for (let offset = 0; offset < anchors.length; offset++) {
+        const anchor = (face.anchorIndex + offset) % anchors.length;
+        const [x, y] = anchors[anchor];
+        const { x: centerX, y: centerY } = face.anchor(x, y, this.point);
+        if (
+          centerX < halfWidth ||
+          centerX > viewport.x - halfWidth ||
+          centerY < halfHeight ||
+          centerY > viewport.y - halfHeight ||
+          !face.contains(centerX, centerY, halfWidth, halfHeight) ||
+          this.occluders.some(
+            (other) =>
+              other !== face && other.covers(face, centerX, centerY, halfWidth, halfHeight),
+          )
         )
-      )
-        continue;
+          continue;
 
-      face.anchorIndex = anchor;
-      const previous = this.placements[index];
-      if (
-        previous?.face === face &&
-        previous.revision === face.revision &&
-        previous.anchor === anchor &&
-        previous.number === number
-      )
+        face.anchorIndex = anchor;
+        const previous = this.placements[index];
+        if (
+          previous?.face === face &&
+          previous.revision === face.revision &&
+          previous.anchor === anchor &&
+          previous.number === number &&
+          previous.size === size
+        )
+          return true;
+        this.placements[index] = { face, revision: face.revision, anchor, number, size };
+        this.buffersDirty = true;
+        for (const [corner, [dx, dy]] of corners.entries()) {
+          const px = centerX + dx * halfWidth;
+          const py = centerY + dy * halfHeight;
+          this.vertex
+            .set((px / viewport.x) * 2 - 1, (py / viewport.y) * 2 - 1, face.depth(px, py))
+            .unproject(camera);
+          const vertex = index * 4 + corner;
+          this.position.setXYZ(vertex, this.vertex.x, this.vertex.y, this.vertex.z);
+          this.color.setW(vertex, face.opacity);
+          this.uv.setXY(
+            vertex,
+            (uvX + dx * inkHalfWidth * texelsPerPixel) / textureWidth,
+            1 - (uvY - dy * inkHalfHeight * texelsPerPixel) / textureHeight,
+          );
+        }
         return true;
-      this.placements[index] = { face, revision: face.revision, anchor, number };
-      this.buffersDirty = true;
-      for (const [corner, [dx, dy]] of corners.entries()) {
-        const px = centerX + (dx * width) / 2;
-        const py = centerY + (dy * height) / 2;
-        this.vertex
-          .set((px / viewport.x) * 2 - 1, (py / viewport.y) * 2 - 1, face.depth(px, py))
-          .unproject(camera);
-        const vertex = index * 4 + corner;
-        this.position.setXYZ(vertex, this.vertex.x, this.vertex.y, this.vertex.z);
-        this.color.setW(vertex, face.opacity);
-        this.uv.setXY(
-          vertex,
-          (uvX + ((dx * width) / 2) * texelsPerPixel) / textureWidth,
-          1 - (uvY - ((dy * height) / 2) * texelsPerPixel) / textureHeight,
-        );
       }
-      return true;
     }
     return false;
   }

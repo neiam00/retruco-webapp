@@ -57,7 +57,8 @@ test('distant card ranks are painted at a readable size and respect concealed an
   face.card = { suit: 'cups', number: 12 };
   face.concealed = true;
   const update = await showTable(page, table);
-  await expect(page.getByRole('application')).toBeVisible();
+  const scene = page.getByRole('application');
+  await expect(scene).toBeVisible();
 
   const vira = { x: 34, y: 410, width: 45, height: 26 };
   const opposite = { x: 212, y: 403, width: 50, height: 35 };
@@ -75,4 +76,15 @@ test('distant card ranks are painted at a readable size and respect concealed an
   game.revision++;
   update(structuredClone(table));
   await expect.poll(() => digitHeights(page, opposite)).toEqual([]);
+
+  // A turn and a short landscape viewport both narrow the exposed vira.
+  await scene.press('ArrowLeft');
+  await scene.press('ArrowLeft');
+  const angledVira = { x: 117, y: 407, width: 42, height: 24 };
+  await expect.poll(async () => (await digitHeights(page, angledVira)).length).toBe(2);
+  await scene.press('ArrowRight');
+  await scene.press('ArrowRight');
+  await page.setViewportSize({ width: 740, height: 315 });
+  const landscapeVira = { x: 262, y: 189, width: 40, height: 19 };
+  await expect.poll(async () => (await digitHeights(page, landscapeVira)).length).toBe(2);
 });
