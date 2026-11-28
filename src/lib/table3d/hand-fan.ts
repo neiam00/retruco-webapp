@@ -3,6 +3,7 @@ import { seatDistance } from './camera.js';
 export const feltHeight = 0.76;
 export const cardWidth = 0.117;
 export const cardHeight = 0.177;
+export const cardThickness = 0.00062;
 export const gripBindPitch = -0.4;
 export const gripTransferDuration = 0.09;
 

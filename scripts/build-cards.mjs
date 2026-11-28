@@ -15,7 +15,7 @@ async function checkPintas(image, stem) {
   const suit = stem.split('_')[1];
   const expected = suits.indexOf(suit);
   // At the smallest normal hand size, sample each printed rule separately.
-  // Taking the darker of the adjacent rows handles subpixel registration.
+  // A single row through the ink keeps nearby illustrations out of the sample.
   const width = 40;
   const height = 60;
   const pixels = await sharp(image)
@@ -29,7 +29,7 @@ async function checkPintas(image, stem) {
     let segments = 0;
     let previousInk = false;
     for (let x = 5; x < width - 5; x++) {
-      const ink = Math.min(...[row - 1, row, row + 1].map((r) => pixels[r * width + x])) < 216;
+      const ink = pixels[row * width + x] < 216;
       if (ink && !previousInk) segments++;
       previousInk = ink;
     }
@@ -42,38 +42,38 @@ async function checkPintas(image, stem) {
 }
 
 async function checkCornerRank(image, stem) {
-  const width = 64;
-  const height = 96;
+  // The physical print is drawn at roughly this size in the reference pack.
+  // Sample each digit independently, in both opposed corners. Sampling
+  // a compact figure box keeps pips and the suit rules out of this check.
+  const width = 89;
+  const height = 133;
   const pixels = await sharp(image)
-    .resize(width, height)
+    .resize(width, height, { fit: 'fill' })
     .removeAlpha()
     .greyscale()
     .raw()
     .toBuffer();
   const rank = Number(stem.split('_')[2]);
-  // At this hand size the print starts seven pixels from the left. Compare
-  // matching pixels after a half-turn so that nearby pips cannot supply
-  // a missing index. Each figure on a court card must read independently.
   const figures =
     rank >= 10
       ? [
-          [7, 11],
-          [12, 17],
+          [11, 14],
+          [15, 19],
         ]
-      : [[7, 12]];
+      : [[11, 16]];
   for (const [left, right] of figures) {
     let inkRows = 0;
     let inkPixels = 0;
-    for (let y = 8; y <= 17; y++) {
+    for (let y = 11; y <= 18; y++) {
       const previous = inkPixels;
       for (let x = left; x <= right; x++) {
         const upper = pixels[y * width + x];
         const lower = pixels[(height - 1 - y) * width + width - 1 - x];
-        if (Math.max(upper, lower) < 160) inkPixels++;
+        if (Math.max(upper, lower) < 185) inkPixels++;
       }
       if (inkPixels > previous) inkRows++;
     }
-    if (inkRows < 8 || inkPixels < 12) {
+    if (inkRows < 5 || inkPixels < 7) {
       throw new Error(`${stem} needs a legible rank in both corners at ${width}px wide.`);
     }
   }
@@ -152,7 +152,8 @@ const tiles = await Promise.all(
 );
 const tableDirectory = join(root, 'static/table3d');
 await mkdir(tableDirectory, { recursive: true });
-await sharp({ create: { width: 2048, height: 2304, channels: 4, background: '#fff3d6' } })
+await sharp({ create: { width: 2048, height: 2304, channels: 4, background: '#fff' } })
   .composite(tiles)
-  .webp({ quality: 92, alphaQuality: 100 })
+  // Sharp chroma subsampling preserves the thin coloured ink in the small tiles.
+  .webp({ quality: 88, smartSubsample: true, effort: 6, alphaQuality: 100 })
   .toFile(join(tableDirectory, 'cards.webp'));

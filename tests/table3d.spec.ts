@@ -515,6 +515,48 @@ test('a quick one-finger swipe turns the camera without playing the card underne
   expect(commands).toEqual([]);
 });
 
+test('tapping a public table card shows its printed face and a covered card stays private', async ({
+  page,
+}, { project }) => {
+  test.skip(!project.use.hasTouch, 'Uses a touchscreen.');
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => localStorage.setItem('retruco.table.mode', '3d'));
+  const table = tableSnapshot(4, 2, false);
+  const game = table.state!;
+  const play = game.seats[2].plays[0];
+  play.card = { suit: 'cups', number: 11 };
+  game.legal = [{ type: 'play', card: 2 }];
+  const commands: Command[] = [];
+  const update = await showTable(page, table, (cmd) => commands.push(cmd));
+  await expectViewport(page);
+
+  // The far player's card and the deck both lie in the top half of the felt.
+  const inspect = () => page.touchscreen.tap(235, 420);
+  const closeUp = scene(page).getByRole('img', { name: '11 de copas', exact: true });
+  await inspect();
+  await expect(closeUp).toBeVisible();
+  await expect(closeUp).toHaveAttribute('src', /card_cups_11-.*\.webp$/);
+  expect((await closeUp.boundingBox())!.width).toBeGreaterThanOrEqual(100);
+  await page.touchscreen.tap(54, 424);
+  await expect(closeUp).toHaveCount(0);
+  const vira = scene(page).getByRole('img', { name: '12 de copas', exact: true });
+  await expect(vira).toBeVisible();
+  await page.touchscreen.tap(75, 405);
+  await expect(vira).toHaveCount(0);
+
+  await inspect();
+  await expect(closeUp).toBeVisible();
+  play.concealed = true;
+  table.sequence++;
+  game.revision++;
+  update(structuredClone(table));
+  await expect(closeUp).toHaveCount(0);
+  await inspect();
+  await expect(closeUp).toHaveCount(0);
+  expect(commands).toEqual([]);
+});
+
 test('releasing a held or interrupted touch leaves the card available for a single tap', async ({
   page,
   browserName,

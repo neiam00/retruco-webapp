@@ -109,7 +109,8 @@ scene. Draw the canvas to all four edges and inset the touch controls around
 display cutouts. Returning to the lobby restores the normal page layout.
 
 On touchscreens, tap a held card or a control once to choose it. Swipe one
-finger across the table to look around, including from the held cards.
+finger across the table to look around, including from the held cards. Tapping
+the exposed face of a played card or the vira gives a brief close-up of its print.
 
 Unplayed cards stay in the player's grip, fanned toward their owner. Looking
 up lowers the wrists while keeping the cards tilted and visibly above the
@@ -137,7 +138,8 @@ reach on a phone.
 Every face of the Spanish deck carries its suit's _pinta_ on both horizontal
 inner borders. Oros has a continuous line, copas has one break, espadas has
 two, and bastos has three. Preserve the breaks on the courts and at the
-smallest displayed hand size.
+smallest displayed hand size. Print the small serif ranks in opposite corners.
+On the 3D table, the ink follows the paper's angle and takes the same light.
 
 The Classic match retains green felt, the established seat geometry, and its
 viewport-fitting table/hand/action dock. The lobby's ambient cards do not run in

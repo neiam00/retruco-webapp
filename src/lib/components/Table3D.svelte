@@ -4,7 +4,7 @@
   import { untrack } from 'svelte';
   import { on } from 'svelte/events';
   import { cardName, cardURL } from '#lib/cards.js';
-  import type { Snapshot } from '#lib/protocol.js';
+  import type { Card, Snapshot } from '#lib/protocol.js';
   import { subscribeMouthLevels } from '#lib/voice-levels.js';
   import type { HeadPose } from '#lib/table3d/camera.js';
   import {
@@ -37,6 +37,7 @@
     lastX: number;
     lastY: number;
     dragging: boolean;
+    tableFace?: Card;
     touch?: TouchPress;
   }
 
@@ -81,6 +82,7 @@
   let reducedMotion = $state(false);
   let autoFocusCantos = $state(true);
   let hovered = $state.raw<PointerLabel | null>(null);
+  let closeUp = $state.raw<{ card: Card; x: number; y: number; context: string }>();
   let speaking = $state.raw<TableCue | null>(null);
   let perspective = $derived(viewSeat(snapshot));
   let vira = $derived(snapshot.state?.vira);
@@ -180,6 +182,7 @@
       onpose(null);
       scene = undefined;
       clearTimeout(labelTimer);
+      closeUp = undefined;
       hovered = null;
       speaking = null;
     };
@@ -227,7 +230,8 @@
     if (gesture?.id === event.pointerId) cancelGesture();
   }
 
-  function cancelCompetingTouch(event: PointerEvent) {
+  function windowPress(event: PointerEvent) {
+    closeUp = undefined;
     if (gesture?.touch && event.pointerType === 'touch' && gesture.id !== event.pointerId)
       cancelGesture();
   }
@@ -249,6 +253,7 @@
       lastX: event.clientX,
       lastY: event.clientY,
       dragging: false,
+      tableFace: current.exposedTableCardAt(event.clientX, event.clientY),
     };
     gesture = active;
     clearTimeout(labelTimer);
@@ -304,8 +309,17 @@
     const target = touch?.cardTarget;
     const card =
       !touch || target !== undefined ? active.scene.select(clientX, clientY, target) : undefined;
-    if (card !== undefined) onselect?.(card);
-    else if (event.pointerType !== 'mouse') {
+    if (card !== undefined) {
+      onselect?.(card);
+      return;
+    }
+    if (active.tableFace) {
+      const face = active.scene.exposedTableCardAt(clientX, clientY);
+      if (face?.suit === active.tableFace.suit && face.number === active.tableFace.number) {
+        active.scene.endHover();
+        closeUp = { card: face, x: clientX, y: clientY, context: selectionContext };
+      }
+    } else if (event.pointerType !== 'mouse') {
       active.scene.hover(clientX, clientY);
       labelTimer = setTimeout(() => active.scene.endHover(), 1100);
     }
@@ -316,7 +330,13 @@
       event.preventDefault();
   }
 
+  function closeUpLoaded() {
+    clearTimeout(labelTimer);
+    labelTimer = setTimeout(() => (closeUp = undefined), 2400);
+  }
+
   function keys(event: KeyboardEvent) {
+    closeUp = undefined;
     if (event.key === 'Escape' && cardsExpanded) {
       cardsExpanded = false;
       return;
@@ -354,7 +374,7 @@
 <svelte:window
   onblur={cancelGesture}
   onpagehide={cancelGesture}
-  onpointerdowncapture={cancelCompetingTouch}
+  onpointerdowncapture={windowPress}
 />
 
 <div
@@ -368,7 +388,7 @@
 >
   <span id={touchControlsId} hidden>
     En pantallas táctiles, toca una carta o un botón una vez. Desliza un dedo sobre la mesa para
-    mover la cámara.
+    mover la cámara. Toca una carta descubierta de la mesa para verla de cerca.
   </span>
   {#key renderProfile}
     <canvas
@@ -458,7 +478,20 @@
         <strong>{speaking.name}</strong>
         {speaking.label}
       </p>{/if}
-    {#if hovered}
+    {#if closeUp && closeUp.context === selectionContext}
+      <img
+        class="card-close-up"
+        src={cardURL(closeUp.card)}
+        alt={cardName(closeUp.card)}
+        width="148"
+        height="222"
+        style:--touch-x={closeUp.x + 'px'}
+        style:--touch-y={closeUp.y + 'px'}
+        draggable="false"
+        onload={closeUpLoaded}
+        onerror={() => (closeUp = undefined)}
+      />
+    {:else if hovered}
       <div
         class="held-card-label"
         style:left={Math.max(74, Math.min(window.innerWidth - 74, hovered.x)) + 'px'}
@@ -713,6 +746,18 @@
     color: #fff6dd;
     white-space: nowrap;
     font-size: 0.8rem;
+    pointer-events: none;
+  }
+
+  .card-close-up {
+    --width: clamp(100px, 24vmin, 148px);
+    position: absolute;
+    left: clamp(calc(8px + var(--width) / 2), var(--touch-x), calc(100% - 8px - var(--width) / 2));
+    bottom: clamp(8px, calc(100% - var(--touch-y) + 10px), calc(100% - var(--width) * 1.5 - 8px));
+    width: var(--width);
+    height: auto;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 3px 6px #08140f80);
     pointer-events: none;
   }
 </style>
